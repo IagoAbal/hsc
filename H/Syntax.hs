@@ -30,7 +30,7 @@ data SrcLoc = SrcLoc {
 		, srcLine     :: Int
     , srcColumn   :: Int
 		}
-    deriving(Eq,Ord)
+    deriving(Eq,Ord,Show)
 
 
 -- * Variables
@@ -119,6 +119,13 @@ type TyParams p = [TyVAR p ::: Maybe Kind]
 type PostTcTyParams p = PostTc p [TyVar]
 
 
+-- * Modules
+
+newtype ModuleName = ModName String
+
+data Module p where
+  Module :: forall p. SrcLoc -> ModuleName -> [AnyDecl p] -> Module p
+
 -- * Declarations
 
 -- | Sort of type declarations
@@ -128,8 +135,8 @@ data Fn
 -- | Sort of logical goals
 data Lg
 
-data IsRec = Rec    -- ^ recursive
-           | NonRec -- ^ non-recursive 
+
+data AnyDecl p = forall s. AnyDecl (Decl s p)
 
 data Decl s p where
   -- | type synonym 
@@ -140,13 +147,21 @@ data Decl s p where
   TypeSig :: SrcLoc -> [NAME p] -> PolyType p -> Decl Fn p
   -- | a function defined by a *set* of equations
   -- NB: Only uniform definitions are allowed
-  FunBind :: IsRec -> [Match p] -> Decl Fn p
+  FunBind :: IsRec p -> [Match p] -> Decl Fn p
   -- | pattern binding
-  PatBind :: SrcLoc -> IsRec -> Pat p -> PostTcType p -> Rhs p -> WhereDecls p -> Decl Fn p
+  PatBind :: SrcLoc -> IsRec p -> Pat p -> PostTcType p -> Rhs p -> WhereDecls p -> Decl Fn p
   -- | logical goal: a theorem or a lemma
   GoalDecl :: SrcLoc -> NAME p -> GoalType -> PostTcTyParams p -> Prop p -> Decl Lg p
 
 type WhereDecls p = [Decl Fn p]
+
+  -- Everything is parsed as potentially recursive and later
+  -- we perform an analysis to detect non-recursive definitions.
+data IsRec p where
+  -- | recursive
+  Rec :: IsRec p
+  -- | non-recursive 
+  NonRec :: Lt Pr p => IsRec p
 
 -- | Declaration of a data constructor.
 data ConDecl p
@@ -179,11 +194,7 @@ data Exp p where
   -- | type application
   TyApp :: Exp Tc -> [Type Tc] -> Exp Tc
   -- | lambda expression
-  Lam :: SrcLoc
-        -> [Pat p ::: PostTcType p]
-            -- ^ A predicate type cannot be inferred from a pattern,
-            -- so we may need a PostTcType annotation.
-        -> Exp p -> Exp p
+  Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
   -- | local declarations with @let@
   Let :: [Decl Fn p] -> Exp p -> Exp p
   -- | type lambda
@@ -238,6 +249,7 @@ data BuiltinCon = UnitCon
 
 data Op = BoolOp BoolOp
         | IntOp IntOp
+        | ConOp BuiltinCon
     deriving Eq
 
 -- | Operators for building boolean expressions
@@ -279,13 +291,14 @@ data Rhs p
 				-- ^ guarded right hand side (/gdrhs/)
         -- See [Guards]
 
-data Otherwise p = Otherwise (Exp p)
-                 | NoOtherwise
-
 -- | A guarded right hand side @|@ /exp/ @=@ /exp/.
 -- The first expression will be Boolean-valued.
 data GuardedRhs p
 	 = GuardedRhs SrcLoc (Prop p) (Exp p)
+
+data Otherwise p = Otherwise (Exp p)
+                 | NoOtherwise
+
 
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
@@ -321,8 +334,7 @@ data Pat p where
   AsPat :: VAR p -> Pat p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
-data Alt p
-	= Alt SrcLoc (Pat p) (Rhs p)
+data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 
 
 -- * Types
@@ -343,6 +355,7 @@ data Type p where
   PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
   -- | function type
   FunTy :: Dom p -> Range p -> Type p
+  -- ListTy ?
   -- | tuple type
   TupleTy :: !Int -> [Dom p] -> Type p
   -- | meta type variable
@@ -360,7 +373,7 @@ type PostTcType p = PostTc p (Type p)
 
 -- ** Type constructors
 
-data TyCon p = UserTyCon (NAME p)
+data TyCon p = UserTyCon (TyNAME p)
              | BuiltinTyCon BuiltinType
 
 data BuiltinType = UnitTy
@@ -393,8 +406,11 @@ data MetaTyVar = MetaTyV {
 (-->) :: Type p -> Type p -> Type p
 dom --> ran = Dom Nothing dom Nothing \--> ran
 
+unitTyCon :: TyCon p
+unitTyCon = BuiltinTyCon UnitTy
+
 unitTy :: Type p
-unitTy = ConTy $ BuiltinTyCon UnitTy
+unitTy = ConTy unitTyCon
 
 boolTy :: Type p
 boolTy = ConTy $ BuiltinTyCon BoolTy
