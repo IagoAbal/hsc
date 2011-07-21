@@ -245,6 +245,9 @@ data BuiltinCon = UnitCon
                 | ConsCon
     deriving Eq
 
+consCon :: Con p
+consCon = BuiltinCon ConsCon
+
 -- ** Built-in operators
 
 data Op = BoolOp BoolOp
@@ -332,6 +335,8 @@ data Pat p where
   WildPat :: Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
+  -- ^ pattern signature
+  SigPat :: Pat p -> Type p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt SrcLoc (Pat p) (Rhs p)

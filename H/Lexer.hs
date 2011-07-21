@@ -57,16 +57,22 @@ data Token
   | RightArrow
   | At
   | Minus
+  | OP_Eq
+  
 
   -- Reserved Ids
   | KW_Case
   | KW_Data
   | KW_Else
+  | KW_Exists
+  | KW_Forall
   | KW_If
   | KW_In
+  | KW_Lemma
   | KW_Let
   | KW_Module
   | KW_Of
+  | KW_Theorem
   | KW_Then
   | KW_Type
   | KW_Where
@@ -86,7 +92,8 @@ reserved_ops = [
  ( "\\", Backslash ),
  ( "|",  Bar ),
  ( "->", RightArrow ),
- ( "@",  At )
+ ( "@",  At ),
+ ( "==", OP_Eq )
  ]
 
 special_varops :: [(String,Token)]
@@ -100,11 +107,15 @@ reserved_ids = [
  ( "case",    KW_Case ),
  ( "data",    KW_Data ),
  ( "else",    KW_Else ),
+ ( "exists",  KW_Exists ),
+ ( "forall",  KW_Forall ),
  ( "if",      KW_If ),
  ( "in",      KW_In ),
+ ( "lemma",   KW_Lemma ),
  ( "let",     KW_Let ),
  ( "module",  KW_Module ),
  ( "of",      KW_Of ),
+ ( "theorem", KW_Theorem ),
  ( "then",    KW_Then ),
  ( "type",    KW_Type ),
  ( "where",   KW_Where )

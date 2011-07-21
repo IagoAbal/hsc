@@ -77,17 +77,22 @@ Reserved operators
 >	'->'	{ RightArrow }
 >	'@'	{ At }
 >	'-'	{ Minus }
+> '==' { OP_Eq }
 
 Reserved Ids
 
 >	'case'		{ KW_Case }
 >	'data'		{ KW_Data }
 >	'else'		{ KW_Else }
+> 'exists'  { KW_Exists }
+> 'forall'  { KW_Forall }
 >	'if'		{ KW_If }
 >	'in'		{ KW_In }
+> 'lemma' { KW_Lemma }
 >	'let'		{ KW_Let }
 >	'module'	{ KW_Module }
 >	'of'		{ KW_Of }
+> 'theorem' { KW_Theorem }
 >	'then'		{ KW_Then }
 >	'type'		{ KW_Type }
 >	'where'		{ KW_Where }
@@ -141,7 +146,8 @@ shift/reduce-conflict, so we don't handle this case here, but in bodyaux.
 >			{ AnyDecl $ TypeDecl $1 $3 $4 $6 }
 >	| srcloc 'data' conid typarams '=' constrs
 >			{ AnyDecl $ DataDecl $1 $3 (reverse $4) $6 }
-> | decl		{ AnyDecl $1 }
+> | decl		 { AnyDecl $1 }
+> | goaldecl { AnyDecl $1 }
 
 > decls :: { [Decl Fn Pr] }
 >	: optsemis decls1 optsemis	{% checkRevFnDecls $2 }
@@ -225,6 +231,13 @@ Datatype declarations
 -----------------------------------------------------------------------------
 Value definitions
 
+> goaldecl :: { Decl Lg Pr }
+> : srcloc goaltype varid '=' exp  { GoalDecl $1 $3 $2 NoPostTc $5 }
+
+> goaltype :: { GoalType }
+> : 'theorem' { TheoremGoal }
+> | 'lemma'   { LemmaGoal }
+
 > valdef :: { Decl Fn Pr }
 > : srcloc varid apats rhs optwhere	{ FunBind Rec [Match $1 $2 $3 $4 $5] }
 > | srcloc pat rhs optwhere 				{ PatBind $1 Rec $2 NoPostTc $3 $4 }
@@ -274,8 +287,13 @@ the exp0 productions to distinguish these from the others (exp0a).
 
 > exp10a :: { Exp Pr }
 >	: '\\' srcloc apats '->' exp	{ Lam $2 (reverse $3) $5 }
->  	| 'let' decllist 'in' exp	{ Let $2 $4 }
+> | 'let' decllist 'in' exp	{ Let $2 $4 }
 >	| 'if' exp 'then' exp 'else' exp { If $2 $4 $6 }
+> | quantifier apats ',' exp  { QP $1 (reverse $2) $4 }
+
+> quantifier :: { Quantifier }
+> : 'exists'  { ExistsQ }
+> | 'forall'  { ForallQ }
 
 > exp10b :: { Exp Pr }
 >	: 'case' exp 'of' altslist	{ Case $2 NoPostTc $4 }
@@ -290,8 +308,40 @@ the exp0 productions to distinguish these from the others (exp0a).
 >	: apats apat			{ $2 : $1 }
 > | apat				{ [$1] }
 
+
+> pat   :: { Pat Pr }
+>	: pat1 ':' type  	{ SigPat $1 $3 }
+>	| pat1				{ $1 }
+
+> pat1 :: { Pat Pr }
+>	: fpat '::' pat1		{ InfixPat $1 ConsCon $3 }
+>	| fpat			{ $1 }
+
+> fpat :: { Pat Pr }
+>	: con apats		{ ConPat $1 (reverse $2) }
+> | apat				{ $1 }
+
 > apat :: { Pat Pr }
+>	: var '@' apat	{ AsPat $1 $3 }
+> | apat1					{ $1 }
+
+> apat1 :: { Pat Pr }
 >	: var 			{ VarPat $1 }
+> | con        { ConPat $1 [] }
+> | literal			{ LitPat $1 }
+>	| '(' pat ')'			{ ParenPat $2 }
+>	| '(' tpats ')'			{ TuplePat (reverse $2) }
+>	| '[' lpats ']'			{ ListPat (reverse $2) }
+> | '_'							{ WildPat }
+
+> tpats :: { [Pat Pr] }
+>	: tpats ',' pat			{ $3 : $1 }
+>	| pat ',' pat			{ [$3,$1] }
+
+> lpats :: { [Pat Pr] }
+>	: lpats ',' pat			{ $3 : $1 }
+> | pat             { [$1] }
+>	| {- empty -}			{ [] }
 
 > aexp	:: { Exp Pr }
 > : aexp1				{ $1 }
@@ -367,9 +417,6 @@ Case alternatives
 > gdpat	:: { GuardedRhs Pr }
 >	: srcloc '|' exp0 '->' exp	{ GuardedRhs $1 $3 $5 }
 
-> pat :: { Pat Pr }
->	: var 			{ VarPat $1 }
-
 -----------------------------------------------------------------------------
 Variables, Constructors and Operators.
 
@@ -378,11 +425,17 @@ Variables, Constructors and Operators.
 >	| '[' ']'		{ Con (BuiltinCon NilCon) }
 > | conid			{ Con (UserCon $1) }
 
+> con :: { Con Pr }
+> : '(' ')'		{ BuiltinCon UnitCon }
+>	| '[' ']'		{ BuiltinCon NilCon }
+> | conid			{ UserCon $1 }
+
 > var 	:: { VAR Pr }
 >	: varid			{ $1 }
 
 > op	:: { Op }
 >	: '::'			{ ConOp ConsCon }
+> | '=='      { BoolOp EqB }
 
 
 -----------------------------------------------------------------------------

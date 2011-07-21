@@ -330,6 +330,13 @@ instance (Pretty (VAR p), Pretty (TyVAR p)) => Pretty (Decl s p) where
 		markLine pos $
 		myFsep [pretty pat, prettyFunRhs rhs] $$$ ppWhere whereDecls
 
+-- GoalDecl :: SrcLoc -> NAME p -> GoalType -> PostTcTyParams p -> Prop p -> Decl Lg p
+	pretty (GoalDecl pos name goaltype _ptctys prop)
+		= myFsep [ppGoalType goaltype, pretty name, equals, pretty prop]
+		where
+				ppGoalType TheoremGoal = text "theorem"
+				ppGoalType LemmaGoal   = text "lemma"
+
 
 instance (Pretty (VAR p), Pretty (TyVAR p)) => Pretty (Match p) where
 	pretty (Match pos f ps rhs whereDecls) =
@@ -493,7 +500,9 @@ instance (Pretty (VAR p), Pretty (TyVAR p)) => Pretty (Exp p) where
 			     text "..", pretty to]
 	pretty (Ann _pos e ty) =
 		myFsep [pretty e, text ":", pretty ty]
-
+--  QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
+	pretty (QP quant patList body)
+		= myFsep $ pretty quant : map pretty patList ++ [text ",", pretty body]
 
 
 instance Pretty (NAME p) => Pretty (Con p) where
@@ -541,11 +550,12 @@ instance Pretty Quantifier where
 
 -- ------------------------- Patterns -----------------------------
 
-instance Pretty (VAR p) => Pretty (Pat p) where
+instance (Pretty (VAR p), Pretty (TyVAR p)) => Pretty (Pat p) where
 	prettyPrec _ (VarPat var) = pretty var
 	prettyPrec _ (LitPat lit) = pretty lit
 	prettyPrec p (InfixPat a cop b) = parensIf (p > 0) $
 		myFsep [pretty a, pretty cop, pretty b]
+	prettyPrec p (ConPat con []) = pretty con
 	prettyPrec p (ConPat con ps) = parensIf (p > 1) $
 		myFsep (pretty con : map pretty ps)
 	prettyPrec _ (TuplePat ps) = parenList . map pretty $ ps
@@ -556,6 +566,8 @@ instance Pretty (VAR p) => Pretty (Pat p) where
 	prettyPrec _ (AsPat var pat) =
 		hcat [pretty var, char '@', pretty pat]
 	prettyPrec _ WildPat = char '_'
+	prettyPrec _ (SigPat pat ty) =
+		myFsep [pretty pat, text ":", pretty ty]
 
 
 -- ------------------------- Case bodies  -------------------------
