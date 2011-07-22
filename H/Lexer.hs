@@ -56,8 +56,19 @@ data Token
   | Bar
   | RightArrow
   | At
+  | Tilde
+  | BarBar
+  | AmpAmp
+  | Implication
+  | Iff
   | Minus
-  | OP_Eq
+  | Plus
+  | Asterisk
+  | Slash
+  | Percent
+  | Caret
+  | EqEq
+  | SlashEq
   
 
   -- Reserved Ids
@@ -93,7 +104,18 @@ reserved_ops = [
  ( "|",  Bar ),
  ( "->", RightArrow ),
  ( "@",  At ),
- ( "==", OP_Eq )
+ ( "~",  Tilde),
+ ( "||", BarBar),
+ ( "&&", AmpAmp),
+ ( "==>", Implication),
+ ( "<=>", Iff),
+ ( "+",  Plus),
+ ( "*",  Asterisk),
+ ( "/",  Slash),
+ ( "%",  Percent),
+ ( "^",  Caret),
+ ( "==", EqEq),
+ ( "/=", SlashEq)
  ]
 
 special_varops :: [(String,Token)]

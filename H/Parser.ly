@@ -76,8 +76,19 @@ Reserved operators
 >	'|'	{ Bar }
 >	'->'	{ RightArrow }
 >	'@'	{ At }
->	'-'	{ Minus }
-> '==' { OP_Eq }
+> '~' { Tilde }
+> '||' { BarBar }
+> '&&' { AmpAmp }
+> '==>' { Implication }
+> '<=>' { Iff }
+> '+' { Plus }
+> '-' { Minus }
+> '*' { Asterisk }
+> '/' { Slash }
+> '%' { Percent }
+> '^' { Caret }
+> '==' { EqEq }
+> '/=' { SlashEq }
 
 Reserved Ids
 
@@ -297,6 +308,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 
 > exp10b :: { Exp Pr }
 >	: 'case' exp 'of' altslist	{ Case $2 NoPostTc $4 }
+> | '~' fexp			{ PrefixApp (BoolOp NegB) $2 }
 >	| '-' fexp			{ PrefixApp (IntOp NegI) $2 }
 >	| fexp				{ $1 }
 
