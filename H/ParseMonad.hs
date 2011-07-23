@@ -75,7 +75,7 @@ indentOfParseState _            = 0
 -- More to come later, e.g. literate mode, language extensions.
 
 data ParseMode = ParseMode {
-                                -- | original name of the file being parsed
+                -- | original name of the file being parsed
                 parseFilename :: String
                 }
 
