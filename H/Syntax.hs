@@ -35,31 +35,34 @@ data SrcLoc = SrcLoc {
 
 -- * Variables
 
-data Var = V {
-             varName :: !Name
-           , varType :: PolyType Tc
-           }
+  -- | A typed 'Name'
+data Var p = V {
+               varName :: !Name
+             , varType :: PolyType p
+             }
 
-instance Eq Var where
+instance Eq (Var p) where
   (==) = (==) `on` varName
 
-instance Ord Var where
+instance Ord (Var p) where
   compare = compare `on` varName
 
-instance Named Var where
+instance Named (Var p) where
   nameOf = varName
 
-instance Uniquable Var where
+instance Uniquable (Var p) where
   uniqOf = uniqOf . nameOf
 
-instance Sorted Var (PolyType Tc) where
+instance Sorted (Var p) (PolyType p) where
   sortOf = varType
 
 
+  -- | Essentially a kinded 'Name'
 data TyVar = TyV {
                tyVarName   :: !Name
              , tyVarKind   :: !Kind
              , skolemTyVar :: !Bool
+                -- ^ Is it a skolem type variable ?
              }
 
 instance Eq TyVar where
@@ -79,13 +82,17 @@ instance Sorted TyVar Kind where
 
 -- ** Fresh variables
 
-newVar :: MonadUnique m => String -> PolyType Tc -> m Var
+newVar :: MonadUnique m => String -> PolyType p -> m (Var p)
 newVar str ty = do name <- newName VarNS str
                    return $ V name ty
 
-newVarFrom :: MonadUnique m => Var -> m Var
+newVarFrom :: MonadUnique m => Var p -> m (Var p)
 newVarFrom (V name ty) = do name' <- newNameFrom name
                             return $ V name' ty
+
+newTyVar :: MonadUnique m => String -> Kind -> m TyVar
+newTyVar str ki = do name <- newName TyVarNS str
+                     return $ TyV name ki False
 
 -- ** Instantiate variables
 
@@ -99,7 +106,9 @@ instTyVar _other                = undefined
 type family VAR phase
 type instance VAR Pr = OccName
 type instance VAR Rn = Name
-type instance VAR Tc = Var
+type instance VAR Tc = Var Tc
+type instance VAR Ti = Var Ti
+type instance VAR Vc = Var Vc
 
 type NAME phase = VAR phase
 
@@ -107,24 +116,45 @@ type family TyVAR phase
 type instance TyVAR Pr = OccName
 type instance TyVAR Rn = Name
 type instance TyVAR Tc = TyVar
+type instance TyVAR Ti = TyVar
+type instance TyVAR Vc = TyVar
 
 type TyNAME phase = TyVAR phase
 
--- ** Type parameters
+type family GoalNAME phase
+type instance GoalNAME Pr = OccName
+type instance GoalNAME Rn = Name
+type instance GoalNAME Tc = Name
+type instance GoalNAME Ti = Name
+type instance GoalNAME Vc = Name
 
-  -- The user can provide a kind annotation,
-  -- if not, we will assume the 'type' kind.
-type TyParams p = [TyVAR p ::: Maybe Kind]
+-- ** Parameters
+
+type Params p = [Pat p]
+
+{- NOTE [Params]
+A pattern cannot capture predicate-types during type inference
+  e.g. in (x::xs) : {l:[Int]| P l}
+       the inferred type for x::xs is [Int]
+but a trivial workaround is to use a @-pattern
+  e.g. in l@(x::xs) : {l:[Int]| P l}
+       the inferred type for l@(x::xs) is {l:[Int]| P l}
+-}
+
+  -- Only type parameters of kind 'type' are supported
+  -- so any kind annotation is pointless.
+type TyParams p = [TyVAR p]
 
 type PostTcTyParams p = PostTc p [TyVar]
 
 
 -- * Modules
 
+data Module p where
+  Module :: SrcLoc -> ModuleName -> [AnyDecl p] -> Module p
+
 newtype ModuleName = ModName String
 
-data Module p where
-  Module :: forall p. SrcLoc -> ModuleName -> [AnyDecl p] -> Module p
 
 -- * Declarations
 
@@ -135,7 +165,7 @@ data Fn
 -- | Sort of logical goals
 data Lg
 
-
+  -- | Any kind of declaration
 data AnyDecl p = forall s. AnyDecl (Decl s p)
 
 data Decl s p where
@@ -147,11 +177,17 @@ data Decl s p where
   TypeSig :: SrcLoc -> [NAME p] -> PolyType p -> Decl Fn p
   -- | a function defined by a *set* of equations
   -- NB: Only uniform definitions are allowed
-  FunBind :: IsRec p -> [Match p] -> Decl Fn p
+  FunBind :: IsRec p -> NAME p -> [Match p] -> Decl Fn p
   -- | pattern binding
-  PatBind :: SrcLoc -> IsRec p -> Pat p -> PostTcType p -> Rhs p -> WhereDecls p -> Decl Fn p
+  PatBind :: SrcLoc -> IsRec p -> Pat p -> PostTcType p -> Rhs p -> Decl Fn p
   -- | logical goal: a theorem or a lemma
-  GoalDecl :: SrcLoc -> NAME p -> GoalType -> PostTcTyParams p -> Prop p -> Decl Lg p
+  GoalDecl :: SrcLoc -> GoalType -> GoalNAME p
+            -> PostTcTyParams p
+              -- ^ if a goal depends on some arbitrary type
+              -- that is inferred during type checking;
+              -- note that the logical 'forall' does not allow
+              -- to quantify over types.
+            -> Prop p -> Decl Lg p
 
 type WhereDecls p = [Decl Fn p]
 
@@ -164,12 +200,13 @@ data IsRec p where
   NonRec :: Lt Pr p => IsRec p
 
 -- | Declaration of a data constructor.
-data ConDecl p
-	 = ConDecl SrcLoc (NAME p) [Type p]
+data ConDecl p where
+  ConDeclIn :: SrcLoc -> NAME Pr -> [Type Pr] -> ConDecl Pr
+  ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
 
 -- | Clauses of a function binding.
 data Match p
-	 = Match SrcLoc (NAME p) [Pat p] (Rhs p) (WhereDecls p)
+	 = Match SrcLoc [Pat p] (Rhs p)
 
 data GoalType = TheoremGoal
               | LemmaGoal
@@ -185,6 +222,9 @@ data Exp p where
   Con :: Con p -> Exp p
   -- | literal constant
   Lit :: Lit -> Exp p
+  -- | @else@ guard expression
+  -- It is used to facilitate parsing but then removed during renaming
+  ElseGuard :: Exp Pr
   -- | prefix application
   PrefixApp :: Op -> Exp p -> Exp p
   -- | infix application
@@ -192,15 +232,17 @@ data Exp p where
   -- | application
   App :: Exp p -> Exp p -> Exp p
   -- | type application
-  TyApp :: Exp Tc -> [Type Tc] -> Exp Tc
+  TyApp :: Ge p Tc => Exp p -> [Type p] -> Exp p
   -- | lambda expression
   Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
   -- | local declarations with @let@
   Let :: [Decl Fn p] -> Exp p -> Exp p
   -- | type lambda
-  TyLam :: [TyVar] -> Exp Tc -> Exp Tc
+  TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
   -- | @if@ /exp/ @then@ /exp/ @else@ /exp/
-  If :: Prop p -> Exp p -> Exp p -> Exp p
+  Ite :: Prop p -> Exp p -> Exp p -> Exp p
+  -- | Generalized @if@ expressions
+  If :: GuardedRhss p -> Exp p
   -- | @case@ /exp/ @of@ /alts/
   Case :: Exp p
         -> PostTcType p
@@ -220,94 +262,44 @@ data Exp p where
   EnumFromTo :: Exp p -> Exp p -> Exp p
   -- ^ bounded arithmetic sequence, with first two elements given
   EnumFromThenTo :: Exp p -> Exp p -> Exp p -> Exp p
-  -- | type annotation
-  Ann :: SrcLoc -> Exp p -> Type p -> Exp p
+  -- | explicit type coercion
+  Coerc :: SrcLoc -> Exp p -> Type p -> Exp p
   -- | logic quantifier
   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
 
 -- | Expressions of boolean type
 type Prop = Exp
 
--- ** Literals
-
-data Lit = IntLit Integer
-    deriving Eq
-
--- ** Data constructors
-
-data Con p = UserCon (NAME p)
-           | BuiltinCon BuiltinCon
-
-data BuiltinCon = UnitCon
-                | FalseCon
-                | TrueCon
-                | NilCon
-                | ConsCon
-    deriving Eq
-
-consCon :: Con p
-consCon = BuiltinCon ConsCon
-
--- ** Built-in operators
-
-data Op = BoolOp BoolOp
-        | IntOp IntOp
-        | ConOp BuiltinCon
-    deriving Eq
-
--- | Operators for building boolean expressions
-data BoolOp = NotB
-            | OrB
-            | AndB
-            | ImpB
-            | IffB
-            | EqB   -- ^ @==@
-            | NeqB  -- ^ @/=@
-            | LtB
-            | LeB
-            | GtB
-            | GeB
-    deriving Eq
-
--- | Operators for building integer expressions
-data IntOp = NegI   -- ^ negation @-@ /exp/
-           | AddI
-           | SubI
-           | MulI
-           | DivI
-           | ModI
-           | ExpI
-    deriving Eq
-
--- ** Logical quantifiers
-
-data Quantifier = ForallQ
-                | ExistsQ
-    deriving Eq
-
 -- ** Right-hand side
 
 -- | The right hand side of a function or pattern binding.
-data Rhs p
-	 = UnGuardedRhs (Exp p)	-- ^ unguarded right hand side (/exp/)
-	 | GuardedRhss  [GuardedRhs p] (Otherwise p)
+data Rhs p = Rhs (GRhs p) (WhereDecls p)
+
+data GRhs p
+	 = UnGuarded (Exp p)	-- ^ unguarded right hand side (/exp/)
+	 | Guarded (GuardedRhss p)
 				-- ^ guarded right hand side (/gdrhs/)
         -- See [Guards]
 
--- | A guarded right hand side @|@ /exp/ @=@ /exp/.
--- The first expression will be Boolean-valued.
+data GuardedRhss p where
+  GuardedRhssIn :: [GuardedRhs Pr] -> GuardedRhss Pr
+  GuardedRhss :: Ge p Rn => [GuardedRhs p] -> Else p -> GuardedRhss p
+
+-- | A guarded right hand side @|@ /exp/ @=@ /exp/ or @|@ /exp/ @->@ /exp/.
+-- The first expression is boolean-valued.
 data GuardedRhs p
 	 = GuardedRhs SrcLoc (Prop p) (Exp p)
 
-data Otherwise p = Otherwise (Exp p)
-                 | NoOtherwise
-
+-- | @else@ clause
+data Else p where
+  Else   :: Ge p Rn => SrcLoc -> Exp p -> Else p
+  NoElse :: Ge p Rn => Else p
 
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
 First, a set of guards has to be exhaustive, which may cause the
 generation of a coverage TCC. This TCC is omitted if there is an
-'otherwise' alternative.
+'else' clause.
 Second, guards cannot overlap which will lead to the generation of the
 corresponding TCC. This may look like a kick-in-the-ass but it is
 convenient when writing critical software.
@@ -341,14 +333,100 @@ data Pat p where
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 
+-- ** Literals
+
+data Lit = IntLit Integer
+    deriving Eq
+
+-- ** Data constructors
+
+data Con p = UserCon (NAME p)
+           | BuiltinCon BuiltinCon
+
+data BuiltinCon = UnitCon
+                | FalseCon
+                | TrueCon
+                | NilCon
+                | ConsCon
+    deriving Eq
+
+unitCon, trueCon, falseCon, nilCon, consCon :: Con p
+unitCon  = BuiltinCon UnitCon
+trueCon  = BuiltinCon TrueCon
+falseCon = BuiltinCon FalseCon
+nilCon   = BuiltinCon NilCon
+consCon  = BuiltinCon ConsCon
+
+-- ** Built-in operators
+
+data Op = BoolOp BoolOp
+        | IntOp IntOp
+        | ConOp BuiltinCon
+    deriving Eq
+
+-- | Operators for building boolean expressions
+data BoolOp = NotB
+            | OrB
+            | AndB
+            | ImpB
+            | IffB
+            | EqB   -- ^ @==@
+            | NeqB  -- ^ @/=@
+            | LtB
+            | LeB
+            | GtB
+            | GeB
+    deriving Eq
+
+notOp, orOp, andOp, impOp, iffOp :: Op
+eqOp, neqOp, ltOp, leOp, gtOp, geOp :: Op
+notOp = BoolOp NotB
+orOp  = BoolOp OrB
+andOp = BoolOp AndB
+impOp = BoolOp ImpB
+iffOp = BoolOp IffB
+eqOp  = BoolOp EqB
+neqOp = BoolOp NeqB
+ltOp  = BoolOp LtB
+leOp  = BoolOp LeB
+gtOp  = BoolOp GtB
+geOp  = BoolOp GeB
+
+-- | Operators for building integer expressions
+data IntOp = NegI   -- ^ negation @-@ /exp/
+           | AddI
+           | SubI
+           | MulI
+           | DivI
+           | ModI
+           | ExpI
+    deriving Eq
+
+negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
+negOp = IntOp NegI
+addOp = IntOp AddI
+subOp = IntOp SubI
+mulOp = IntOp MulI
+divOp = IntOp DivI
+modOp = IntOp ModI
+expOp = IntOp ExpI
+
+-- ** Logical quantifiers
+
+data Quantifier = ForallQ
+                | ExistsQ
+    deriving Eq
+
 
 -- * Types
 
 typeOf :: Sorted a (Type p) => a -> Type p
 typeOf = sortOf
 
+-- | Rank-1 polymorphic types
 data PolyType p = ForallTy (TyParams p) (Type p)
 
+-- | Monomorphic types
 data Type p where
   -- | type variable
   VarTy :: TyVAR p -> Type p
@@ -359,13 +437,19 @@ data Type p where
   -- | subset type
   PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
   -- | function type
-  FunTy :: Dom p -> Range p -> Type p
-  -- ListTy ?
+  FunTyIn :: Type Pr -> Range Pr -> Type Pr
+  FunTy :: Ge p Rn => Dom p -> Range p -> Type p
+  -- | list type
+  ListTy :: Type p -> Type p
   -- | tuple type
-  TupleTy :: !Int -> [Dom p] -> Type p
+  TupleTyIn :: [Type Pr] -> Type Pr
+  TupleTy :: Ge p Rn =>  [Dom p] -> Type p
+  -- | parenthised type
+  ParenTy :: Type Pr -> Type Pr 
   -- | meta type variable
   MetaTy :: MetaTyVar -> Type Tc
 
+  -- NB: The @Dom Nothing ty (Just prop)@ is pointless
 data Dom p = Dom (Maybe (Pat p)) (Type p) (Maybe (Prop p))
 
 domType :: Dom p -> Type p
@@ -379,21 +463,25 @@ type PostTcType p = PostTc p (Type p)
 -- ** Type constructors
 
 data TyCon p = UserTyCon (TyNAME p)
-             | BuiltinTyCon BuiltinType
+             | BuiltinTyCon BuiltinTyCon
 
-data BuiltinType = UnitTy
-                 | BoolTy
-                 | IntTy
-                 | NatTy    -- ^ @{n:Int|n >= 0}@
-                 | ListTy
+data BuiltinTyCon = UnitTyCon
+                  | BoolTyCon
+                  | IntTyCon
+                  | NatTyCon    -- ^ @{n:Int|n >= 0}@
     deriving Eq
 
-instance Sorted BuiltinType Kind where
-  sortOf UnitTy = typeKi
-  sortOf BoolTy = typeKi
-  sortOf IntTy  = typeKi
-  sortOf NatTy  = typeKi
-  sortOf ListTy = typeKi ++> typeKi
+unitTyCon, boolTyCon, intTyCon, natTyCon :: TyCon p
+unitTyCon = BuiltinTyCon UnitTyCon
+boolTyCon = BuiltinTyCon BoolTyCon
+intTyCon  = BuiltinTyCon IntTyCon
+natTyCon  = BuiltinTyCon NatTyCon
+
+instance Sorted BuiltinTyCon Kind where
+  sortOf UnitTyCon = typeKi
+  sortOf BoolTyCon = typeKi
+  sortOf IntTyCon  = typeKi
+  sortOf NatTyCon  = typeKi
 
 -- ** Meta type variables
 
@@ -405,32 +493,17 @@ data MetaTyVar = MetaTyV {
 
 -- ** Constructors
 
-(\-->) :: Dom p -> Range p -> Type p
+(\-->) :: Ge p Rn => Dom p -> Range p -> Type p
 (\-->) = FunTy
 
-(-->) :: Type p -> Type p -> Type p
+(-->) :: Ge p Rn => Type p -> Type p -> Type p
 dom --> ran = Dom Nothing dom Nothing \--> ran
 
-unitTyCon :: TyCon p
-unitTyCon = BuiltinTyCon UnitTy
-
-unitTy :: Type p
+unitTy, boolTy, intTy, natTy :: Type p
 unitTy = ConTy unitTyCon
-
-boolTy :: Type p
-boolTy = ConTy $ BuiltinTyCon BoolTy
-
-intTy :: Type p
-intTy = ConTy $ BuiltinTyCon IntTy
-
-natTy :: Type p
-natTy = ConTy $ BuiltinTyCon NatTy
-
-listTyCon :: Type p
-listTyCon = ConTy $ BuiltinTyCon ListTy
-
-listTy :: Type p -> Type p
-listTy = AppTy listTyCon
+boolTy = ConTy boolTyCon
+intTy  = ConTy intTyCon
+natTy  = ConTy natTyCon
 
 
 -- * Kinds

@@ -48,6 +48,7 @@ data Token
   | Underscore
 
   -- Reserved operators
+  | Dot
   | DotDot
   | Colon
   | DoubleColon
@@ -69,9 +70,18 @@ data Token
   | Caret
   | EqEq
   | SlashEq
+  | Lt
+  | LtEq
+  | Gt
+  | GtEq
   
 
   -- Reserved Ids
+  | KW_Bool
+  | KW_False
+  | KW_Int
+  | KW_Nat
+  | KW_True
   | KW_Case
   | KW_Data
   | KW_Else
@@ -96,6 +106,7 @@ data Token
 
 reserved_ops :: [(String,Token)]
 reserved_ops = [
+ ( ".",  Dot),
  ( "..", DotDot ),
  ( ":",  Colon ),
  ( "::", DoubleColon ),
@@ -115,7 +126,11 @@ reserved_ops = [
  ( "%",  Percent),
  ( "^",  Caret),
  ( "==", EqEq),
- ( "/=", SlashEq)
+ ( "/=", SlashEq),
+ ( "<",  Lt),
+ ( "<=", LtEq),
+ ( ">",  Gt),
+ ( ">=", GtEq)
  ]
 
 special_varops :: [(String,Token)]
@@ -126,6 +141,11 @@ special_varops = [
 reserved_ids :: [(String,Token)]
 reserved_ids = [
  ( "_",       Underscore ),
+ ( "Bool",    KW_Bool ),
+ ( "False",   KW_False ),
+ ( "Int",     KW_Int ),
+ ( "Nat",     KW_Nat ),
+ ( "True",    KW_True ),
  ( "case",    KW_Case ),
  ( "data",    KW_Data ),
  ( "else",    KW_Else ),

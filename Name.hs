@@ -20,6 +20,7 @@ data NameSpace = VarNS
                | ConNS
                | TyVarNS
                | TyConNS
+               | GoalNS
     deriving(Eq, Ord)
 
 mkOccName :: NameSpace -> String -> OccName

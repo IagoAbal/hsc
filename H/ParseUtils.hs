@@ -290,18 +290,18 @@ checkRevDecls = mergeFunBinds []
   where
       mergeFunBinds :: [AnyDecl Pr] -> [AnyDecl Pr] -> P [AnyDecl Pr]
       mergeFunBinds revDs [] = return revDs
-      mergeFunBinds revDs (AnyDecl (FunBind _ ms1@(Match _ name ps _ _:_)):ds1)
+      mergeFunBinds revDs (AnyDecl (FunBind _ name ms1@(Match _ ps _:_)):ds1)
         = mergeMatches ms1 ds1
           where
               arity = length ps
               mergeMatches :: [Match Pr] -> [AnyDecl Pr] -> P [AnyDecl Pr]
-              mergeMatches ms' (AnyDecl (FunBind _ ms@(Match loc name' ps' _ _:_)):ds)
+              mergeMatches ms' (AnyDecl (FunBind _ name' ms@(Match loc ps' _:_)):ds)
                 | name' == name =
                     if length ps' /= arity
                       then fail ("arity mismatch for '" ++ prettyPrint name ++ "'")
                               `atSrcLoc` loc
                       else mergeMatches (ms++ms') ds
-              mergeMatches ms' ds = mergeFunBinds (AnyDecl (FunBind Rec ms'):revDs) ds
+              mergeMatches ms' ds = mergeFunBinds (AnyDecl (FunBind Rec name ms'):revDs) ds
       mergeFunBinds revDs (d:ds) = mergeFunBinds (d:revDs) ds
 
 
@@ -310,16 +310,16 @@ checkRevFnDecls = mergeFunBinds []
   where
       mergeFunBinds :: [Decl Fn Pr] -> [Decl Fn Pr] -> P [Decl Fn Pr]
       mergeFunBinds revDs [] = return revDs
-      mergeFunBinds revDs (FunBind _ ms1@(Match _ name ps _ _:_):ds1)
+      mergeFunBinds revDs (FunBind _ name ms1@(Match _ ps _:_):ds1)
         = mergeMatches ms1 ds1
           where
               arity = length ps
               mergeMatches :: [Match Pr] -> [Decl Fn Pr] -> P [Decl Fn Pr]
-              mergeMatches ms' (FunBind _ ms@(Match loc name' ps' _ _:_):ds)
+              mergeMatches ms' (FunBind _ name' ms@(Match loc ps' _:_):ds)
                 | name' == name =
                     if length ps' /= arity
                       then fail ("arity mismatch for '" ++ prettyPrint name ++ "'")
                               `atSrcLoc` loc
                       else mergeMatches (ms++ms') ds
-              mergeMatches ms' ds = mergeFunBinds (FunBind Rec ms':revDs) ds
+              mergeMatches ms' ds = mergeFunBinds (FunBind Rec name ms':revDs) ds
       mergeFunBinds revDs (d:ds) = mergeFunBinds (d:revDs) ds

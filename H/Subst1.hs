@@ -32,12 +32,14 @@ import qualified Data.Set as Set
 
   
 data Subst1 = Subst1 {
-                substEnv   :: Map Var (Exp Tc)
+                substEnv   :: Map (Var Tc) (Exp Tc)
                 -- | variables in scope,
                 -- overapproximating the set of free variables
-              , substScope :: Set Var
+              , substScope :: Set (Var Tc)
               }
 
+mkSubst1 :: [(Var Tc,Exp Tc)] -> Set (Var Tc) -> Subst1
+mkSubst1 envList scope = Subst1 (Map.fromList envList) scope
 
 class Subst t where
   subst :: MonadUnique m => Subst1 -> t -> m t
@@ -68,41 +70,63 @@ instance SubstBndr b => SubstBndr [b] where
     where go (bs',s) b = do (b',s') <- substBndr s b
                             return (b':bs',s')
 
-instance SubstBndr Var where
+instance SubstBndr (Var Tc) where
   substBndr (Subst1{substEnv,substScope}) var
     = if var `Set.member` substScope
+            -- @var@ may capture some variable 
          then do var' <- newVarFrom var
                  let env'   = Map.insert var (Var var') substEnv
                  let scope' = Set.insert var' substScope
                  return (var',Subst1 env' scope')
+            -- @var@ will not capture any variable
          else do let env'   = Map.delete var substEnv
                  let scope' = Set.insert var substScope
                  return (var,Subst1 env' scope')
 
-instance Subst (Decl s Tc) where
-  subst s (TypeDecl loc tynm tyargs ty)
-    = liftM (TypeDecl loc tynm tyargs) $ subst s ty
-  subst s (DataDecl loc tynm tyargs cons)
-    = liftM (DataDecl loc tynm tyargs) $ subst s cons
-  subst s (TypeSig loc funs polyty)
+instance SubstBndr (Decl s Tc) where
+  substBndr s (TypeDecl loc tynm tyargs ty)
+    = do ty' <- subst s ty
+         return (TypeDecl loc tynm tyargs ty', s)
+  substBndr s (DataDecl loc tynm tyargs cons)
+    = do cons' <- subst s cons
+         return (DataDecl loc tynm tyargs cons',s)
+  substBndr s (TypeSig loc funs polyty)
     = do polyty' <- subst s polyty
-         return $ TypeSig loc funs polyty'
-  subst s (FunBind rec matches) = liftM (FunBind rec) $ subst s matches
-  subst s (PatBind loc rec pat ptcty rhs whr)
+         return (TypeSig loc funs polyty',s)
+  substBndr s (FunBind NonRec fun matches)
+    = do matches' <- subst s matches  -- non-recursive bindings
+         (fun',s') <- substBndr s fun
+         return (FunBind NonRec fun' matches',s')
+  substBndr s (FunBind Rec fun matches)
+    = do (fun',s') <- substBndr s fun
+         matches' <- subst s' matches  -- recursive bindings
+         return (FunBind Rec fun' matches',s')
+  substBndr s (PatBind loc NonRec pat ptcty rhs)
+    = do ptcty' <- subst s ptcty
+         rhs' <- subst s rhs    -- non-recursive bindings
+         (pat',s') <- substBndr s pat
+         return (PatBind loc NonRec pat' ptcty' rhs',s')
+  substBndr s (PatBind loc Rec pat ptcty rhs)
     = do ptcty' <- subst s ptcty
          (pat',s') <- substBndr s pat
-         liftM2 (PatBind loc rec pat' ptcty') (subst s' rhs) (subst s' whr)
-  subst s (GoalDecl loc name gtype ptctyparams prop)
-    = GoalDecl loc name gtype ptctyparams `liftM` subst s prop
+         rhs' <- subst s' rhs    -- recursive bindings
+         return (PatBind loc Rec pat' ptcty' rhs',s')
+  substBndr s (GoalDecl loc gname gtype ptctyparams prop)
+    = do prop' <- subst s prop
+         return (GoalDecl loc gname gtype ptctyparams prop',s)
+
+instance Subst (Decl s Tc) where
+  subst s decl = liftM fst $ substBndr s decl
 
 instance Subst (ConDecl Tc) where
   subst s (ConDecl loc con args)
-    = liftM (ConDecl loc con) $ subst s args
+    = do (args',_s') <- substBndr s args
+         return (ConDecl loc con args')
 
 instance Subst (Match Tc) where
-  subst s (Match loc fun pats rhs whr)
+  subst s (Match loc pats rhs)
     = do (pats',s') <- substBndr s pats
-         liftM2 (Match loc fun pats') (subst s' rhs) (subst s' whr)
+         liftM (Match loc pats') (subst s' rhs)
 
 instance Subst (Exp Tc) where
   subst s@(Subst1{substEnv}) (Var x@(V name ty))
@@ -122,8 +146,10 @@ instance Subst (Exp Tc) where
          body' <- subst s' body
          return $ Lam loc apats' body'
   subst s (TyLam tvs e) = TyLam tvs `liftM` subst s e
-  subst s (Let decls body) = liftM2 Let (subst s decls) (subst s body)
-  subst s (If g t e) = liftM3 If (subst s g) (subst s t) (subst s e)
+  subst s (Let decls body) = do (decls',s') <- substBndr s decls
+                                liftM (Let decls') (subst s' body)
+  subst s (Ite g t e) = liftM3 Ite (subst s g) (subst s t) (subst s e)
+  subst s (If grhss) = liftM If $ subst s grhss
   subst s (Case e casety alts)
     = liftM3 Case (subst s e) (subst s casety) (subst s alts)
   subst s (Tuple es) = liftM Tuple $ subst s es
@@ -135,22 +161,29 @@ instance Subst (Exp Tc) where
   subst s (EnumFromTo e1 en) = liftM2 EnumFromTo (subst s e1) (subst s en)
   subst s (EnumFromThenTo e1 e2 en)
     = liftM3 EnumFromThenTo (subst s e1) (subst s e2) (subst s en)
-  subst s (Ann loc e ty) = liftM2 (Ann loc) (subst s e) (subst s ty)
+  subst s (Coerc loc e ty) = liftM2 (Coerc loc) (subst s e) (subst s ty)
   subst s (QP q pats body) = do (pats',s') <- substBndr s pats
                                 liftM (QP q pats') $ subst s' body
 
 instance Subst (Rhs Tc) where
-  subst s (UnGuardedRhs e) = liftM UnGuardedRhs $ subst s e
-  subst s (GuardedRhss guards owise)
-    = liftM2 GuardedRhss (subst s guards) (subst s owise)
+  subst s (Rhs grhs whr) = do (whr',s') <- substBndr s whr
+                              grhs' <- subst s' grhs
+                              return (Rhs grhs' whr')
 
-instance Subst (Otherwise Tc) where
-  subst s (Otherwise e) = liftM Otherwise $ subst s e
-  subst s NoOtherwise   = return NoOtherwise
+instance Subst (GRhs Tc) where
+  subst s (UnGuarded e)   = liftM UnGuarded $ subst s e
+  subst s (Guarded grhss) = liftM Guarded (subst s grhss)
+
+instance Subst (GuardedRhss Tc) where
+  subst s (GuardedRhss pgrhss elserhs)
+    = liftM2 GuardedRhss (subst s pgrhss) (subst s elserhs)
 
 instance Subst (GuardedRhs Tc) where
   subst s (GuardedRhs loc g e) = liftM2 (GuardedRhs loc) (subst s g) (subst s e)
 
+instance Subst (Else Tc) where
+  subst s (Else loc e) = liftM (Else loc) $ subst s e
+  subst s NoElse   = return NoElse
 
 instance SubstBndr (Pat Tc) where
   substBndr s (VarPat var) = do (var',s') <- substBndr s var
@@ -199,8 +232,8 @@ instance Subst (Type Tc) where
          liftM (PredTy pat' ty') $ subst s mbProp
   subst s (FunTy dom rang) = do (dom',s') <- substBndr s dom
                                 liftM (FunTy dom') $ subst s' rang
-  subst s (TupleTy n tys) = do (tys',_s') <- substBndr s tys
-                               return $ TupleTy n tys'
+  subst s (TupleTy tys) = do (tys',_s') <- substBndr s tys
+                             return $ TupleTy tys'
 
 
 instance SubstBndr (Dom Tc) where
