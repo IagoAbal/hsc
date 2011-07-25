@@ -442,18 +442,21 @@ data Type p where
   -- | list type
   ListTy :: Type p -> Type p
   -- | tuple type
-  TupleTyIn :: [Type Pr] -> Type Pr
-  TupleTy :: Ge p Rn =>  [Dom p] -> Type p
+  TupleTy :: [Dom p] -> Type p
   -- | parenthised type
   ParenTy :: Type Pr -> Type Pr 
   -- | meta type variable
   MetaTy :: MetaTyVar -> Type Tc
 
   -- NB: The @Dom Nothing ty (Just prop)@ is pointless
-data Dom p = Dom (Maybe (Pat p)) (Type p) (Maybe (Prop p))
+data Dom p = Dom {
+               domMbPat  :: Maybe (Pat p)
+             , domType   :: Type p
+             , domMbProp :: Maybe (Prop p)
+             }
 
-domType :: Dom p -> Type p
-domType (Dom mbPat ty mbProp) = PredTy pat ty mbProp
+dom2type :: Dom p -> Type p
+dom2type (Dom mbPat ty mbProp) = PredTy pat ty mbProp
   where pat = maybe WildPat id mbPat
 
 type Range = Type

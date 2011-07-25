@@ -121,17 +121,17 @@ Reserved Ids
 Special Ids
 
 
-Precedences
+  Precedences
 
-> %right '==>'
-> %right '<=>'
-> %nonassoc '==' '/=' '<' '<=' '>' '>='
-> %left '+' '-' '||'
-> %left '%'
-> %left '*' '/' '&&'
-> %right '^'
-> %left '~'
-> %nonassoc NEG
+  > %right '==>'
+  > %right '<=>'
+  > %nonassoc '==' '/=' '<' '<=' '>' '>='
+  > %left '+' '-' '||'
+  > %left '%'
+  > %left '*' '/' '&&'
+  > %right '^'
+  > %left '~'
+  > %nonassoc NEG
 
 > %monad { P }
 > %lexer { lexer } { EOF }
@@ -219,13 +219,10 @@ Types
 > atype :: { Type Pr }
 > : gtycon            { ConTy $1 }
 > | tyvar             { VarTy $1 }
-> | '(' tuptypes ')'   { TupleTyIn (reverse $2) }
+> | '(' tuptypes ')'   { TupleTy (reverse $2) }
 > | '[' type ']'      { ListTy $2 }
 > | '(' type ')'      { $2 }
-> | predty            { $1 }
-
-> predty :: { Type Pr }
-> : '{' apat ':' type '}'           { PredTy $2 $4 Nothing }
+> | '{' apat ':' type '}'           { PredTy $2 $4 Nothing }
 > | '{' apat ':' type '|' prop '}'  { PredTy $2 $4 (Just $6) }
 
 > gtycon :: { TyCon Pr }
@@ -241,9 +238,14 @@ Types
 > | type                        { ForallTy [] $1 }
 
 
-> tuptypes :: { [Type Pr] }
-> : tuptypes ',' type   { $3 : $1 }
-> | type  ',' type    { [$3, $1] }
+> tuptypes :: { [Dom Pr] }
+> : tuptypes ',' tupdom   { $3 : $1 }
+> | tupdom  ',' tupdom    { [$3, $1] }
+
+> tupdom :: { Dom Pr }
+> : type   { Dom Nothing $1 Nothing }
+> | apat ':' type { Dom (Just $1) $3 Nothing }
+> | apat ':' type '|' prop { Dom (Just $1) $3 (Just $5) }
 
 > typaram :: { TyVAR Pr }
 > : tyvar     { $1 }
@@ -268,9 +270,9 @@ Datatype declarations
 > : atypes atype   { $2 : $1 }
 > | {- empty -} { [] }
 
-> scontype :: { (TyNAME Pr, [Type Pr]) }
-> : btype       {% do { (c,ts) <- splitTyConApp $1;
->                       return (c,ts) } }
+  > scontype :: { (TyNAME Pr, [Type Pr]) }
+  > : btype       {% do { (c,ts) <- splitTyConApp $1;
+  >                       return (c,ts) } }
 
 -----------------------------------------------------------------------------
 Value definitions
@@ -340,6 +342,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 > : '\\' srcloc apats '->' exp  { Lam $2 (reverse $3) $5 }
 > | 'let' decllist 'in' exp { Let $2 $4 }
 > | 'if' exp 'then' exp 'else' exp { Ite $2 $4 $6 }
+> | 'if' gdpats    { If (GuardedRhssIn (reverse $2)) }
 > | quantifier apats ',' exp  { QP $1 (reverse $2) $4 }
 
 > quantifier :: { Quantifier }
@@ -378,9 +381,9 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | '(' exp0b op ')'    { LeftSection $2 $3  }
 > | '(' op exp0 ')'   { RightSection $2 $3 }
 
-> commas :: { Int }
-> : commas ','      { $1 + 1 }
-> | ','       { 1 }
+  > commas :: { Int }
+  > : commas ','      { $1 + 1 }
+  > | ','       { 1 }
 
 > texps :: { [Exp Pr] }
 > : texps ',' exp     { $3 : $1 }
@@ -493,7 +496,30 @@ Variables, Constructors and Operators.
 
 > op  :: { Op }
 > : '::'      { ConOp ConsCon }
-> | '=='      { BoolOp EqB }
+> | boolop    { $1 }
+> | intop     { $1 }
+
+> boolop  :: { Op }
+> : '||' { orOp }
+> | '&&' { andOp }
+> | '==>' { impOp }
+> | '<=>' { iffOp }
+> | '=='      { eqOp }
+> | '/=' { neqOp }
+> | '<' { ltOp }
+> | '<=' { leOp }
+> | '>' { gtOp }
+> | '>=' { geOp }
+
+> intop  :: { Op }
+> : '+' { addOp }
+> | '-' { subOp }
+> | '*' { mulOp }
+> | '/' { divOp }
+> | '%' { modOp }
+> | '^' { expOp }
+
+
 
 
 -----------------------------------------------------------------------------

@@ -376,7 +376,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (PolyT
 	pretty (ForallTy [] ty)
 		= pretty ty
 	pretty (ForallTy typarams ty)
-		= myFsep [text "forall", mySep $ map pretty typarams, comma, pretty ty]
+		= myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
 
 instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Type p) where
 	prettyPrec _ (PredTy pat ty Nothing)
@@ -388,8 +388,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Type 
 	prettyPrec p (FunTy a b) = parensIf (p > 0) $
 		myFsep [ppDomType a, text "->", pretty b]
 	prettyPrec _ (ListTy a)  = brackets $ pretty a
-	prettyPrec _ (TupleTyIn l) = parenList . map pretty $ l
-	prettyPrec _ (TupleTy l) = parenList . map pretty $ l
+	prettyPrec _ (TupleTy l) = parenList . map ppTupleDom $ l
 	prettyPrec p (AppTy a b) = parensIf (p > prec_btype) $
 			myFsep [pretty a, ppAType b]
 	prettyPrec _ (VarTy name) = pretty name
@@ -397,6 +396,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Type 
 	prettyPrec _ (ParenTy ty) = pretty ty
 	-- MetaTy ?
 
+	-- fun-dom
 instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Dom p) where
 	prettyPrec p (Dom Nothing ty Nothing) = prettyPrec p ty
 	-- dependent arrow
@@ -406,6 +406,12 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Dom p
 		= braces $ mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
 	prettyPrec _p _other = undefined
 
+ppTupleDom :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Dom p -> Doc
+ppTupleDom (Dom Nothing ty Nothing) = pretty ty
+ppTupleDom (Dom (Just pat) ty Nothing)
+	= mySep [pretty pat, char ':', pretty ty]
+ppTupleDom (Dom (Just pat) ty (Just prop))
+	= mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
 
 instance Pretty (TyVAR p) => Pretty (TyCon p) where
 	pretty (UserTyCon name) = pretty name
