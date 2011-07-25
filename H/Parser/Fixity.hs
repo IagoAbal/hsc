@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, FlexibleInstances #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  H.Fixity
+-- Module      :  H.Parser.Fixity
 -- Copyright   :  (c) Niklas Broberg 2009
 --                (c) Iago Abal 2011
 -- License     :  BSD-style (see the file LICENSE.txt)
@@ -14,7 +14,7 @@
 -- be parsed properly.
 --
 -----------------------------------------------------------------------------
-module H.Fixity
+module H.Parser.Fixity
     (
     -- * Fixity representation
       Fixity(..)

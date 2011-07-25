@@ -1,7 +1,7 @@
 -- #hide
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Language.Haskell.ParseMonad
+-- Module      :  H.Parser.ParseMonad
 -- Copyright   :  (c) The GHC Team, 1997-2000
 --                (c) Iago Abal, 2011
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
@@ -14,7 +14,7 @@
 --
 -----------------------------------------------------------------------------
 
-module H.ParseMonad
+module H.Parser.ParseMonad
   ( -- * Parsing
     P, ParseResult(..), atSrcLoc, LexContext(..),
     ParseMode(..), defaultParseMode,

@@ -21,10 +21,10 @@
 > 
 > import H.Syntax
 > import H.Phase
-> import H.ParseMonad
-> import H.Lexer
-> import H.ParseUtils
-> import H.Fixity
+> import H.Parser.ParseMonad
+> import H.Parser.Lexer
+> import H.Parser.ParseUtils
+> import H.Parser.Fixity
 > import Name
 > import Sorted
 > }

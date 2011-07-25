@@ -1,7 +1,7 @@
 -- #hide
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Language.Haskell.Lexer
+-- Module      :  H.Parser.Lexer
 -- Copyright   :  (c) The GHC Team, 1997-2000
 --                (c) Iago Abal, 2011
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
@@ -18,9 +18,9 @@
 -- ToDo: FloatTok should have three parts (integer part, fraction, exponent) (?)
 -- ToDo: Use a lexical analyser generator (lx?)
 
-module H.Lexer (Token(..), lexer) where
+module H.Parser.Lexer (Token(..), lexer) where
 
-import H.ParseMonad
+import H.Parser.ParseMonad
 
 import Data.Char
   ( isAlpha, isLower, isUpper, toLower,

@@ -32,7 +32,7 @@ module H.Pretty
 	) where
 
 import H.Syntax
-import H.ParseMonad( ParseResult(..) )
+import H.Parser.ParseMonad( ParseResult(..) )
 import Name
 import Sorted
 

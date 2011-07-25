@@ -17,12 +17,12 @@
 --
 -----------------------------------------------------------------------------
 
-module H.ParseUtils
+module H.Parser.ParseUtils
   where
 
 import H.Syntax
 import H.Phase
-import H.ParseMonad
+import H.Parser.ParseMonad
 import H.Pretty
 
 
