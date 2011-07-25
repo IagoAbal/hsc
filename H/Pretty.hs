@@ -326,7 +326,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Decl 
 	pretty (FunBind _rec fun matches) =
 		ppBindings (map (ppMatch fun) matches)
 
-	pretty (PatBind pos _rec pat _ptcty (Rhs grhs whereDecls)) =
+	pretty (PatBind pos _rec pat (Rhs grhs whereDecls)) =
 		markLine pos $
 		myFsep [pretty pat, ppGRhs ValDef grhs]
 				$$$ ppWhere whereDecls

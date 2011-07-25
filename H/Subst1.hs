@@ -101,16 +101,14 @@ instance SubstBndr (Decl s Tc) where
     = do (fun',s') <- substBndr s fun
          matches' <- subst s' matches  -- recursive bindings
          return (FunBind Rec fun' matches',s')
-  substBndr s (PatBind loc NonRec pat ptcty rhs)
-    = do ptcty' <- subst s ptcty
-         rhs' <- subst s rhs    -- non-recursive bindings
+  substBndr s (PatBind loc NonRec pat rhs)
+    = do rhs' <- subst s rhs    -- non-recursive bindings
          (pat',s') <- substBndr s pat
-         return (PatBind loc NonRec pat' ptcty' rhs',s')
-  substBndr s (PatBind loc Rec pat ptcty rhs)
-    = do ptcty' <- subst s ptcty
-         (pat',s') <- substBndr s pat
+         return (PatBind loc NonRec pat' rhs',s')
+  substBndr s (PatBind loc Rec pat rhs)
+    = do (pat',s') <- substBndr s pat
          rhs' <- subst s' rhs    -- recursive bindings
-         return (PatBind loc Rec pat' ptcty' rhs',s')
+         return (PatBind loc Rec pat' rhs',s')
   substBndr s (GoalDecl loc gname gtype ptctyparams prop)
     = do prop' <- subst s prop
          return (GoalDecl loc gname gtype ptctyparams prop',s)

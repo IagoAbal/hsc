@@ -179,7 +179,7 @@ data Decl s p where
   -- NB: Only uniform definitions are allowed
   FunBind :: IsRec p -> NAME p -> [Match p] -> Decl Fn p
   -- | pattern binding
-  PatBind :: SrcLoc -> IsRec p -> Pat p -> PostTcType p -> Rhs p -> Decl Fn p
+  PatBind :: SrcLoc -> IsRec p -> Pat p -> Rhs p -> Decl Fn p
   -- | logical goal: a theorem or a lemma
   GoalDecl :: SrcLoc -> GoalType -> GoalNAME p
             -> PostTcTyParams p
@@ -328,6 +328,7 @@ data Pat p where
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
   -- ^ pattern signature
+    -- Add SrcLoc ?
   SigPat :: Pat p -> Type p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
@@ -348,7 +349,7 @@ data BuiltinCon = UnitCon
                 | TrueCon
                 | NilCon
                 | ConsCon
-    deriving Eq
+    deriving(Eq,Ord)
 
 unitCon, trueCon, falseCon, nilCon, consCon :: Con p
 unitCon  = BuiltinCon UnitCon
@@ -362,7 +363,7 @@ consCon  = BuiltinCon ConsCon
 data Op = BoolOp BoolOp
         | IntOp IntOp
         | ConOp BuiltinCon
-    deriving Eq
+    deriving(Eq,Ord)
 
 -- | Operators for building boolean expressions
 data BoolOp = NotB
@@ -376,7 +377,7 @@ data BoolOp = NotB
             | LeB
             | GtB
             | GeB
-    deriving Eq
+    deriving(Eq,Ord)
 
 notOp, orOp, andOp, impOp, iffOp :: Op
 eqOp, neqOp, ltOp, leOp, gtOp, geOp :: Op
@@ -400,7 +401,7 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
            | DivI
            | ModI
            | ExpI
-    deriving Eq
+    deriving(Eq,Ord)
 
 negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
 negOp = IntOp NegI

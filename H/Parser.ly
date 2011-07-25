@@ -286,7 +286,7 @@ Value definitions
 
 > valdef :: { Decl Fn Pr }
 > : srcloc varid apats rhs optwhere { FunBind Rec $2 [Match $1 $3 (Rhs $4 $5)] }
-> | srcloc pat rhs optwhere         { PatBind $1 Rec $2 NoPostTc (Rhs $3 $4) }
+> | srcloc pat rhs optwhere         { PatBind $1 Rec $2 (Rhs $3 $4) }
 
 > optwhere :: { [Decl Fn Pr] }
 > : 'where' decllist    { $2 }
