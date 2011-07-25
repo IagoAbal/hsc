@@ -24,6 +24,7 @@
 > import H.ParseMonad
 > import H.Lexer
 > import H.ParseUtils
+> import H.Fixity
 > import Name
 > import Sorted
 > }
@@ -572,11 +573,15 @@ Miscellaneous (mostly renamings)
 > happyError :: P a
 > happyError = fail "Parse error"
 
+> opFixities :: ParseResult (Module Pr) -> ParseResult (Module Pr)
+> opFixities (ParseOk m) = applyFixities preludeFixities m
+> opFixities r@(ParseFailed _ _) = r
+
 > -- | Parse of a string, which should contain a complete H! module.
 > parseModule :: String -> ParseResult (Module Pr)
-> parseModule = runParser parse
+> parseModule = opFixities . runParser parse
 
 > -- | Parse of a string, which should contain a complete H! module.
 > parseModuleWithMode :: ParseMode -> String -> ParseResult (Module Pr)
-> parseModuleWithMode mode = runParserWithMode mode parse
+> parseModuleWithMode mode = opFixities . runParserWithMode mode parse
 > }
