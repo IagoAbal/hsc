@@ -16,6 +16,7 @@ module Unique
   where
 
 import Control.Monad.Identity
+import Control.Monad.Reader
 import Control.Monad.State.Strict
 
 
@@ -53,6 +54,12 @@ rest (UniqSupply x) = mkSupply (x+1)
 
 class Monad m => MonadUnique m where
   getUniq :: m Uniq
+
+
+-- MonadUnique instances for some monad stacks based on lifting.
+
+instance MonadUnique m => MonadUnique (ReaderT r m) where
+  getUniq = lift getUniq
 
 
 -- * UniqueT monad transformer
