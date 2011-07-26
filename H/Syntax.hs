@@ -263,7 +263,7 @@ data Exp p where
   -- ^ bounded arithmetic sequence, with first two elements given
   EnumFromThenTo :: Exp p -> Exp p -> Exp p -> Exp p
   -- | explicit type coercion
-  Coerc :: SrcLoc -> Exp p -> Type p -> Exp p
+  Coerc :: SrcLoc -> Exp p -> PolyType p -> Exp p
   -- | logic quantifier
   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
 

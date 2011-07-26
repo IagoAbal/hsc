@@ -318,7 +318,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | exp0        { $1 }
 
 > exp   :: { Exp Pr }
-> : exp0b ':' srcloc type   { Coerc $3 $1 $4 }
+> : exp0b ':' srcloc polytype   { Coerc $3 $1 $4 }
 > | exp0        { $1 }
 
 > exp0 :: { Exp Pr }
