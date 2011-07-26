@@ -8,7 +8,7 @@
 						 #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Language.Haskell.Pretty
+-- Module      :  H.Pretty
 -- Copyright   :  (c) The GHC Team, Noel Winstanley 1997-2000
 --                (c) Iago Abal, 2011
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
@@ -32,6 +32,7 @@ module H.Pretty
 	) where
 
 import H.Syntax
+import H.Phase
 import H.Parser.ParseMonad( ParseResult(..) )
 import Name
 import Sorted
@@ -70,25 +71,19 @@ data PPHsMode = PPHsMode {
 				-- | blank lines between statements?
 		spacing :: Bool,
 				-- | Pretty-printing style to use
-		layout :: PPLayout,
-				-- | add GHC-style @LINE@ pragmas to output?
-		linePragmas :: Bool,
-				-- | not implemented yet
-		comments :: Bool
+		layout :: PPLayout
 		}
 
 -- | The default mode: pretty-print using the offside rule and sensible
 -- defaults.
 defaultMode :: PPHsMode
 defaultMode = PPHsMode{
-		      caseIndent = 4,
+		      caseIndent = 5,
 		      letIndent = 4,
 		      whereIndent = 6,
 		      onsideIndent = 2,
 		      spacing = True,
-		      layout = PPOffsideRule,
-		      linePragmas = False,
-		      comments = True
+		      layout = PPOffsideRule
 		      }
 
 -- | Pretty printing monad
@@ -268,10 +263,15 @@ fullRender :: P.Mode -> Int -> Float -> (P.TextDetails -> a -> a)
 	      -> a -> Doc -> a
 fullRender = fullRenderWithMode defaultMode
 
+--------------------------------------
+
+class (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => PrettyNames p where
+
+instance PrettyNames Pr where
+
 -- -------------------------  Pretty-Print a Module --------------------
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Module p) where
+instance PrettyNames p => Pretty (Module p) where
 	pretty (Module pos modName decls) =
-		markLine pos $
 		topLevel (ppModuleHeader modName)
 			 (map pretty decls)
 
@@ -298,20 +298,18 @@ instance Pretty ModuleName where
 
 -- -------------------------  Declarations ------------------------------
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (AnyDecl p) where
+instance PrettyNames p => Pretty (AnyDecl p) where
 	pretty (AnyDecl decl) = pretty decl
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Decl s p) where
+instance PrettyNames p => Pretty (Decl s p) where
 	pretty (TypeDecl loc name nameList htype) =
 		blankline $
-		markLine loc $
 		mySep ( [text "type", pretty name]
 			++ map pretty nameList
 			++ [equals, pretty htype])
 
 	pretty (DataDecl loc name nameList constrList) =
 		blankline $
-		markLine loc $
 		mySep ( [text "data", pretty name]
 			++ map pretty nameList)
 			<+> myVcat (zipWith (<+>) (equals : repeat (char '|'))
@@ -319,7 +317,6 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Decl 
 
 	pretty (TypeSig pos nameList polyType) =
 		blankline $
-		markLine pos $
 		mySep ((punctuate comma . map pretty $ nameList)
 		      ++ [text ":", pretty polyType])
 
@@ -327,7 +324,6 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Decl 
 		ppBindings (map (ppMatch fun) matches)
 
 	pretty (PatBind pos _rec pat (Rhs grhs whereDecls)) =
-		markLine pos $
 		myFsep [pretty pat, ppGRhs ValDef grhs]
 				$$$ ppWhere whereDecls
 
@@ -339,20 +335,19 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Decl 
 				ppGoalType LemmaGoal   = text "lemma"
 
 
-ppMatch :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => NAME p -> Match p -> Doc
+ppMatch :: PrettyNames p => NAME p -> Match p -> Doc
 ppMatch fun (Match pos ps (Rhs grhs whereDecls)) =
-		markLine pos $
 		myFsep (lhs ++ [ppGRhs ValDef grhs])
 		$$$ ppWhere whereDecls
 	    where
 		lhs = pretty fun : map (prettyPrec 2) ps
 
-ppWhere :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => [Decl s p] -> Doc
+ppWhere :: PrettyNames p => [Decl s p] -> Doc
 ppWhere [] = empty
 ppWhere l  = nest 2 (text "where" $$$ ppBody whereIndent (map pretty l))
 
 -- ------------------------- Data & Newtype Bodies -------------------------
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (ConDecl p) where
+instance PrettyNames p => Pretty (ConDecl p) where
 	pretty (ConDeclIn _pos name typeList) =
 		mySep $ pretty name : map (prettyPrec prec_atype) typeList
 	pretty (ConDecl _pos name typeList) =
@@ -360,10 +355,10 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (ConDe
 
 ------------------------- Types -------------------------
 
-ppDomType :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Dom p -> Doc
+ppDomType :: PrettyNames p => Dom p -> Doc
 ppDomType = prettyPrec prec_btype
 
-ppAType :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Type p -> Doc
+ppAType :: PrettyNames p => Type p -> Doc
 ppAType = prettyPrec prec_atype
 
 -- precedences for types
@@ -372,13 +367,13 @@ prec_btype = 1	-- left argument of ->,
 		-- or either argument of an infix data constructor
 prec_atype = 2	-- argument of type or data constructor, or of a class
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (PolyType p) where
+instance PrettyNames p => Pretty (PolyType p) where
 	pretty (ForallTy [] ty)
 		= pretty ty
 	pretty (ForallTy typarams ty)
 		= myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Type p) where
+instance PrettyNames p => Pretty (Type p) where
 	prettyPrec _ (PredTy pat ty Nothing)
 		= braces $ mySep [pretty pat, char ':', pretty ty]
 	prettyPrec _ (PredTy pat ty (Just prop))
@@ -397,7 +392,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Type 
 	-- MetaTy ?
 
 	-- fun-dom
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Dom p) where
+instance PrettyNames p => Pretty (Dom p) where
 	prettyPrec p (Dom Nothing ty Nothing) = prettyPrec p ty
 	-- dependent arrow
 	prettyPrec _p (Dom (Just pat) ty Nothing)
@@ -406,7 +401,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Dom p
 		= braces $ mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
 	prettyPrec _p _other = undefined
 
-ppTupleDom :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Dom p -> Doc
+ppTupleDom :: PrettyNames p => Dom p -> Doc
 ppTupleDom (Dom Nothing ty Nothing) = pretty ty
 ppTupleDom (Dom (Just pat) ty Nothing)
 	= mySep [pretty pat, char ':', pretty ty]
@@ -443,24 +438,24 @@ rhsSepSym ValDef  = equals
 rhsSepSym CaseAlt = text "->"
 rhsSepSym IfExp   = text "->"
 
-ppRhs :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => RhsContext -> Rhs p -> Doc
+ppRhs :: PrettyNames p => RhsContext -> Rhs p -> Doc
 ppRhs ctx (Rhs grhs whereDecls) = ppGRhs ctx grhs $$$ ppWhere whereDecls
 
-ppGRhs :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => RhsContext -> GRhs p -> Doc
+ppGRhs :: PrettyNames p => RhsContext -> GRhs p -> Doc
 ppGRhs ctx (UnGuarded e)   = rhsSepSym ctx <+> pretty e
 ppGRhs ctx (Guarded grhss) = ppGuardedRhss ctx grhss
 
-ppGuardedRhss :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => RhsContext -> GuardedRhss p -> Doc
+ppGuardedRhss :: PrettyNames p => RhsContext -> GuardedRhss p -> Doc
 ppGuardedRhss ctx (GuardedRhssIn guardList)
 	= myVcat $ map (ppGuardedRhs ctx) guardList
 ppGuardedRhss ctx (GuardedRhss guardList elserhs)
 	= myVcat $ map (ppGuardedRhs ctx) guardList ++ [ppElse ctx elserhs]
 
-ppGuardedRhs :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => RhsContext -> GuardedRhs p -> Doc
+ppGuardedRhs :: PrettyNames p => RhsContext -> GuardedRhs p -> Doc
 ppGuardedRhs ctx (GuardedRhs _pos guard body) =
 		myFsep [char '|', pretty guard, rhsSepSym ctx, pretty body]
 
-ppElse :: (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => RhsContext -> Else p -> Doc
+ppElse :: PrettyNames p => RhsContext -> Else p -> Doc
 ppElse ctx (Else _pos body)
 	= myFsep [char '|', text "else", rhsSepSym ctx, pretty body]
 ppElse ctx  NoElse   = empty
@@ -470,7 +465,7 @@ ppElse ctx  NoElse   = empty
 instance Pretty Lit where
 	pretty (IntLit i) = integer i
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Exp p) where
+instance PrettyNames p => Pretty (Exp p) where
 	pretty (Lit lit) = pretty lit
 	pretty ElseGuard = text "else"
 	-- lambda stuff
@@ -565,7 +560,7 @@ instance Pretty Quantifier where
 
 -- ------------------------- Patterns -----------------------------
 
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Pat p) where
+instance PrettyNames p => Pretty (Pat p) where
 	prettyPrec _ (VarPat var) = pretty var
 	prettyPrec _ (LitPat lit) = pretty lit
 	prettyPrec p (InfixPat a cop b) = parensIf (p > 0) $
@@ -586,7 +581,7 @@ instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Pat p
 
 
 -- ------------------------- Case bodies  -------------------------
-instance (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => Pretty (Alt p) where
+instance PrettyNames p => Pretty (Alt p) where
 	pretty (Alt _pos pat rhs) =
 		myFsep [pretty pat, ppRhs CaseAlt rhs]		-- is this pretty printed correctly ?
 
@@ -691,17 +686,3 @@ layoutChoice a b dl = do e <- getPPEnv
                          if layout e == PPOffsideRule ||
                             layout e == PPSemiColon
                           then a dl else b dl
-
--- Prefix something with a LINE pragma, if requested.
--- GHC's LINE pragma actually sets the current line number to n-1, so
--- that the following line is line n.  But if there's no newline before
--- the line we're talking about, we need to compensate by adding 1.
-
-markLine :: SrcLoc -> Doc -> Doc
-markLine loc doc = do
-	e <- getPPEnv
-	let y = srcLine loc
-	let line l =
-	      text ("{-# LINE " ++ show l ++ " \"" ++ srcFilename loc ++ "\" #-}")
-	if linePragmas e then layoutChoice (line y $$) (line (y+1) <+>) doc
-	      else doc
