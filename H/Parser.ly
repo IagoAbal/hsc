@@ -19,6 +19,7 @@
 >   ParseMode(..), defaultParseMode, ParseResult(..)) where
 > 
 > import H.Syntax
+> import H.SrcLoc
 > import H.Phase
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer

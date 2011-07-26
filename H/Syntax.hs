@@ -13,6 +13,7 @@ module H.Syntax
   where
 
 import H.Phase
+import H.SrcLoc
 
 import Name
 import Sorted
@@ -21,16 +22,6 @@ import Unique( Uniq, Uniquable(..), MonadUnique(..) )
 import Data.STRef( STRef )
 import Data.Function ( on )
 
-
--- * Source locations
-
--- | A position in the source
-data SrcLoc = SrcLoc {
-      srcFilename :: String
-		, srcLine     :: Int
-    , srcColumn   :: Int
-		}
-    deriving(Eq,Ord,Show)
 
 
 -- * Variables

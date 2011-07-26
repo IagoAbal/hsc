@@ -26,7 +26,7 @@ module H.Parser.ParseMonad
     pushContextL, popContextL
   ) where
 
-import H.Syntax(SrcLoc(..))
+import H.SrcLoc
 import Control.Applicative
 import Data.Monoid
 

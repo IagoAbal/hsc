@@ -32,6 +32,7 @@ module H.Pretty
 	) where
 
 import H.Syntax
+import H.SrcLoc
 import H.Phase
 import H.Parser.ParseMonad( ParseResult(..) )
 import Name
@@ -277,8 +278,8 @@ instance PrettyNames p => Pretty (Module p) where
 
 
 instance Pretty SrcLoc where
-	pretty (SrcLoc file line column)
-		= hcat [text file, char ':', int line, char ':', int column, char ':']
+	pretty loc
+		=  (return $ ppSrcLoc loc) <> char ':'
 
 instance (Pretty a) => Pretty (ParseResult a) where
 	pretty (ParseOk a) = pretty a
