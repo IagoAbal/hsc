@@ -1,5 +1,4 @@
 > {
-> {-# LANGUAGE TypeOperators #-}
 > -----------------------------------------------------------------------------
 > -- |
 > -- Module      :  H.Parser
@@ -23,17 +22,13 @@
 > import H.Phase
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer
-> import H.Parser.ParseUtils
+> import H.Parser.Utils
 > import H.Parser.Fixity
+>
 > import Name
 > import Sorted
 > }
 
-ToDo: Check exactly which names must be qualified with Prelude (commas and friends)
-ToDo: Inst (MPCs?)
-ToDo: Polish constr a bit
-ToDo: Ugly: exp0b is used for lhs, pat, exp0, ...
-ToDo: Differentiate between record updates and labeled construction.
 
 -----------------------------------------------------------------------------
 Conflicts: 2 shift/reduce
@@ -49,10 +44,11 @@ Conflicts: 2 shift/reduce
 
 -----------------------------------------------------------------------------
 
+
 > %token
-> VARID    { VarId $$ }
+> VARID  { VarId $$ }
 > CONID  { ConId $$ }
-> INT  { IntTok $$ }
+> INT    { IntTok $$ }
 
 Symbols
 
@@ -64,75 +60,62 @@ Symbols
 > vccurly { VRightCurly }     -- a virtual close brace
 > '[' { LeftSquare }
 > ']' { RightSquare }
->   ',' { Comma }
+> ',' { Comma }
 > '_' { Underscore }
 
 Reserved operators
 
 > '.'   { Dot }
 > '..'  { DotDot }
-> ':' { Colon }
+> ':'   { Colon }
 > '::'  { DoubleColon }
-> '=' { Equals }
+> '='   { Equals }
 > '\\'  { Backslash }
-> '|' { Bar }
+> '|'   { Bar }
 > '->'  { RightArrow }
-> '@' { At }
-> '~' { Tilde }
-> '||' { BarBar }
-> '&&' { AmpAmp }
+> '@'   { At }
+> '~'   { Tilde }
+> '||'  { BarBar }
+> '&&'  { AmpAmp }
 > '==>' { Implication }
 > '<=>' { Iff }
-> '+' { Plus }
-> '-' { Minus }
-> '*' { Asterisk }
-> '/' { Slash }
-> '%' { Percent }
-> '^' { Caret }
-> '==' { EqEq }
-> '/=' { SlashEq }
-> '<' { Lt }
-> '<=' { LtEq }
-> '>' { Gt }
-> '>=' { GtEq }
+> '+'   { Plus }
+> '-'   { Minus }
+> '*'   { Asterisk }
+> '/'   { Slash }
+> '%'   { Percent }
+> '^'   { Caret }
+> '=='  { EqEq }
+> '/='  { SlashEq }
+> '<'   { Lt }
+> '<='  { LtEq }
+> '>'   { Gt }
+> '>='  { GtEq }
 
 Reserved Ids
 
 > 'Bool'    { KW_Bool }
-> 'False'    { KW_False }
-> 'Int'    { KW_Int }
-> 'Nat'    { KW_Nat }
+> 'False'   { KW_False }
+> 'Int'     { KW_Int }
+> 'Nat'     { KW_Nat }
 > 'True'    { KW_True }
 > 'case'    { KW_Case }
 > 'data'    { KW_Data }
 > 'else'    { KW_Else }
 > 'exists'  { KW_Exists }
 > 'forall'  { KW_Forall }
-> 'if'    { KW_If }
-> 'in'    { KW_In }
-> 'lemma' { KW_Lemma }
-> 'let'   { KW_Let }
+> 'if'      { KW_If }
+> 'in'      { KW_In }
+> 'lemma'   { KW_Lemma }
+> 'let'     { KW_Let }
 > 'module'  { KW_Module }
-> 'of'    { KW_Of }
+> 'of'      { KW_Of }
 > 'theorem' { KW_Theorem }
 > 'then'    { KW_Then }
 > 'type'    { KW_Type }
 > 'where'   { KW_Where }
 
-Special Ids
 
-
-  Precedences
-
-  > %right '==>'
-  > %right '<=>'
-  > %nonassoc '==' '/=' '<' '<=' '>' '>='
-  > %left '+' '-' '||'
-  > %left '%'
-  > %left '*' '/' '&&'
-  > %right '^'
-  > %left '~'
-  > %nonassoc NEG
 
 > %monad { P }
 > %lexer { lexer } { EOF }
@@ -140,16 +123,15 @@ Special Ids
 > %tokentype { Token }
 > %%
 
------------------------------------------------------------------------------
+-----------------------------------------------------------------------
 Module Header
 
 > module :: { Module Pr }
-> : srcloc 'module' modid 'where' body
->   { Module $1 $3 $5 }
+> : srcloc 'module' modid 'where' body    { Module $1 $3 $5 }
 
 > body :: { [AnyDecl Pr] }
 > : '{'  bodyaux '}'      { $2 }
-> | open bodyaux close      { $2 }
+> | open bodyaux close    { $2 }
 
 > bodyaux :: { [AnyDecl Pr] }
 > : optsemis topdecls { $2 }
@@ -162,7 +144,7 @@ Module Header
 > : semis         { () }
 > | {- empty -}       { () }
 
------------------------------------------------------------------------------
+-----------------------------------------------------------------------
 Top-Level Declarations
 
 Note: The report allows topdecls to be empty. This would result in another
@@ -172,14 +154,18 @@ shift/reduce-conflict, so we don't handle this case here, but in bodyaux.
 > : topdecls1 optsemis    {% checkRevDecls $1 }
 
 > topdecls1 :: { [AnyDecl Pr] }
-> : topdecls1 semis topdecl { $3 : $1 }
-> | topdecl     { [$1] }
+> : topdecls1 semis topdecl   { $3 : $1 }
+> | topdecl                   { [$1] }
 
 > topdecl :: { AnyDecl Pr }
 > : srcloc 'type' conid typarams '=' type
->     { AnyDecl $ TypeDecl $1 $3 $4 $6 }
+>     {% do { checkTyParams $1 (TypeDeclTPC $3) $4
+>           ; return $ AnyDecl $ TypeDecl $1 $3 $4 $6 }
+>     }
 > | srcloc 'data' conid typarams '=' constrs
->     { AnyDecl $ DataDecl $1 $3 (reverse $4) $6 }
+>     {% do { checkTyParams $1 (DataDeclTPC $3) $4
+>           ; return $ AnyDecl $ DataDecl $1 $3 (reverse $4) $6 }
+>     }
 > | decl     { AnyDecl $1 }
 > | goaldecl { AnyDecl $1 }
 
@@ -235,7 +221,10 @@ Types
 
 
 > polytype :: { PolyType Pr }
-> : 'forall' typarams '.' type  { ForallTy $2 $4 }
+> : srcloc 'forall' typarams '.' type
+>     {% do { checkTyParams $1 ForallTyTPC $3
+>           ; return $ ForallTy $3 $5 }
+>     }
 > | type                        { ForallTy [] $1 }
 
 
@@ -248,12 +237,17 @@ Types
 > | apat ':' type { Dom (Just $1) $3 Nothing }
 > | apat ':' type '|' prop { Dom (Just $1) $3 (Just $5) }
 
+
+> typarams :: { TyParams Pr }
+> : typaramsR   { reverse $1 }
+
+> typaramsR :: { TyParams Pr }
+> : typaramsR typaram  { $2 : $1 }
+> | {- empty -}       { [] }
+
 > typaram :: { TyVAR Pr }
 > : tyvar     { $1 }
 
-> typarams :: { TyParams Pr }
-> : typarams typaram  { $2 : $1 }
-> | {- empty -}       { [] }
 
 -----------------------------------------------------------------------------
 Datatype declarations

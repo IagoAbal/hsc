@@ -4,7 +4,7 @@
 -- #hide
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Language.Haskell.ParseUtils
+-- Module      :  H.Parser.Utils
 -- Copyright   :  (c) The GHC Team, 1997-2000
 --                (c) Iago Abal, 2011
 -- License     :  BSD-style (see the file libraries/base/LICENSE)
@@ -17,7 +17,7 @@
 --
 -----------------------------------------------------------------------------
 
-module H.Parser.ParseUtils
+module H.Parser.Utils
   where
 
 import H.Syntax
@@ -25,14 +25,22 @@ import H.Phase
 import H.Parser.ParseMonad
 import H.Pretty
 
+import Data.List ( nub )
 
-splitTyConApp :: Type Pr -> P (TyNAME Pr,[Type Pr])
-splitTyConApp t0 = split t0 []
- where
- split :: Type Pr -> [Type Pr] -> P (TyNAME Pr,[Type Pr])
- split (AppTy t u) ts = split t (u:ts)
- split (ConTy (UserTyCon t)) ts = return (t,ts)
- split _ _ = fail "Illegal data declaration"
+
+data TyParamsContext = TypeDeclTPC (TyNAME Pr)
+                     | DataDeclTPC (TyNAME Pr)
+                     | ForallTyTPC
+
+checkTyParams :: SrcLoc -> TyParamsContext -> TyParams Pr -> P ()
+checkTyParams loc ctx typs
+  | nub typs == typs = return ()
+  -- there is some repeated variable as in (for example) @forall a a b. [(a,b)]@
+  | otherwise        = fail ("Duplicated type variable(s) in " ++ pp_ctx ctx )
+                        `atSrcLoc` loc
+  where pp_ctx (TypeDeclTPC nm) = "`" ++ prettyPrint nm ++ "' type declaration"
+        pp_ctx (DataDeclTPC nm) = "`" ++ prettyPrint nm ++ "' data declaration"
+        pp_ctx ForallTyTPC      = "'forall' type"
 
 -- -----------------------------------------------------------------------------
 -- -- Various Syntactic Checks
