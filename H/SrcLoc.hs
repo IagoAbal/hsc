@@ -1,7 +1,8 @@
 module H.SrcLoc where
 
 
-import Text.PrettyPrint
+import H.Pretty
+
 
 -- | A position in the source
 data SrcLoc = SrcLoc {
@@ -12,10 +13,10 @@ data SrcLoc = SrcLoc {
     deriving(Eq,Ord,Show)
 
 
-ppSrcLoc :: SrcLoc -> Doc
-ppSrcLoc (SrcLoc file line column)
-  = hcat [text file, char ':', int line, char ':', int column]
+instance Pretty SrcLoc where
+  pretty (SrcLoc file line column)
+    = hcat [text file, char ':', int line, char ':', int column]
 
 
 ppLocated :: SrcLoc -> Doc -> Doc
-ppLocated loc msg = ppSrcLoc loc <> char ':' <+> msg
+ppLocated loc msg = pretty loc <> char ':' <+> msg

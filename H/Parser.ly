@@ -20,6 +20,7 @@
 > 
 > import H.Syntax
 > import H.SrcLoc
+> import H.Pretty
 > import H.Phase
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer
@@ -567,6 +568,10 @@ Miscellaneous (mostly renamings)
 > {
 > happyError :: P a
 > happyError = fail "Parse error"
+
+> instance (Pretty a) => Pretty (ParseResult a) where
+>  pretty (ParseOk a) = pretty a
+>  pretty (ParseFailed loc errmsg) = mySep [pretty loc, text errmsg]
 
 > opFixities :: ParseResult (Module Pr) -> ParseResult (Module Pr)
 > opFixities (ParseOk m) = applyFixities preludeFixities m
