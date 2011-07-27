@@ -33,9 +33,22 @@ instance Lt Tc Vc where
 instance Lt Ti Vc where
 
 class Le a b where
-  -- reflexivity
-instance Le a a where
-instance Lt a b => Le a b where
+  --
+instance Le Pr Pr where
+instance Le Pr Rn where
+instance Le Pr Tc where
+instance Le Pr Ti where
+instance Le Pr Vc where
+instance Le Rn Rn where
+instance Le Rn Tc where
+instance Le Rn Ti where
+instance Le Rn Vc where
+instance Le Tc Tc where
+instance Le Tc Ti where
+instance Le Tc Vc where
+instance Le Ti Vc where
+instance Le Ti Ti where
+instance Le Vc Vc where
 
 class Gt a b where
 instance Lt b a => Gt a b where
