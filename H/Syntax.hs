@@ -21,7 +21,7 @@ import Name
 import Sorted
 import Unique( Uniq, Uniquable(..), MonadUnique(..) )
 
-import Data.STRef( STRef )
+import Data.IORef( IORef )
 import Data.Function ( on )
 
 
@@ -154,8 +154,8 @@ type PostTcTyParams p = PostTc p [TyVar]
 
 -- * Modules
 
-data Module p where
-  Module :: SrcLoc -> ModuleName -> [AnyDecl p] -> Module p
+data Module p = Module SrcLoc ModuleName [Decl p]
+
 
 newtype ModuleName = ModName String
 
@@ -177,28 +177,15 @@ instance Pretty ModuleName where
 
 -- * Declarations
 
--- | Sort of type declarations
-data Ty
--- | Sort of function and type signatures declarations
-data Fn
--- | Sort of logical goals
-data Lg
-
-  -- | Any kind of declaration
-data AnyDecl p = forall s. AnyDecl (Decl s p)
-
-data Decl s p where
+data Decl p where
   -- | type synonym 
-  TypeDecl ::	SrcLoc -> TyNAME p -> TyParams p -> Type p -> Decl Ty p
+  TypeDecl ::	SrcLoc -> TyNAME p -> TyParams p -> Type p -> Decl p
   -- | inductive data type
-  DataDecl ::	SrcLoc -> TyNAME p -> TyParams p -> [ConDecl p] -> Decl Ty p
-  -- | type signature(s)
-  TypeSig :: SrcLoc -> [NAME p] -> PolyType p -> Decl Fn p
-  -- | a function defined by a *set* of equations
-  -- NB: Only uniform definitions are allowed
-  FunBind :: IsRec p -> NAME p -> [Match p] -> Decl Fn p
-  -- | pattern binding
-  PatBind :: SrcLoc -> IsRec p -> Pat p -> Rhs p -> Decl Fn p
+  DataDecl ::	SrcLoc -> TyNAME p -> TyParams p -> [ConDecl p] -> Decl p
+--   -- | type signature
+--   TypeSig :: SrcLoc -> NAME Pr -> PolyType Pr -> Decl Pr
+  -- | Value declarations
+  ValDecl :: Bind p -> Decl p
   -- | logical goal: a theorem or a lemma
   GoalDecl :: SrcLoc -> GoalType -> GoalNAME p
             -> PostTcTyParams p
@@ -206,9 +193,21 @@ data Decl s p where
               -- that is inferred during type checking;
               -- note that the logical 'forall' does not allow
               -- to quantify over types.
-            -> Prop p -> Decl Lg p
+            -> Prop p -> Decl p
 
-type WhereDecls p = [Decl Fn p]
+
+data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) [Match p]
+                  -- ^ a function defined by a *set* of equations
+                  -- NB: Only uniform definitions are allowed
+                  -- NB: @f = ...@ is considered a FunBind because that allows
+                  --     the annotation with a polymorphic type.
+            | PatBind SrcLoc (Pat p) (Rhs p)
+                  -- ^ pattern binding
+
+data TypeSig p = NoTypeSig
+               | TypeSig SrcLoc (PolyType p)
+
+type WhereBinds p = [Bind p]
 
   -- Everything is parsed as potentially recursive and later
   -- we perform an analysis to detect non-recursive definitions.
@@ -232,10 +231,7 @@ data GoalType = TheoremGoal
   deriving Eq
 
 
-instance PrettyNames p => Pretty (AnyDecl p) where
-  pretty (AnyDecl decl) = pretty decl
-
-instance PrettyNames p => Pretty (Decl s p) where
+instance PrettyNames p => Pretty (Decl p) where
   pretty (TypeDecl loc name nameList htype) =
     blankline $
     mySep ( [text "type", pretty name]
@@ -247,23 +243,29 @@ instance PrettyNames p => Pretty (Decl s p) where
       ++ map pretty nameList)
       <+> myVcat (zipWith (<+>) (equals : repeat (char '|'))
                (map pretty constrList))
-  pretty (TypeSig pos nameList polyType) =
-    blankline $
-    mySep ((punctuate comma . map pretty $ nameList)
-          ++ [text ":", pretty polyType])
-  pretty (FunBind _rec fun matches) =
-    blankline $
-    ppBindings (map (ppMatch fun) matches)
-  pretty (PatBind pos _rec pat (Rhs grhs whereDecls)) =
-    blankline $
-    myFsep [pretty pat, ppGRhs ValDef grhs]
-        $$$ ppWhere whereDecls
+--   pretty (TypeSig pos name polyType)
+--     = blankline $
+--       mySep [pretty name, text ":", pretty polyType]
+  pretty (ValDecl bind) = blankline $ pretty bind
   pretty (GoalDecl pos goaltype gname _ptctys prop)
     = blankline $
-        myFsep [ppGoalType goaltype, pretty gname, equals, pretty prop]
-    where
-        ppGoalType TheoremGoal = text "theorem"
-        ppGoalType LemmaGoal   = text "lemma"
+        myFsep [pretty goaltype, pretty gname, equals, pretty prop]
+
+instance Pretty GoalType where
+  pretty TheoremGoal = text "theorem"
+  pretty LemmaGoal   = text "lemma"
+
+instance PrettyNames p => Pretty (Bind p) where
+  pretty (FunBind _rec fun sig matches) =
+         ppTypeSig fun sig
+      $$ ppBindings (map (ppMatch fun) matches)
+  pretty (PatBind pos pat (Rhs grhs whereDecls)) =
+    myFsep [pretty pat, ppGRhs ValDef grhs]
+        $$$ ppWhere whereDecls
+
+ppTypeSig :: PrettyNames p => NAME p -> TypeSig p -> Doc
+ppTypeSig _fun NoTypeSig = empty
+ppTypeSig  fun (TypeSig _loc polyty) = mySep [pretty fun, text ":", pretty polyty]
 
 ppMatch :: PrettyNames p => NAME p -> Match p -> Doc
 ppMatch fun (Match pos ps (Rhs grhs whereDecls)) =
@@ -272,7 +274,7 @@ ppMatch fun (Match pos ps (Rhs grhs whereDecls)) =
       where
     lhs = pretty fun : map (prettyPrec 2) ps
 
-ppWhere :: PrettyNames p => [Decl s p] -> Doc
+ppWhere :: PrettyNames p => WhereBinds p -> Doc
 ppWhere [] = empty
 ppWhere l  = nest 2 (text "where" $$$ ppBody whereIndent (map pretty l))
 
@@ -306,7 +308,7 @@ data Exp p where
   -- | lambda expression
   Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
   -- | local declarations with @let@
-  Let :: [Decl Fn p] -> Exp p -> Exp p
+  Let :: [Bind p] -> Exp p -> Exp p
   -- | type lambda
   TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
   -- | @if@ /exp/ @then@ /exp/ @else@ /exp/
@@ -340,17 +342,18 @@ data Exp p where
 -- | Expressions of boolean type
 type Prop = Exp
 
+isElseGuard :: Exp Pr -> Bool
+isElseGuard ElseGuard = True
+isElseGuard _other    = False
 
 instance PrettyNames p => Pretty (Exp p) where
   pretty (Lit lit) = pretty lit
   pretty ElseGuard = text "else"
-  -- lambda stuff
   pretty (PrefixApp op a) = myFsep [pretty op, pretty a]
   pretty (InfixApp a op b) = myFsep [pretty a, pretty op, pretty b]
   pretty (App a b) = myFsep [pretty a, pretty b]
   pretty (Lam _loc patList body) = myFsep $
     char '\\' : map pretty patList ++ [text "->", pretty body]
-  -- keywords
   pretty (Let expList letBody) =
     myFsep [text "let" <+> ppBody letIndent (map pretty expList),
       text "in", pretty letBody]
@@ -366,16 +369,9 @@ instance PrettyNames p => Pretty (Exp p) where
   pretty (Var var) = pretty var
   pretty (Con con) = pretty con
   pretty (Tuple expList) = parenList . map pretty $ expList
---  -- weird stuff
   pretty (Paren e) = parens . pretty $ e
   pretty (LeftSection e op) = parens (pretty e <+> pretty op)
   pretty (RightSection op e) = parens (pretty op <+> pretty e)
---  -- patterns
---  -- special case that would otherwise be buggy
---  pretty (HsAsPat name (HsIrrPat e)) =
---    myFsep [pretty name <> char '@', char '~' <> pretty e]
---  pretty (HsAsPat name e) = hcat [pretty name, char '@', pretty e]
---  pretty HsWildCard = char '_'
   -- Lists
   pretty (List list) =
     bracketList . punctuate comma . map pretty $ list
@@ -386,14 +382,13 @@ instance PrettyNames p => Pretty (Exp p) where
            text "..", pretty to]
   pretty (Coerc _pos e ty) =
     myFsep [pretty e, text ":", pretty ty]
---  QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
   pretty (QP quant patList body)
     = myFsep $ pretty quant : map pretty patList ++ [text ",", pretty body]
 
 -- ** Right-hand side
 
 -- | The right hand side of a function or pattern binding.
-data Rhs p = Rhs (GRhs p) (WhereDecls p)
+data Rhs p = Rhs (GRhs p) (WhereBinds p)
 
 data GRhs p
 	 = UnGuarded (Exp p)	-- ^ unguarded right hand side (/exp/)
@@ -482,10 +477,6 @@ data Pat p where
     -- Add SrcLoc ?
   SigPat :: Pat p -> Type p -> Pat p
 
--- | An /alt/ in a @case@ expression.
-data Alt p = Alt SrcLoc (Pat p) (Rhs p)
-
-
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
@@ -500,6 +491,9 @@ patBndrs (SigPat p _t) = patBndrs p
 
 patsBndrs :: [Pat p] -> [VAR p]
 patsBndrs = concatMap patBndrs
+
+-- | An /alt/ in a @case@ expression.
+data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 
 
 instance PrettyNames p => Pretty (Pat p) where
@@ -519,7 +513,7 @@ instance PrettyNames p => Pretty (Pat p) where
     hcat [pretty var, char '@', pretty pat]
   prettyPrec _ WildPat = char '_'
   prettyPrec _ (SigPat pat ty) =
-    myFsep [pretty pat, text ":", pretty ty]
+    parens $ myFsep [pretty pat, text ":", pretty ty]
 
 instance PrettyNames p => Pretty (Alt p) where
   pretty (Alt _pos pat rhs) =
@@ -674,8 +668,7 @@ data Type p where
   -- | subset type
   PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
   -- | function type
-  FunTyIn :: Type Pr -> Range Pr -> Type Pr
-  FunTy :: Ge p Rn => Dom p -> Range p -> Type p
+  FunTy :: Dom p -> Range p -> Type p
   -- | list type
   ListTy :: Type p -> Type p
   -- | tuple type
@@ -724,8 +717,6 @@ instance PrettyNames p => Pretty (Type p) where
     = braces $ mySep [pretty pat, char ':', pretty ty]
   prettyPrec _ (PredTy pat ty (Just prop))
     = braces $ mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
-  prettyPrec p (FunTyIn a b) = parensIf (p > 0) $
-    myFsep [prettyPrec prec_btype a, text "->", pretty b]
   prettyPrec p (FunTy a b) = parensIf (p > 0) $
     myFsep [ppDomType a, text "->", pretty b]
   prettyPrec _ (ListTy a)  = brackets $ pretty a
@@ -790,17 +781,26 @@ instance Sorted BuiltinTyCon Kind where
 -- ** Meta type variables
 
 data MetaTyVar = MetaTyV {
-                   mtvUniq :: !Uniq
+                    -- a 'Uniq' would suffice but a 'Name' allows
+                    -- better pretty-printing.
+                   mtvName :: !Name
                  , mtvKind :: !Kind
-                 , mtvRef  :: forall s. STRef s (Maybe (Type Tc))
+                 , mtvRef  :: IORef (Maybe (Type Tc))
                  }
+
+instance Eq MetaTyVar where
+  (==) = (==) `on` mtvName
+
+instance Sorted MetaTyVar Kind where
+  sortOf = mtvKind
+
 
 -- ** Constructors
 
-(\-->) :: Ge p Rn => Dom p -> Range p -> Type p
+(\-->) :: Dom p -> Range p -> Type p
 (\-->) = FunTy
 
-(-->) :: Ge p Rn => Type p -> Type p -> Type p
+(-->) :: Type p -> Type p -> Type p
 dom --> ran = Dom Nothing dom Nothing \--> ran
 
 unitTy, boolTy, intTy, natTy :: Type p
