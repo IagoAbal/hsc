@@ -147,7 +147,13 @@ instance Pretty OccName where
   pretty = text . occString
 
 instance Pretty Name where
-  pretty = pretty . nameOcc
+  pretty (Name _ occ@(OccName ns _) uniq)
+    = case ns of
+          -- The 'OccName' for constructors is ensured to be unique
+          ConNS   -> pretty occ
+          TyConNS -> pretty occ
+          -- For regular variables we need to print the 'Uniq'.
+          _other  -> pretty occ <> char '_' <> int uniq
 
 
 -- * Pretty printing combinators
