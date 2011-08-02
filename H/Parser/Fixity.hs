@@ -15,24 +15,7 @@
 --
 -----------------------------------------------------------------------------
 module H.Parser.Fixity
-    (
-    -- * Fixity representation
-      Fixity(..)
-    -- | The following three functions all create lists of
-    --   fixities from textual representations of operators.
-    --   The intended usage is e.g.
-    --
-    -- > fixs = infixr_ 0  ["$","$!","`seq`"]
-    --
-    --   Note that the operators are expected as you would
-    --   write them infix, i.e. with ` characters surrounding
-    --   /varid/ operators, and /varsym/ operators written as is.
-    , infix_, infixl_, infixr_
-    -- ** Collections of fixities
-    , preludeFixities
-
-    -- * Applying fixities to an AST
-    , AppFixity(..)
+    ( applyPreludeFixities
     ) where
 
 import H.Syntax
@@ -43,11 +26,19 @@ import Data.Traversable (mapM)
 import Prelude hiding (mapM)
 
 
+
+
+applyPreludeFixities :: Monad m => Module Pr -> m (Module Pr)
+applyPreludeFixities = applyFixities preludeFixities
+
+------
+
+
 -- | Associativity of an operator.
 data Assoc
-	 = AssocNone	-- ^ non-associative operator (declared with @infix@)
-	 | AssocLeft	-- ^ left-associative operator (declared with @infixl@).
-	 | AssocRight	-- ^ right-associative operator (declared with @infixr@)
+   = AssocNone  -- ^ non-associative operator (declared with @infix@)
+   | AssocLeft  -- ^ left-associative operator (declared with @infixl@)
+   | AssocRight -- ^ right-associative operator (declared with @infixr@)
    deriving(Eq,Ord,Show)
 
 -- | Operator fixities are represented by their associativity
@@ -113,7 +104,7 @@ preludeFixities = concat
     ,infixr_ 3 [andOp]
     ,infixr_ 2 [orOp]
     ,infixr_ 1 [impOp, iffOp]
-    ]  
+    ]
 
 infixr_, infixl_, infix_ :: Int -> [Op] -> [Fixity]
 infixr_ = fixity AssocRight
@@ -128,7 +119,6 @@ fixity a p = map (Fixity a p)
 
 
 
-
 -------------------------------------------------------------------
 -- Boilerplate - yuck!! Everything below here is internal stuff
 
@@ -136,26 +126,27 @@ instance AppFixity (Module Pr) where
     applyFixities fixs (Module loc n decls) =
         liftM (Module loc n) $ mapM (applyFixities fixs) decls
 
-instance AppFixity (AnyDecl Pr) where
-  applyFixities fixs (AnyDecl decl) = liftM AnyDecl $ applyFixities fixs decl
-
-instance AppFixity (Decl s Pr) where
+instance AppFixity (Decl Pr) where
   applyFixities fixs decl = case decl of
       TypeDecl loc tynm tyargs ty -> liftM (TypeDecl loc tynm tyargs) (fix ty)
       DataDecl loc tynm tyargs cons -> liftM (DataDecl loc tynm tyargs) (mapM fix cons)
-      TypeSig loc funs polyty   -> liftM (TypeSig loc funs) (fix polyty)
-      FunBind rec n matches         -> liftM (FunBind rec n) $ mapM fix matches
-      PatBind loc rec p rhs -> liftM2 (PatBind loc rec) (fix p) (fix rhs)
+      ValDecl bind -> liftM ValDecl $ fix bind
       GoalDecl loc gname gtype ptctyparams prop ->
           liftM (GoalDecl loc gname gtype ptctyparams) (fix prop)
     where fix x = applyFixities fixs x
 
--- appFixDecls :: Monad m => [Fixity] -> [Decl s Pr] -> m [Decl s Pr]
--- appFixDecls fixs decls =
---     mapM (applyFixities fixs) decls
+instance AppFixity (Bind Pr) where
+  applyFixities fixs bind = case bind of
+      FunBind rec n sig matches  -> liftM2 (FunBind rec n) (fix sig) (mapM fix matches)
+      PatBind loc p rhs -> liftM2 (PatBind loc) (fix p) (fix rhs)
+    where fix x = applyFixities fixs x
+
+instance AppFixity (TypeSig Pr) where
+  applyFixities fixs NoTypeSig = return NoTypeSig
+  applyFixities fixs (TypeSig loc polyty) = liftM (TypeSig loc) (fix polyty)
+    where fix x = applyFixities fixs x
 
 instance AppFixity (ConDecl Pr) where
---   ConDeclIn :: SrcLoc -> NAME Pr -> [Type Pr] -> ConDecl Pr
   applyFixities fixs (ConDeclIn loc con tys)
     = liftM (ConDeclIn loc con) $ mapM (applyFixities fixs) tys
 
@@ -203,7 +194,7 @@ instance AppFixity (Type Pr) where
       ConTy _ -> return ty
       AppTy a b -> liftM2 AppTy (fix a) (fix b)
       PredTy pat s mbP -> liftM3 PredTy (fix pat) (fix s) (fix mbP)
-      FunTyIn a b -> liftM2 FunTyIn (fix a) (fix b)
+      FunTy a b -> liftM2 FunTy (fix a) (fix b)
       ListTy a -> liftM ListTy (fix a)
       TupleTy l -> liftM TupleTy $ mapM fix l
       ParenTy a -> liftM ParenTy (fix a)

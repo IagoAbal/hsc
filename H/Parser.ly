@@ -29,6 +29,8 @@
 >
 > import Name
 > import Sorted
+>
+> import Control.Monad ( (>=>) )
 > }
 
 
@@ -131,11 +133,11 @@ Module Header
 > module :: { Module Pr }
 > : srcloc 'module' modid 'where' body    { Module $1 $3 $5 }
 
-> body :: { [AnyDecl Pr] }
+> body :: { [Decl Pr] }
 > : '{'  bodyaux '}'      { $2 }
 > | open bodyaux close    { $2 }
 
-> bodyaux :: { [AnyDecl Pr] }
+> bodyaux :: { [Decl Pr] }
 > : optsemis topdecls { $2 }
 > | optsemis          { [] }
 
@@ -152,53 +154,58 @@ Top-Level Declarations
 Note: The report allows topdecls to be empty. This would result in another
 shift/reduce-conflict, so we don't handle this case here, but in bodyaux.
 
-> topdecls :: { [AnyDecl Pr] }
-> : topdecls1 optsemis    {% checkRevDecls $1 }
+> topdecls :: { [Decl Pr] }
+> : topdecls1 optsemis    {% do { decls <- groupDeclsBinds $1
+>                               ; checkDupDecls decls
+>                               ; return decls }
+>                         }
 
-> topdecls1 :: { [AnyDecl Pr] }
-> : topdecls1 semis topdecl   { $3 : $1 }
+> topdecls1 :: { [Decl Pr] }
+> : topdecls1 semis topdecl   { $1 ++ [$3] }
 > | topdecl                   { [$1] }
 
-> topdecl :: { AnyDecl Pr }
-> : srcloc 'type' conid typarams '=' type
->     {% do { checkTyParams $1 (TypeDeclTPC $3) $4
->           ; return $ AnyDecl $ TypeDecl $1 $3 $4 $6 }
->     }
-> | srcloc 'data' conid typarams '=' constrs
->     {% do { checkTyParams $1 (DataDeclTPC $3) $4
->           ; return $ AnyDecl $ DataDecl $1 $3 (reverse $4) $6 }
->     }
-> | decl     { AnyDecl $1 }
-> | goaldecl { AnyDecl $1 }
+> topdecl :: { Decl Pr }
+> : srcloc 'type' tyconid typarams '=' type     { TypeDecl $1 $3 $4 $6 }
+> | srcloc 'data' tyconid typarams '=' constrs  { DataDecl $1 $3 $4 $6 }
+> | valdecl                                   { $1 }
+> | srcloc goaltype goalname '=' exp          { GoalDecl $1 $2 $3 NoPostTc $5 }
 
-> decls :: { [Decl Fn Pr] }
-> : optsemis decls1 optsemis  {% checkRevFnDecls $2 }
+> goaltype :: { GoalType }
+> : 'theorem' { TheoremGoal }
+> | 'lemma'   { LemmaGoal }
+
+> valdecls :: { [Decl Pr] }
+> : optsemis valdecls1 optsemis  {% do { decls <- groupDeclsBinds $2
+>                                      ; checkDupDecls decls
+>                                      ; return decls }
+>                                }
 > | optsemis      { [] }
 
-> decls1 :: { [Decl Fn Pr] }
-> : decls1 semis decl   { $3 : $1 }
-> | decl        { [$1] }
+> valdecls1 :: { [Decl Pr] }
+> : valdecls1 semis valdecl   { $1 ++ [$3] }
+> | valdecl        { [$1] }
 
-> decl :: { Decl Fn Pr }
-> : signdecl      { $1 }
-> | valdef      { $1 }
+> valdecl :: { Decl Pr }
+> : bind      { ValDecl $1 }
 
-> decllist :: { [Decl Fn Pr] }
-> : '{'  decls '}'    { $2 }
-> | open decls close    { $2 }
+  > : signdecl      { $1 }
 
-> signdecl :: { Decl Fn Pr }
-> : srcloc vars ':' polytype { TypeSig $1 (reverse $2) $4 }
+> valdecllist :: { [Decl Pr] }
+> : '{'  valdecls '}'    { $2 }
+> | open valdecls close    { $2 }
+
+  > signdecl :: { FnDecl Pr }
+  > : srcloc vars ':' polytype { TypeSig $1 $2 $4 }
 
 > vars  :: { [VAR Pr] }
-> : vars ',' var      { $3 : $1 }
+> : vars ',' var      { $1 ++ [$3] }
 > | var               { [$1] }
 
 ----------------------------------------------------------------------
 Types
 
 > type :: { Type Pr }
-> : btype '->' type   { FunTyIn $1 $3 }
+> : btype '->' type   { mkFunTy $1 $3 }
 > | btype       { $1 }
 
 > btype :: { Type Pr }
@@ -208,7 +215,7 @@ Types
 > atype :: { Type Pr }
 > : gtycon            { ConTy $1 }
 > | tyvar             { VarTy $1 }
-> | '(' tuptypes ')'   { TupleTy (reverse $2) }
+> | '(' tuptypes ')'   { TupleTy $2 }
 > | '[' type ']'      { ListTy $2 }
 > | '(' type ')'      { $2 }
 > | '{' apat ':' type '}'           { PredTy $2 $4 Nothing }
@@ -223,28 +230,21 @@ Types
 
 
 > polytype :: { PolyType Pr }
-> : srcloc 'forall' typarams '.' type
->     {% do { checkTyParams $1 ForallTyTPC $3
->           ; return $ ForallTy $3 $5 }
->     }
+> : 'forall' typarams '.' type  { ForallTy $2 $4 }
 > | type                        { ForallTy [] $1 }
 
 
 > tuptypes :: { [Dom Pr] }
-> : tuptypes ',' tupdom   { $3 : $1 }
-> | tupdom  ',' tupdom    { [$3, $1] }
+> : tuptypes ',' tupdom   { $1 ++ [$3] }
+> | tupdom  ',' tupdom    { [$1,$3] }
 
 > tupdom :: { Dom Pr }
 > : type   { Dom Nothing $1 Nothing }
 > | apat ':' type { Dom (Just $1) $3 Nothing }
 > | apat ':' type '|' prop { Dom (Just $1) $3 (Just $5) }
 
-
 > typarams :: { TyParams Pr }
-> : typaramsR   { reverse $1 }
-
-> typaramsR :: { TyParams Pr }
-> : typaramsR typaram  { $2 : $1 }
+> : typarams typaram  { $1 ++ [$2] }
 > | {- empty -}       { [] }
 
 > typaram :: { TyVAR Pr }
@@ -255,16 +255,16 @@ Types
 Datatype declarations
 
 > constrs :: { [ConDecl Pr] }
-> : constrs '|' constr    { $3 : $1 }
+> : constrs '|' constr    { $1 ++ [$3] }
 > | constr      { [$1] }
 
 > constr :: { ConDecl Pr }
-> : srcloc conid atypes   { ConDeclIn $1 $2 (reverse $3) }
+> : srcloc conid atypes   { ConDeclIn $1 $2 $3 }
 
 -- : srcloc scontype    { ConDecl $1 (fst $2) (snd $2) }
 
 > atypes :: { [Type Pr] }
-> : atypes atype   { $2 : $1 }
+> : atypes atype   { $1 ++ [$2] }
 > | {- empty -} { [] }
 
   > scontype :: { (TyNAME Pr, [Type Pr]) }
@@ -274,27 +274,33 @@ Datatype declarations
 -----------------------------------------------------------------------------
 Value definitions
 
-> goaldecl :: { Decl Lg Pr }
-> : srcloc goaltype goalname '=' exp  { GoalDecl $1 $2 $3 NoPostTc $5 }
+> bind :: { Bind Pr }
+> : funsig semis funbind            {% funWithSig $1 $3 }
+> | funbind                         { $1 }
+> | srcloc pat rhs wherebinds       { PatBind $1 $2 (Rhs $3 $4) }
 
-> goaltype :: { GoalType }
-> : 'theorem' { TheoremGoal }
-> | 'lemma'   { LemmaGoal }
+> funsig :: { (SrcLoc,NAME Pr,PolyType Pr) }
+> : srcloc varid ':' polytype { ($1,$2,$4) }
 
-> valdef :: { Decl Fn Pr }
-> : srcloc varid apats rhs optwhere { FunBind Rec $2 [Match $1 $3 (Rhs $4 $5)] }
-> | srcloc pat rhs optwhere         { PatBind $1 Rec $2 (Rhs $3 $4) }
+> funbind :: { Bind Pr }
+> : srcloc varid apats rhs wherebinds
+>         { FunBind Rec $2 NoTypeSig [Match $1 $3 (Rhs $4 $5)] }
+> | srcloc varid rhs wherebinds
+>         { FunBind Rec $2 NoTypeSig [Match $1 [] (Rhs $3 $4)] }
 
-> optwhere :: { [Decl Fn Pr] }
-> : 'where' decllist    { $2 }
+> binds :: { [Bind Pr] }
+> : valdecllist     { getParsedBinds $1 }
+
+> wherebinds :: { WhereBinds Pr }
+> : 'where' binds    { $2 }
 > | {- empty -}     { [] }
 
 > rhs :: { GRhs Pr }
 > : '=' exp     { UnGuarded $2 }
-> | gdrhs       { Guarded (GuardedRhssIn  (reverse $1)) }
+> | gdrhs       { Guarded (GuardedRhssIn  $1) }
 
 > gdrhs :: { [GuardedRhs Pr] }
-> : gdrhs gdrh      { $2 : $1 }
+> : gdrhs gdrh      { $1 ++ [$2] }
 > | gdrh        { [$1] }
 
 > gdrh :: { GuardedRhs Pr }
@@ -336,11 +342,11 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | exp10b      { $1 }
 
 > exp10a :: { Exp Pr }
-> : '\\' srcloc apats '->' exp  { Lam $2 (reverse $3) $5 }
-> | 'let' decllist 'in' exp { Let $2 $4 }
+> : '\\' srcloc apats '->' exp  { Lam $2 $3 $5 }
+> | 'let' binds 'in' exp { Let $2 $4 }
 > | 'if' exp 'then' exp 'else' exp { Ite $2 $4 $6 }
-> | 'if' gdpats    { If (GuardedRhssIn (reverse $2)) }
-> | quantifier apats ',' exp  { QP $1 (reverse $2) $4 }
+> | 'if' gdpats    { If (GuardedRhssIn $2) }
+> | quantifier apats ',' exp  { QP $1 $2 $4 }
 
 > quantifier :: { Quantifier }
 > : 'exists'  { ExistsQ }
@@ -373,7 +379,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | gcon        { $1 }
 > | literal     { Lit $1 }
 > | '(' exp ')'     { Paren $2 }
-> | '(' texps ')'     { Tuple (reverse $2) }
+> | '(' texps ')'     { Tuple $2 }
 > | '[' list ']'         { $2 }
 > | '(' exp0b op ')'    { LeftSection $2 $3  }
 > | '(' op exp0 ')'   { RightSection $2 $3 }
@@ -383,13 +389,12 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
   > | ','       { 1 }
 
 > texps :: { [Exp Pr] }
-> : texps ',' exp     { $3 : $1 }
-> | exp ',' exp     { [$3,$1] }
-
+> : texps ',' exp     { $1 ++ [$3] }
+> | exp ',' exp     { [$1,$3] }
 
 
 > apats :: { [Pat Pr] }
-> : apats apat      { $2 : $1 }
+> : apats apat      { $1 ++ [$2] }
 > | apat        { [$1] }
 
 
@@ -403,7 +408,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | fpat      { $1 }
 
 > fpat :: { Pat Pr }
-> : con apats   { ConPat $1 (reverse $2) }
+> : con apats   { ConPat $1 $2 }
 > | apat        { $1 }
 
 > apat :: { Pat Pr }
@@ -416,16 +421,16 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | literal     { LitPat $1 }
 > | '(' pat ':' type ')'     { SigPat $2 $4 }
 > | '(' pat ')'     { ParenPat $2 }
-> | '(' tpats ')'     { TuplePat (reverse $2) }
-> | '[' lpats ']'     { ListPat (reverse $2) }
+> | '(' tpats ')'     { TuplePat $2 }
+> | '[' lpats ']'     { ListPat $2 }
 > | '_'             { WildPat }
 
 > tpats :: { [Pat Pr] }
-> : tpats ',' pat     { $3 : $1 }
-> | pat ',' pat     { [$3,$1] }
+> : tpats ',' pat     { $1 ++ [$3] }
+> | pat ',' pat     { [$1,$3] }
 
 > lpats :: { [Pat Pr] }
-> : lpats ',' pat     { $3 : $1 }
+> : lpats ',' pat     { $1 ++ [$3] }
 > | pat             { [$1] }
 > | {- empty -}     { [] }
 
@@ -437,13 +442,13 @@ avoiding another shift/reduce-conflict.
 
 > list :: { Exp Pr }
 > : exp       { List [$1] }
-> | lexps       { List (reverse $1) }
+> | lexps       { List $1 }
 > | exp '..' exp      { EnumFromTo $1 $3 }
 > | exp ',' exp '..' exp    { EnumFromThenTo $1 $3 $5 }
 
 > lexps :: { [Exp Pr] }
-> : lexps ',' exp     { $3 : $1 }
-> | exp ',' exp     { [$3,$1] }
+> : lexps ',' exp     { $1 ++ [$3] }
+> | exp ',' exp     { [$1,$3] }
 
 -----------------------------------------------------------------------------
 Case alternatives
@@ -453,10 +458,10 @@ Case alternatives
 > | open alts close   { $2 }
 
 > alts :: { [Alt Pr] }
-> : optsemis alts1 optsemis { reverse $2 }
+> : optsemis alts1 optsemis { $2 }
 
 > alts1 :: { [Alt Pr] }
-> : alts1 semis alt   { $3 : $1 }
+> : alts1 semis alt   { $1 ++ [$3] }
 > | alt       { [$1] }
 
 > alt :: { Alt Pr }
@@ -464,10 +469,10 @@ Case alternatives
 
 > altrhs :: { GRhs Pr }
 > : '->' exp      { UnGuarded $2 }
-> | gdpats      { Guarded (GuardedRhssIn (reverse $1)) }
+> | gdpats      { Guarded (GuardedRhssIn $1) }
 
 > gdpats :: { [GuardedRhs Pr] }
-> : gdpats gdpat      { $2 : $1 }
+> : gdpats gdpat      { $1 ++ [$2] }
 > | gdpat       { [$1] }
 
 > gdpat :: { GuardedRhs Pr }
@@ -571,17 +576,13 @@ Miscellaneous (mostly renamings)
 
 > instance (Pretty a) => Pretty (ParseResult a) where
 >  pretty (ParseOk a) = pretty a
->  pretty (ParseFailed loc errmsg) = mySep [pretty loc, text errmsg]
-
-> opFixities :: ParseResult (Module Pr) -> ParseResult (Module Pr)
-> opFixities (ParseOk m) = applyFixities preludeFixities m
-> opFixities r@(ParseFailed _ _) = r
+>  pretty (ParseFailed loc errmsg) = mySep [pretty loc <> char ':', text errmsg]
 
 > -- | Parse of a string, which should contain a complete H! module.
 > parseModule :: String -> ParseResult (Module Pr)
-> parseModule = opFixities . runParser parse
+> parseModule = runParser parse >=> applyPreludeFixities
 
 > -- | Parse of a string, which should contain a complete H! module.
 > parseModuleWithMode :: ParseMode -> String -> ParseResult (Module Pr)
-> parseModuleWithMode mode = opFixities . runParserWithMode mode parse
+> parseModuleWithMode mode = runParserWithMode mode parse >=> applyPreludeFixities
 > }
