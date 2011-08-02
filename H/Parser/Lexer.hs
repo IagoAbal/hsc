@@ -257,7 +257,11 @@ lexToken = do
                        return (IntTok n)
         c:_ | isDigit c -> do n <- lexDecimal
                               return (IntTok n)
-            | isUpper c -> lexConId
+            | isUpper c -> do
+                 con <- lexWhile isIdent
+                 return $ case lookup con reserved_ids of
+                               Just keyword -> keyword
+                               Nothing -> ConId con
             | isLower c || c == '_' -> do
                  ident <- lexWhile isIdent
                  return $ case lookup ident (reserved_ids ++ special_varids) of
