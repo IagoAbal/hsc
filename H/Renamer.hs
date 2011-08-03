@@ -16,17 +16,17 @@ module H.Renamer where
 import H.Syntax
 import H.FreeVars
 import H.SrcLoc
-import H.SrcContext ( MonadSrcContext(..) )
+import H.SrcContext ( SrcContext(..), MonadSrcContext(..) )
 import H.Phase
 import H.Pretty
 import H.Message ( Message, MsgContext )
 import qualified H.Message as Msg
+import H.Monad
 
 import Name
 import Unique
 
 import Control.Applicative
-import Control.Failure ( Failure(..) )
 import Control.Monad.Error
 import Control.Monad.Reader
 import Data.List
@@ -38,36 +38,40 @@ import qualified Data.Set as Set
 
 
 
-rnModule :: (Failure Message m, MonadSrcContext m, MonadUnique m) => Module Pr -> m (Module Rn)
+rnModule :: Module Pr -> IO (Either Message (Module Rn))
 rnModule (Module loc modname decls)
-  = liftM (Module loc modname) $
-      runRnM (renameBndr decls return) Map.empty
+  = do res <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname)) newSupply Map.empty ()
+       case res of
+            Left err -> return $ Left err
+            Right (decls',(),()) -> return $ Right $ Module loc modname decls'
 
 
-newtype RnM m a = RnM { unRnM :: ReaderT (Map OccName Name) m a }
-    deriving(Functor, Applicative, Monad, MonadUnique, MonadReader (Map OccName Name), MonadSrcContext)
+-- newtype RnM a = RnM { unRnM :: ReaderT (Map OccName Name) m a }
+--     deriving(Functor, Applicative, Monad, MonadUnique, MonadReader (Map OccName Name), MonadSrcContext)
 
-runRnM :: RnM m a -> Map OccName Name -> m a
-runRnM m = runReaderT (unRnM m) 
+type RnM a = H (Map OccName Name) () () a
+
+-- runRnM :: RnM a -> Map OccName Name -> m a
+-- runRnM m = runReaderT (unRnM m) 
 
 
-instance Failure Message m => Failure Message (RnM m) where
-  failure = RnM . lift . failure
+-- instance failH Message m => failH Message (RnM m) where
+--   failH = RnM . lift . failH
 
 
 
 class Rename ast where
-  rename :: (Failure Message m, MonadSrcContext m, MonadUnique m) => ast Pr -> RnM m (ast Rn)
+  rename :: ast Pr -> RnM (ast Rn)
 
-rnMaybe :: (Failure Message m, MonadSrcContext m, MonadUnique m, Rename ast) => Maybe (ast Pr) -> RnM m (Maybe (ast Rn))
+rnMaybe :: Rename ast => Maybe (ast Pr) -> RnM (Maybe (ast Rn))
 rnMaybe Nothing  = return Nothing
 rnMaybe (Just a) = liftM Just $ rename a
 
-rnList :: (Failure Message m, MonadSrcContext m, MonadUnique m, Rename ast) => [ast Pr] -> RnM m [ast Rn]
+rnList :: Rename ast => [ast Pr] -> RnM [ast Rn]
 rnList xs = mapM rename xs
 
 class RenameBndr b b' | b -> b' where
-  renameBndr :: (Failure Message m, MonadSrcContext m, MonadUnique m) => b -> (b' -> RnM m a) -> RnM m a
+  renameBndr :: b -> (b' -> RnM a) -> RnM a
 
 
 instance RenameBndr b b' => RenameBndr [b] [b'] where
@@ -78,16 +82,16 @@ instance RenameBndr b b' => RenameBndr [b] [b'] where
 
 
 
-getName :: Failure Message m => OccName -> RnM m Name
+getName :: OccName -> RnM Name
 getName occ = do
   mbName <- asks (Map.lookup occ)
   case mbName of
-      Nothing   -> failure $
+      Nothing   -> failH $
                       text "Variable" <+> ppQuot occ <+> text "is not in scope."
       Just name -> return name
 
 
-withMapping :: Monad m => [(OccName,Name)] -> RnM m a -> RnM m a
+withMapping :: [(OccName,Name)] -> RnM a -> RnM a
 withMapping maps
   = local (Map.union (Map.fromList maps))
 
@@ -129,7 +133,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
           popContext $ f (GoalDecl loc gtype gname' NoPostTc prop') 
 
 
--- rnBind :: (Failure Message m, MonadSrcContext m, MonadUnique m) => Bind Pr -> RnM m (Bind Rn, Map OccName Name)
+-- rnBind :: Bind Pr -> RnM (Bind Rn, Map OccName Name)
 -- rnBind = undefined
 -- renameBndr (FunBind _rec occ sig matches) f
 --   = inContext (text "In the definition of" <+> ppQuot occ) $ do
@@ -171,7 +175,7 @@ instance Rename Match where
         renameBndr pats $ \pats' -> liftM (Match loc pats') $ rename rhs
 
 
-rnConDecl :: (Failure Message m, MonadSrcContext m, MonadUnique m) => ConDecl Pr -> RnM m (ConDecl Rn,(OccName,Name))
+rnConDecl :: ConDecl Pr -> RnM (ConDecl Rn,(OccName,Name))
 rnConDecl (ConDeclIn loc occ tys)
   = inContextAt loc (text "In data constructor declaration" <+> ppQuot occ) $ do
       let doms = map type2dom tys
@@ -240,15 +244,14 @@ instance Rename GuardedRhss where
     (grhss',elserhs) <- check [] grhss
     return $ GuardedRhss grhss' elserhs
     where
-        check :: (Failure Message m, MonadSrcContext m, MonadUnique m) =>
-                  [GuardedRhs Rn] -> [GuardedRhs Pr] -> RnM m ([GuardedRhs Rn],Else Rn)
+        check :: [GuardedRhs Rn] -> [GuardedRhs Pr] -> RnM ([GuardedRhs Rn],Else Rn)
         check acc [] = return (reverse acc, NoElse)
         check acc [GuardedRhs loc ElseGuard exp]
           = do exp' <- rename exp; return (reverse acc, Else loc exp')
           -- an @else@ guard appearing in an intermediate alternative
           -- wrong!
         check acc (GuardedRhs loc ElseGuard _:_)
-          = failure $
+          = failH $
               text "An" <+> quotes (text "else") <+> text "guard can only be used for the last alternative"
         check acc (GuardedRhs loc guard exp:rest)
           = do grhs' <- liftM2 (GuardedRhs loc) (rename guard) (rename exp)
@@ -326,15 +329,15 @@ instance Rename TyCon where
 
 ---
 
-checkDupTyParams :: Failure Message m => TyParams Pr -> RnM m ()
+checkDupTyParams :: TyParams Pr -> RnM ()
 checkDupTyParams typs
   | nub typs == typs = return ()
-  | otherwise        = failure $ text "Duplicated type variable(s)"
+  | otherwise        = failH $ text "Duplicated type variable(s)"
 
-checkDupPatBndrs :: Failure Message m => [Pat Pr] -> RnM m ()
+checkDupPatBndrs :: [Pat Pr] -> RnM ()
 checkDupPatBndrs pats
   | nub bs == bs = return ()
-  | otherwise    = failure $ text "Duplicated binder(s) in pattern(s)"
+  | otherwise    = failH $ text "Duplicated binder(s) in pattern(s)"
   where bs = patsBndrs pats
 
 checkFunBindRec :: Name -> [Match Rn] -> IsRec Rn
