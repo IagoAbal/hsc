@@ -93,6 +93,11 @@ newTyVar :: MonadUnique m => String -> Kind -> m TyVar
 newTyVar str ki = do name <- newName TyVarNS str
                      return $ TyV name ki False
 
+newTyVarFrom :: MonadUnique m => TyVar -> m TyVar
+newTyVarFrom (TyV name ki isSk) = do
+  name' <- newNameFrom name
+  return $ TyV name' ki isSk
+
 -- ** Instantiate variables
 
 instTyVar :: MonadUnique m => TyVar -> m TyVar

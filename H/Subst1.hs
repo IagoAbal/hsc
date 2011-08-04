@@ -16,6 +16,7 @@ module H.Subst1 where
 import H.Syntax
 import H.Phase
 
+import Name
 import Sorted
 import Unique( MonadUnique )
 
@@ -30,16 +31,17 @@ import qualified Data.Set as Set
 
   
 data Subst1 p = Subst1 {
-                substEnv   :: Map (Var p) (Exp p)
+                substVarEnv     :: Map (Var p) (Exp p)
+              , substTyVarEnv   :: Map TyVar   (Type p)
                 -- | variables in scope,
                 -- overapproximating the set of free variables
-              , substScope :: Set (Var p)
+              , substVarScope   :: Set (Var p)
+              , substTyVarScope :: Set TyVar
               }
 
-mkSubst1 :: [(Var p,Exp p)] -> Set (Var p) -> Subst1 p
-mkSubst1 envList scope = Subst1 (Map.fromList envList) scope
-
-
+mkSubst1 :: [(Var p,Exp p)] -> [(TyVar,Type p)] -> Set (Var p) -> Set TyVar -> Subst1 p
+mkSubst1 var_env tyvar_env var_scope tyvar_scope
+  = Subst1 (Map.fromList var_env) (Map.fromList tyvar_env) var_scope tyvar_scope
 
 
 mapAccumM :: Monad m => (acc -> x -> m (y,acc)) -> acc -> [x] -> m ([y], acc)
@@ -48,27 +50,48 @@ mapAccumM f acc (x:xs) = do (y,acc') <- f acc x
                             (ys,acc'') <- mapAccumM f acc' xs
                             return (y:ys,acc'')
 
-substBndrs :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Var p] -> m ([Var p],Subst1 p)
+substBndrs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Var p] -> m ([Var p],Subst1 p)
 substBndrs = mapAccumM substBndr
 
-substBndr :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Var p -> m (Var p,Subst1 p)
-substBndr (Subst1{substEnv,substScope}) var
-  = if var `Set.member` substScope
-          -- @var@ may capture some variable 
-       then do var' <- newVarFrom var
-               let env'   = Map.insert var (Var var') substEnv
-               let scope' = Set.insert var' substScope
-               return (var',Subst1 env' scope')
-          -- @var@ will not capture any variable
-       else do let env'   = Map.delete var substEnv
-               let scope' = Set.insert var substScope
-               return (var,Subst1 env' scope')
+substBndr :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Var p -> m (Var p,Subst1 p)
+substBndr s@Subst1{substVarEnv,substVarScope} var@V{varName,varType} = do
+  varType' <- substPolyType s varType
+  if var `Set.member` substVarScope
+        -- @var@ may capture some variable 
+     then do varName' <- newNameFrom varName
+             let var'   = V varName' varType'
+                 env'   = Map.insert var (Var var') substVarEnv
+                 scope' = Set.insert var' substVarScope
+             return (var',s{substVarEnv = env', substVarScope = scope'})
+        -- @var@ will not capture any variable
+     else do let var'   = V varName varType'
+                 env'   = Map.delete var substVarEnv   -- restrict domain
+                 env''  = Map.insert var (Var var') env'
+                 scope' = Set.insert var substVarScope -- update scope
+             return (var,s{substVarEnv = env'', substVarScope = scope'})
 
 
-substDecls :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Decl p] -> m ([Decl p],Subst1 p)
+substTyBndrs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [TyVar] -> m ([TyVar],Subst1 p)
+substTyBndrs = mapAccumM substTyBndr
+
+substTyBndr :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> TyVar -> m (TyVar,Subst1 p)
+substTyBndr s@Subst1{substTyVarEnv,substTyVarScope} tv = do
+  if tv `Set.member` substTyVarScope
+        -- @tv@ may capture some variable 
+     then do tv' <- newTyVarFrom tv
+             let env'   = Map.insert tv (VarTy tv') substTyVarEnv
+                 scope' = Set.insert tv' substTyVarScope
+             return (tv',s{substTyVarEnv = env', substTyVarScope = scope'})
+        -- @tv@ will not capture any variable
+     else do let env'   = Map.delete tv substTyVarEnv   -- restrict domain
+                 scope' = Set.insert tv substTyVarScope -- update scope
+             return (tv,s{substTyVarEnv = env', substTyVarScope = scope'})
+
+
+substDecls :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Decl p] -> m ([Decl p],Subst1 p)
 substDecls = mapAccumM substDecl
 
-substDecl :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Decl p -> m (Decl p,Subst1 p)
+substDecl :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Decl p -> m (Decl p,Subst1 p)
 substDecl s (TypeDecl loc tynm tyargs ty) = do
   ty' <- substType s ty
   return (TypeDecl loc tynm tyargs ty',s)
@@ -83,16 +106,16 @@ substDecl s (GoalDecl loc gname gtype ptctyparams prop) = do
   return (GoalDecl loc gname gtype ptctyparams prop',s)
 
 
-substConDecls :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [ConDecl p] -> m [ConDecl p]
+substConDecls :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [ConDecl p] -> m [ConDecl p]
 substConDecls s = mapM (substConDecl s)
 
-substConDecl :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> ConDecl p -> m (ConDecl p)
+substConDecl :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> ConDecl p -> m (ConDecl p)
 substConDecl s (ConDecl loc con args) = liftM (ConDecl loc con . fst) $ substDoms s args
 
-substBinds :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Bind p] -> m ([Bind p],Subst1 p)
+substBinds :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Bind p] -> m ([Bind p],Subst1 p)
 substBinds = mapAccumM substBind
 
-substBind :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Bind p -> m (Bind p,Subst1 p)
+substBind :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Bind p -> m (Bind p,Subst1 p)
 substBind s (FunBind NonRec fun sig matches) = do
   sig' <- substTypeSig s sig
   matches' <- substMatches s matches  -- non-recursive bindings
@@ -108,31 +131,30 @@ substBind s (PatBind loc pat rhs) = do
   (pat',s') <- substPat s pat
   return (PatBind loc pat' rhs',s')
 
-substTypeSig :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> TypeSig p -> m (TypeSig p)
+substTypeSig :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> TypeSig p -> m (TypeSig p)
 substTypeSig _s NoTypeSig           = return NoTypeSig
 substTypeSig s (TypeSig loc polyty) = liftM (TypeSig loc) $ substPolyType s polyty
 
-substMatches :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Match p] -> m [Match p]
+substMatches :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Match p] -> m [Match p]
 substMatches s = mapM (substMatch s)
 
-substMatch :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Match p -> m (Match p)
+substMatch :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Match p -> m (Match p)
 substMatch s (Match loc pats rhs) = do
   (pats',s') <- substPats s pats
   liftM (Match loc pats') $ substRhs s' rhs
 
-substExps :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Exp p] -> m [Exp p]
+substExps :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Exp p] -> m [Exp p]
 substExps s = mapM (substExp s)
 
-substMaybeExp :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Maybe (Exp p) -> m (Maybe (Exp p))
+substMaybeExp :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Maybe (Exp p) -> m (Maybe (Exp p))
 substMaybeExp s Nothing  = return Nothing
 substMaybeExp s (Just e) = liftM Just $ substExp s e
 
-substExp :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Exp p -> m (Exp p)
-substExp s@(Subst1{substEnv}) (Var x@(V name polyty))
-  = case Map.lookup x substEnv of
-        Just e  -> return e    -- reunique e ?
-        Nothing -> do polyty' <- substPolyType s polyty
-                      return $ Var (V name polyty')
+substExp :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Exp p -> m (Exp p)
+substExp s@(Subst1{substVarEnv}) e@(Var x@(V name polyty))
+  = case Map.lookup x substVarEnv of
+        Just e' -> return e'   -- reunique e ?
+        Nothing -> return e    -- ???
 substExp s con@(Con _) = return con     -- ? constructors are not substituted...
 substExp s lit@(Lit _) = return lit
 substExp s (PrefixApp op e) =  PrefixApp op `liftM` substExp s e
@@ -143,7 +165,9 @@ substExp s (TyApp e tys) = liftM2 TyApp (substExp s e) (substTypes s tys)
 substExp s (Lam loc pats body)
     = do (pats',s') <- substPats s pats
          liftM (Lam loc pats') $ substExp s' body
-substExp s (TyLam tvs e) = TyLam tvs `liftM` substExp s e
+substExp s (TyLam tvs e) = do
+  (tvs',s') <- substTyBndrs s tvs
+  TyLam tvs' `liftM` substExp s' e
 substExp s (Let binds body) = do
   (binds',s') <- substBinds s binds
   liftM (Let binds') $ substExp s' body
@@ -164,30 +188,30 @@ substExp s (QP q pats body) = do (pats',s') <- substPats s pats
                                  liftM (QP q pats') $ substExp s' body
 
 
-substRhs :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Rhs p -> m (Rhs  p)
+substRhs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Rhs p -> m (Rhs  p)
 substRhs s (Rhs grhs whr)
   = do (whr',s') <- substBinds s whr
        liftM (flip Rhs whr') $ substGRhs s' grhs
 
-substGRhs :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> GRhs p -> m (GRhs  p)
+substGRhs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> GRhs p -> m (GRhs  p)
 substGRhs s (UnGuarded e)   = liftM UnGuarded $ substExp s e
 substGRhs s (Guarded grhss) = liftM Guarded (substGuardedRhss s grhss)
 
-substGuardedRhss :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> GuardedRhss p -> m (GuardedRhss  p)
+substGuardedRhss :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> GuardedRhss p -> m (GuardedRhss  p)
 substGuardedRhss s (GuardedRhss pgrhss elserhs)
   = liftM2 GuardedRhss (mapM (substGuardedRhs s) pgrhss) (substElse s elserhs)
 
-substGuardedRhs :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> GuardedRhs  p -> m (GuardedRhs  p)
+substGuardedRhs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> GuardedRhs  p -> m (GuardedRhs  p)
 substGuardedRhs s (GuardedRhs loc g e) = liftM2 (GuardedRhs loc) (substExp s g) (substExp s e)
 
-substElse :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Else p -> m (Else p)
+substElse :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Else p -> m (Else p)
 substElse s (Else loc e) = liftM (Else loc) $ substExp s e
 substElse s NoElse       = return NoElse
 
-substPats :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Pat p] -> m ([Pat p],Subst1 p)
+substPats :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Pat p] -> m ([Pat p],Subst1 p)
 substPats = mapAccumM substPat
 
-substPat :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Pat p -> m (Pat p,Subst1 p)
+substPat :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Pat p -> m (Pat p,Subst1 p)
 substPat s (VarPat var) = do (var',s') <- substBndr s var
                              return (VarPat var',s')
 substPat s p@(LitPat _) = return (p,s)
@@ -209,29 +233,34 @@ substPat s (AsPat v p) = do (p',s') <- substPat s p
                             return (AsPat v' p',s'')
 
 
--- {- NOTE [SubstBndr.AsPat]
--- Since the renamer ensures that, for 'v@pat', 'v' is fresh w.r.t. FV('pat')
--- the order in which we call substBndr does not matter. But semantically,
--- we must remember that an @-pattern is translated by shifting the 'alias'
--- variable to the RHS as a let-binding, so to call substBndr over 'pat'
--- in first place is the 'most correct' way.
--- -}
+{- NOTE [SubstBndr.AsPat]
+Since the renamer ensures that, for 'v@pat', 'v' is fresh w.r.t. FV('pat')
+the order in which we call substBndr does not matter. But semantically,
+we must remember that an @-pattern is translated by shifting the 'alias'
+variable to the RHS as a let-binding, so to call substBndr over 'pat'
+in first place is the 'most correct' way.
+-}
 
-substAlts :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Alt p] -> m [Alt p]
+substAlts :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Alt p] -> m [Alt p]
 substAlts s = mapM (substAlt s)
 
-substAlt :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Alt p -> m (Alt p)
+substAlt :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Alt p -> m (Alt p)
 substAlt s (Alt loc pat rhs) = do (pat',s') <- substPat s pat
                                   liftM (Alt loc pat') $ substRhs s' rhs
 
-substPolyType :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> PolyType p -> m (PolyType p)
-substPolyType s (ForallTy tvs ty) = liftM (ForallTy tvs) $ substType s ty
+substPolyType :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> PolyType p -> m (PolyType p)
+substPolyType s (ForallTy tvs ty) = do
+  (tvs',s') <- substTyBndrs s tvs
+  liftM (ForallTy tvs') $ substType s' ty
 
-substTypes :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Type p] -> m [Type p]
+substTypes :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Type p] -> m [Type p]
 substTypes s = mapM (substType s)
 
-substType :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Type p -> m (Type p)
-substType s ty@(VarTy _) = return ty
+substType :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Type p -> m (Type p)
+substType Subst1{substTyVarEnv} ty@(VarTy tyvar)
+  = case Map.lookup tyvar substTyVarEnv of
+        Just ty' -> return ty'
+        Nothing  -> return ty
 substType s ty@(ConTy _) = return ty
 substType s (AppTy ty1 ty2) = liftM2 AppTy (substType s ty1) (substType s ty2)
 substType s (PredTy pat ty mbProp)
@@ -242,10 +271,10 @@ substType s (FunTy dom rang) = do (dom',s') <- substDom s dom
                                   liftM (FunTy dom') $ substType s' rang
 substType s (TupleTy ds) = liftM (TupleTy . fst) $ substDoms s ds
 
-substDoms :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> [Dom p] -> m ([Dom p],Subst1 p)
+substDoms :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Dom p] -> m ([Dom p],Subst1 p)
 substDoms = mapAccumM substDom
 
-substDom :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> Dom p -> m (Dom p,Subst1 p)
+substDom :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Dom p -> m (Dom p,Subst1 p)
 substDom s (Dom Nothing ty Nothing) = do
   ty' <- substType s ty
   return (Dom Nothing ty' Nothing,s)
@@ -255,7 +284,7 @@ substDom s (Dom (Just pat) ty mbprop) = do
   mbprop' <- substMaybeExp s' mbprop
   return (Dom (Just pat') ty' mbprop',s')
 
-substPostTcType :: (MonadUnique m, VAR p ~ Var p) => Subst1 p -> PostTcType p -> m (PostTcType p)
+substPostTcType :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> PostTcType p -> m (PostTcType p)
 substPostTcType s NoPostTc    = return NoPostTc
 substPostTcType s (PostTc ty) = liftM PostTc $ substType s ty
 
