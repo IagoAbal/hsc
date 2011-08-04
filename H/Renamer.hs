@@ -16,10 +16,10 @@ module H.Renamer where
 import H.Syntax
 import H.FreeVars
 import H.SrcLoc
-import H.SrcContext ( SrcContext(..), MonadSrcContext(..) )
+import H.SrcContext ( SrcContext(..), MonadContext(..) )
 import H.Phase
 import H.Pretty
-import H.Message ( Message, MsgContext )
+import H.Message
 import qualified H.Message as Msg
 import H.Monad
 
@@ -40,23 +40,20 @@ import qualified Data.Set as Set
 
 rnModule :: Module Pr -> IO (Either Message (Module Rn))
 rnModule (Module loc modname decls)
-  = do res <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname)) newSupply Map.empty ()
+  = do res <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname) False) newSupply Map.empty ()
        case res of
             Left err -> return $ Left err
             Right (decls',(),()) -> return $ Right $ Module loc modname decls'
 
 
 -- newtype RnM a = RnM { unRnM :: ReaderT (Map OccName Name) m a }
---     deriving(Functor, Applicative, Monad, MonadUnique, MonadReader (Map OccName Name), MonadSrcContext)
+--     deriving(Functor, Applicative, Monad, MonadUnique, MonadReader (Map OccName Name), MonadContext)
 
 type RnM a = H (Map OccName Name) () () a
 
 -- runRnM :: RnM a -> Map OccName Name -> m a
 -- runRnM m = runReaderT (unRnM m) 
 
-
--- instance failH Message m => failH Message (RnM m) where
---   failH = RnM . lift . failH
 
 
 
@@ -86,7 +83,7 @@ getName :: OccName -> RnM Name
 getName occ = do
   mbName <- asks (Map.lookup occ)
   case mbName of
-      Nothing   -> failH $
+      Nothing   -> throwError $
                       text "Variable" <+> ppQuot occ <+> text "is not in scope."
       Just name -> return name
 
@@ -251,7 +248,7 @@ instance Rename GuardedRhss where
           -- an @else@ guard appearing in an intermediate alternative
           -- wrong!
         check acc (GuardedRhs loc ElseGuard _:_)
-          = failH $
+          = throwError $
               text "An" <+> quotes (text "else") <+> text "guard can only be used for the last alternative"
         check acc (GuardedRhs loc guard exp:rest)
           = do grhs' <- liftM2 (GuardedRhs loc) (rename guard) (rename exp)
@@ -332,12 +329,12 @@ instance Rename TyCon where
 checkDupTyParams :: TyParams Pr -> RnM ()
 checkDupTyParams typs
   | nub typs == typs = return ()
-  | otherwise        = failH $ text "Duplicated type variable(s)"
+  | otherwise        = throwError $ text "Duplicated type variable(s)"
 
 checkDupPatBndrs :: [Pat Pr] -> RnM ()
 checkDupPatBndrs pats
   | nub bs == bs = return ()
-  | otherwise    = failH $ text "Duplicated binder(s) in pattern(s)"
+  | otherwise    = throwError $ text "Duplicated binder(s) in pattern(s)"
   where bs = patsBndrs pats
 
 checkFunBindRec :: Name -> [Match Rn] -> IsRec Rn
