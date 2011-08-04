@@ -17,6 +17,3 @@ instance Pretty SrcLoc where
   pretty (SrcLoc file line column)
     = hcat [text file, char ':', int line, char ':', int column]
 
-
-ppLocated :: SrcLoc -> Doc -> Doc
-ppLocated loc msg = pretty loc <> char ':' <+> msg
