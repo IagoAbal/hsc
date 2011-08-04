@@ -126,7 +126,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
   renameBndr (GoalDecl loc gtype gname NoPostTc prop) f
     = inContextAt loc (text "In" <+> pretty gtype <+> ppQuot gname) $
         renameBndr gname $ \gname' -> do
-          prop' <- rename prop
+          prop' <- inPropContext $ rename prop
           popContext $ f (GoalDecl loc gtype gname' NoPostTc prop') 
 
 
@@ -217,11 +217,18 @@ instance Rename Exp where
   rename (Coerc loc e polyty)
     = inContextAt loc (text "Type coercion") $
         liftM2 (Coerc loc) (rename e) (rename polyty)
-  rename (QP qt pats body)
-    = inContext (text "In" <+> quotes (pretty qt) <+> text "formula") $ do
-        checkDupPatBndrs pats
-        renameBndr pats $ \pats' ->
-          liftM (QP qt pats') $ rename body
+  rename (QP qt pats body) = do
+    checkQuantifierInPropContext qt
+    inContext (text "In" <+> quotes (pretty qt) <+> text "formula") $ do
+      checkDupPatBndrs pats
+      renameBndr pats $ \pats' ->
+        liftM (QP qt pats') $ rename body
+
+checkQuantifierInPropContext :: Quantifier -> RnM ()
+checkQuantifierInPropContext qt = do
+  ctxt <- getContext
+  when (not $ isPropContext ctxt) $
+    throwError $ quotes (pretty qt) <+> text "formulas cannot appear out of propositional context"
 
 instance Rename Con where
   rename (UserCon occ)     = liftM UserCon $ getName occ
@@ -300,7 +307,7 @@ instance Rename Type where
   rename (PredTy pat ty mbProp) = do
     ty' <- rename ty
     renameBndr pat $ \pat' ->
-      liftM (PredTy pat' ty') $ rnMaybe mbProp
+      liftM (PredTy pat' ty') $ inPropContext $ rnMaybe mbProp
   rename (FunTy a b) =
     renameBndr a $ \a' ->
       liftM (FunTy a') $ rename b
@@ -315,7 +322,7 @@ instance RenameBndr (Dom Pr) (Dom Rn) where
   renameBndr (Dom (Just pat) ty mbProp) f = do
     ty' <- rename ty
     renameBndr pat $ \pat' -> do
-      mbProp' <- rnMaybe mbProp
+      mbProp' <- inPropContext $ rnMaybe mbProp
       f (Dom (Just pat') ty' mbProp')
 
 instance Rename TyCon where
