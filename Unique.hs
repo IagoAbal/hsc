@@ -8,10 +8,10 @@
 module Unique
   ( Uniq
   , Uniquable(..)
-  , UniqSupply, newSupply
+  , UniqSupply, newSupply, next, pick, rest
   , MonadUnique(..)
-  , UniqueT, evalUniqueT, runUniqueT
-  , Unique, evalUnique, runUnique
+  , UniqueT(..), evalUniqueT, runUniqueT
+  , Unique(..), evalUnique, runUnique
   )
   where
 
