@@ -6,7 +6,8 @@
              FlexibleContexts,
              RankNTypes,
              TypeFamilies,
-             UndecidableInstances
+             UndecidableInstances,
+             StandaloneDeriving
              #-}
 
 -- | Syntax of H!
@@ -21,8 +22,10 @@ import Name
 import Sorted
 import Unique( Uniq, Uniquable(..), MonadUnique(..) )
 
-import Data.IORef( IORef )
+import Data.IORef( IORef, newIORef )
 import Data.Function ( on )
+import Control.Monad ( liftM )
+import Control.Monad.IO.Class ( MonadIO(..) )
 
 
 
@@ -61,6 +64,9 @@ data TyVar = TyV {
                 -- ^ Is it a skolem type variable ?
              }
 
+mkTyVar :: Name -> Kind -> TyVar
+mkTyVar nm ki = TyV nm ki False
+
 instance Eq TyVar where
   (==) = (==) `on` tyVarName
 
@@ -98,12 +104,13 @@ newTyVarFrom (TyV name ki isSk) = do
   name' <- newNameFrom name
   return $ TyV name' ki isSk
 
--- ** Instantiate variables
+-- ** Skolemise variables
 
-instTyVar :: MonadUnique m => TyVar -> m TyVar
-instTyVar (TyV name kind False) = do name' <- newNameFrom name
-                                     return (TyV name' kind True)
-instTyVar _other                = undefined
+skoTyVar :: MonadUnique m => TyVar -> m TyVar
+skoTyVar (TyV name kind False) = do
+  name' <- newNameFrom name
+  return (TyV name' kind True)
+skoTyVar _other                = undefined
 
 -- ** Name/Variable type per compilation phase
 
@@ -538,12 +545,34 @@ instance Pretty Lit where
 data Con p = UserCon (NAME p)
            | BuiltinCon BuiltinCon
 
+deriving instance Eq (NAME p) => Eq (Con p)
+deriving instance Ord (NAME p) => Ord (Con p)
+
 data BuiltinCon = UnitCon
                 | FalseCon
                 | TrueCon
                 | NilCon
                 | ConsCon
     deriving(Eq,Ord)
+
+instance (TyVAR p ~ TyVar) => Sorted BuiltinCon (PolyType p) where
+  sortOf UnitCon  = monoTy $ unitTy
+  sortOf FalseCon = monoTy $ boolTy
+  sortOf TrueCon  = monoTy $ boolTy
+  sortOf NilCon   = ForallTy [a_tv] $ a --> ListTy a
+    where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
+          a_uniq = -1001
+          a_tv = TyV a_nm typeKi False
+          a = VarTy a_tv
+  sortOf ConsCon  = ForallTy [a_tv] $ a --> ListTy a --> ListTy a
+    where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
+          a_uniq = -1002
+          a_tv = TyV a_nm typeKi False
+          a = VarTy a_tv
+
+instance (VAR p ~ Var p, TyVAR p ~ TyVar) => Sorted (Con p) (PolyType p) where
+  sortOf (UserCon ucon)    = sortOf ucon
+  sortOf (BuiltinCon bcon) = sortOf bcon
 
 instance Pretty (NAME p) => Pretty (Con p) where
   pretty (UserCon name)    = pretty name
@@ -662,6 +691,9 @@ typeOf = sortOf
 -- | Rank-1 polymorphic types
 data PolyType p = ForallTy (TyParams p) (Type p)
 
+monoTy :: Type p -> PolyType p
+monoTy = ForallTy []
+
 -- | Monomorphic types
 data Type p where
   -- | type variable
@@ -691,12 +723,24 @@ data Dom p = Dom {
              }
 
 dom2type :: Dom p -> Type p
-dom2type (Dom mbPat ty mbProp) = PredTy pat ty mbProp
+dom2type (Dom mbPat ty mbProp) = predTy pat ty mbProp
   where pat = maybe WildPat id mbPat
 
 type Range = Type
 
 type PostTcType p = PostTc p (Type p)
+
+  -- (args,result)
+splitFunTy :: Type p -> ([Type p],Type p)
+splitFunTy (FunTy d t) = (a:args,res)
+  where a = dom2type d
+        (args,res) = splitFunTy t
+splitFunTy ty = ([],ty)
+
+-- | Removes outermost predicate-types
+mu_0 :: Type p -> Type p
+mu_0 (PredTy _ ty _) = mu_0 ty
+mu_0 ty              = ty
 
 
 ppDomType :: PrettyNames p => Dom p -> Doc
@@ -731,7 +775,7 @@ instance PrettyNames p => Pretty (Type p) where
   prettyPrec _ (VarTy name) = pretty name
   prettyPrec _ (ConTy tycon) = pretty tycon
   prettyPrec _ (ParenTy ty) = pretty ty
-  -- MetaTy ?
+  prettyPrec _ (MetaTy mtv) = pretty mtv
 
 instance PrettyNames p => Pretty (Dom p) where
   prettyPrec p (Dom Nothing ty Nothing) = prettyPrec p ty
@@ -754,12 +798,22 @@ ppTupleDom (Dom (Just pat) ty (Just prop))
 data TyCon p = UserTyCon (TyNAME p)
              | BuiltinTyCon BuiltinTyCon
 
+  -- Should I include ListTyCon ?
+  -- right now list is a built-in type (not a built-in type constructor)
+  -- but just because list type has special syntax and in this way
+  -- pretty-printing is slightly easier.
 data BuiltinTyCon = UnitTyCon
                   | BoolTyCon
                   | IntTyCon
                   | NatTyCon    -- ^ @{n:Int|n >= 0}@
-    deriving Eq
+    deriving (Eq,Ord)
 
+deriving instance Eq (TyNAME p) => Eq (TyCon p)
+deriving instance Ord (TyNAME p) => Ord (TyCon p)
+
+instance Sorted (TyNAME p) Kind => Sorted (TyCon p) Kind where
+  sortOf (UserTyCon utycon)    = sortOf utycon
+  sortOf (BuiltinTyCon btycon) = sortOf btycon
 
 instance Pretty (TyVAR p) => Pretty (TyCon p) where
   pretty (UserTyCon name) = pretty name
@@ -796,9 +850,30 @@ data MetaTyVar = MetaTyV {
 instance Eq MetaTyVar where
   (==) = (==) `on` mtvName
 
+instance Ord MetaTyVar where
+  compare = compare `on` mtvName
+
 instance Sorted MetaTyVar Kind where
   sortOf = mtvKind
 
+instance Pretty MetaTyVar where
+  pretty (MetaTyV name _ _) = char '?' <> pretty name
+
+instTyVar :: (MonadUnique m, MonadIO m) => TyVar -> m (Type Tc)
+instTyVar (TyV name kind False) = do
+  name' <- newNameFrom name
+  ref <- liftIO $ newIORef Nothing
+  return $ MetaTy $ MetaTyV name' kind ref
+instTyVar _other = undefined
+
+newMetaTyVar :: (MonadUnique m, MonadIO m) => String -> Kind -> m MetaTyVar
+newMetaTyVar str kind = do
+  name <- newName TyVarNS str
+  ref <- liftIO $ newIORef Nothing
+  return $ MetaTyV name kind ref
+
+newMetaTy :: (MonadUnique m, MonadIO m) => String -> Kind -> m (Type Tc)
+newMetaTy str kind = liftM MetaTy $ newMetaTyVar str kind
 
 -- ** Constructors
 
@@ -807,6 +882,15 @@ instance Sorted MetaTyVar Kind where
 
 (-->) :: Type p -> Type p -> Type p
 dom --> ran = Dom Nothing dom Nothing \--> ran
+
+patternTy :: Pat p -> Type p -> Type p
+patternTy WildPat    ty = ty
+patternTy (VarPat _) ty = ty
+patternTy pat        ty = PredTy pat ty Nothing
+
+predTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
+predTy pat ty Nothing = patternTy pat ty
+predTy pat ty prop    = PredTy pat ty prop
 
 unitTy, boolTy, intTy, natTy :: Type p
 unitTy = ConTy unitTyCon
