@@ -270,6 +270,8 @@ substType s (PredTy pat ty mbProp)
 substType s (FunTy dom rang) = do (dom',s') <- substDom s dom
                                   liftM (FunTy dom') $ substType s' rang
 substType s (TupleTy ds) = liftM (TupleTy . fst) $ substDoms s ds
+  -- substitution is not applied inside meta-types
+substType s mty@(MetaTy _mtv) = return mty
 
 substDoms :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Dom p] -> m ([Dom p],Subst1 p)
 substDoms = mapAccumM substDom
