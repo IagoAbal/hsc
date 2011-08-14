@@ -8,6 +8,11 @@
 
 module H.Phase where
 
+import Control.Applicative
+import Data.Foldable
+import Data.Monoid
+import Data.Traversable
+
 
 -- * Front-end phases
 
@@ -74,3 +79,11 @@ instance Eq a => Eq (PostTc p a) where
 instance Functor (PostTc p) where
   fmap _f NoPostTc   = NoPostTc
   fmap  f (PostTc x) = PostTc (f x)
+
+instance Foldable (PostTc p) where
+  foldMap _f NoPostTc  = mempty
+  foldMap f (PostTc x) = f x
+
+instance Traversable (PostTc p) where
+  traverse f NoPostTc   = pure NoPostTc
+  traverse f (PostTc x) = PostTc <$> f x
