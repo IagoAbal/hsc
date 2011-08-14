@@ -132,8 +132,9 @@ fvTypes = Set.unions . map fvType
 
 fvType :: Ord (VAR p) => Type p -> Set (VAR p)
 fvType (VarTy _) = Set.empty
-fvType (ConTy _) = Set.empty
-fvType (AppTy a b) = fvTypes [a,b]
+fvType (ConTyIn _) = Set.empty
+fvType (AppTyIn a b) = fvTypes [a,b]
+fvType (ConTy _ args) = fvTypes args
 fvType (PredTy pat ty mbprop)
   = fvType ty `Set.union` (fvMaybeExp mbprop Set.\\ bsPat pat)
 fvType (FunTy dom range)

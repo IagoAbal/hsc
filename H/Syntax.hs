@@ -130,7 +130,12 @@ type instance TyVAR Tc = TyVar
 type instance TyVAR Ti = TyVar
 type instance TyVAR Vc = TyVar
 
-type TyNAME phase = TyVAR phase
+type UTyNAME phase = TyVAR phase
+
+type family TyCON phase
+type instance TyCON Pr = TyName Pr
+type instance TyCON Rn = TyName Rn
+type instance TyCON Tc = TyCon Tc
 
 type family GoalNAME phase
 type instance GoalNAME Pr = OccName
@@ -140,7 +145,7 @@ type instance GoalNAME Ti = Name
 type instance GoalNAME Vc = Name
 
 
-class (Pretty (VAR p), Pretty (TyVAR p), Pretty(GoalNAME p)) => PrettyNames p where
+class (Pretty (VAR p), Pretty (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
 instance PrettyNames Pr where
 instance PrettyNames Rn where
 
@@ -191,9 +196,9 @@ instance Pretty ModuleName where
 
 data Decl p where
   -- | type synonym 
-  TypeDecl ::	SrcLoc -> TyNAME p -> TyParams p -> Type p -> Decl p
+  TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Type p -> Decl p
   -- | inductive data type
-  DataDecl ::	SrcLoc -> TyNAME p -> TyParams p -> [ConDecl p] -> Decl p
+  DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
 --   -- | type signature
 --   TypeSig :: SrcLoc -> NAME Pr -> PolyType Pr -> Decl Pr
   -- | Value declarations
@@ -555,7 +560,7 @@ data BuiltinCon = UnitCon
                 | ConsCon
     deriving(Eq,Ord)
 
-instance (TyVAR p ~ TyVar) => Sorted BuiltinCon (PolyType p) where
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BuiltinCon (PolyType p) where
   sortOf UnitCon  = monoTy $ unitTy
   sortOf FalseCon = monoTy $ boolTy
   sortOf TrueCon  = monoTy $ boolTy
@@ -570,7 +575,7 @@ instance (TyVAR p ~ TyVar) => Sorted BuiltinCon (PolyType p) where
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
 
-instance (VAR p ~ Var p, TyVAR p ~ TyVar) => Sorted (Con p) (PolyType p) where
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted (Con p) (PolyType p) where
   sortOf (UserCon ucon)    = sortOf ucon
   sortOf (BuiltinCon bcon) = sortOf bcon
 
@@ -683,6 +688,12 @@ instance Pretty Quantifier where
   pretty ForallQ = text "forall"
   pretty ExistsQ = text "exists"
 
+-- ** Constructors
+
+(.>.), (.>=.) :: Exp p -> Exp p -> Prop p
+x .>. y = InfixApp x gtOp y
+x .>=. y = InfixApp x geOp y
+
 -- * Types
 
 typeOf :: Sorted a (Type p) => a -> Type p
@@ -699,9 +710,10 @@ data Type p where
   -- | type variable
   VarTy :: TyVAR p -> Type p
   -- | named type or type constructor
-  ConTy :: TyCon p -> Type p
+  ConTyIn :: Lt p Tc => TyCON p -> Type p
   -- | application of a type constructor
-  AppTy :: Type p -> Type p -> Type p
+  AppTyIn :: Lt p Tc => Type p -> Type p -> Type p
+  ConTy :: Ge p Tc => TyCON p -> [Type p] -> Type p
   -- | subset type
   PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
   -- | function type
@@ -742,6 +754,10 @@ mu_0 :: Type p -> Type p
 mu_0 (PredTy _ ty _) = mu_0 ty
 mu_0 ty              = ty
 
+isSynTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type p -> Bool
+isSynTy (ConTy SynTyCon{} _) = True
+isSynTy _other               = False
+
 
 ppDomType :: PrettyNames p => Dom p -> Doc
 ppDomType = prettyPrec prec_btype
@@ -770,10 +786,12 @@ instance PrettyNames p => Pretty (Type p) where
     myFsep [ppDomType a, text "->", pretty b]
   prettyPrec _ (ListTy a)  = brackets $ pretty a
   prettyPrec _ (TupleTy l) = parenList . map ppTupleDom $ l
-  prettyPrec p (AppTy a b) = parensIf (p > prec_btype) $
+  prettyPrec p (AppTyIn a b) = parensIf (p > prec_btype) $
       myFsep [pretty a, ppAType b]
+  prettyPrec p (ConTy tc args) = parensIf (p > prec_btype) $
+      myFsep $ pretty tc : map ppAType args
   prettyPrec _ (VarTy name) = pretty name
-  prettyPrec _ (ConTy tycon) = pretty tycon
+  prettyPrec _ (ConTyIn tycon) = pretty tycon
   prettyPrec _ (ParenTy ty) = pretty ty
   prettyPrec _ (MetaTy mtv) = pretty mtv
 
@@ -795,8 +813,11 @@ ppTupleDom (Dom (Just pat) ty (Just prop))
 
 -- ** Type constructors
 
-data TyCon p = UserTyCon (TyNAME p)
-             | BuiltinTyCon BuiltinTyCon
+data TyName p = UserTyCon (UTyNAME p)
+              | BuiltinTyCon BuiltinTyCon
+
+deriving instance Eq (UTyNAME p) => Eq (TyName p)
+deriving instance Ord (UTyNAME p) => Ord (TyName p)
 
   -- Should I include ListTyCon ?
   -- right now list is a built-in type (not a built-in type constructor)
@@ -808,14 +829,11 @@ data BuiltinTyCon = UnitTyCon
                   | NatTyCon    -- ^ @{n:Int|n >= 0}@
     deriving (Eq,Ord)
 
-deriving instance Eq (TyNAME p) => Eq (TyCon p)
-deriving instance Ord (TyNAME p) => Ord (TyCon p)
-
-instance Sorted (TyNAME p) Kind => Sorted (TyCon p) Kind where
+instance Sorted (UTyNAME p) Kind => Sorted (TyName p) Kind where
   sortOf (UserTyCon utycon)    = sortOf utycon
   sortOf (BuiltinTyCon btycon) = sortOf btycon
 
-instance Pretty (TyVAR p) => Pretty (TyCon p) where
+instance Pretty (TyVAR p) => Pretty (TyName p) where
   pretty (UserTyCon name) = pretty name
   pretty (BuiltinTyCon tycon) = pretty tycon
 
@@ -825,11 +843,56 @@ instance Pretty BuiltinTyCon where
   pretty IntTyCon  = text "Int"
   pretty NatTyCon  = text "Nat"
 
-unitTyCon, boolTyCon, intTyCon, natTyCon :: TyCon p
-unitTyCon = BuiltinTyCon UnitTyCon
-boolTyCon = BuiltinTyCon BoolTyCon
-intTyCon  = BuiltinTyCon IntTyCon
-natTyCon  = BuiltinTyCon NatTyCon
+data TyCon p
+  = AlgTyCon {
+      tyConName   :: TyName p
+    , tyConParams :: [TyVar]
+    }
+  | SynTyCon {
+      tyConName   :: TyName p
+    , tyConParams :: [TyVar]
+    , synTyConRhs :: Type p
+    }
+
+instance Eq (TyName p) => Eq (TyCon p) where
+  (==) = (==) `on` tyConName
+
+instance Ord (TyName p) => Ord (TyCon p) where
+  compare = compare `on` tyConName
+
+instance Sorted (TyName p) Kind => Sorted (TyCon p) Kind where
+  sortOf = sortOf . tyConName
+
+instance Pretty (TyName p) => Pretty (TyCon p) where
+  pretty = pretty . tyConName
+
+unitTyName, boolTyName, intTyName, natTyName :: TyName p
+unitTyName = BuiltinTyCon UnitTyCon
+boolTyName = BuiltinTyCon BoolTyCon
+intTyName  = BuiltinTyCon IntTyCon
+natTyName  = BuiltinTyCon NatTyCon
+
+unitTyCon, boolTyCon, intTyCon, natTyCon :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => TyCon p
+unitTyCon = AlgTyCon {
+              tyConName   = BuiltinTyCon UnitTyCon
+            , tyConParams = []
+            }
+boolTyCon = AlgTyCon {
+              tyConName   = BuiltinTyCon BoolTyCon
+            , tyConParams = []
+            }
+intTyCon  = AlgTyCon {
+              tyConName   = BuiltinTyCon IntTyCon
+            , tyConParams = []
+            }
+natTyCon  = SynTyCon {
+              tyConName   = BuiltinTyCon NatTyCon
+            , tyConParams = []
+            , synTyConRhs = predTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
+            }
+  where n = V n_nm (monoTy intTy)
+        n_nm = mkSysName (mkOccName VarNS "n") n_uniq
+        n_uniq = -2001
 
 instance Sorted BuiltinTyCon Kind where
   sortOf UnitTyCon = typeKi
@@ -892,11 +955,11 @@ predTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
 predTy pat ty Nothing = patternTy pat ty
 predTy pat ty prop    = PredTy pat ty prop
 
-unitTy, boolTy, intTy, natTy :: Type p
-unitTy = ConTy unitTyCon
-boolTy = ConTy boolTyCon
-intTy  = ConTy intTyCon
-natTy  = ConTy natTyCon
+unitTy, boolTy, intTy, natTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type p
+unitTy = ConTy unitTyCon []
+boolTy = ConTy boolTyCon []
+intTy  = ConTy intTyCon []
+natTy  = ConTy natTyCon []
 
 
 -- * Kinds

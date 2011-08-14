@@ -209,11 +209,11 @@ Types
 > | btype       { $1 }
 
 > btype :: { Type Pr }
-> : btype atype     { AppTy $1 $2 }
+> : btype atype     { AppTyIn $1 $2 }
 > | atype       { $1 }
 
 > atype :: { Type Pr }
-> : gtycon            { ConTy $1 }
+> : gtycon            { ConTyIn $1 }
 > | tyvar             { VarTy $1 }
 > | '(' tuptypes ')'   { TupleTy $2 }
 > | '[' type ']'      { ListTy $2 }
@@ -221,11 +221,11 @@ Types
 > | '{' apat ':' type '}'           { PredTy $2 $4 Nothing }
 > | '{' apat ':' type '|' prop '}'  { PredTy $2 $4 (Just $6) }
 
-> gtycon :: { TyCon Pr }
-> : '(' ')'     { unitTyCon }
-> | 'Int'       { intTyCon }
-> | 'Nat'       { natTyCon }
-> | 'Bool'      { boolTyCon }
+> gtycon :: { TyCON Pr }
+> : '(' ')'     { unitTyName }
+> | 'Int'       { intTyName }
+> | 'Nat'       { natTyName }
+> | 'Bool'      { boolTyName }
 > |  utycon     { $1 }
 
 
@@ -565,7 +565,7 @@ Miscellaneous (mostly renamings)
 > tyvar :: { TyVAR Pr }
 > : VARID     { mkOccName TyVarNS $1 }
 
-> utycon :: { TyCon Pr }
+> utycon :: { TyCON Pr }
 > : tyconid     { UserTyCon $1 }
 
 -----------------------------------------------------------------------------

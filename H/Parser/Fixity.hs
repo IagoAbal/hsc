@@ -191,8 +191,8 @@ instance AppFixity (PolyType Pr) where
 instance AppFixity (Type Pr) where
   applyFixities fixs ty = case ty of
       VarTy _ -> return ty
-      ConTy _ -> return ty
-      AppTy a b -> liftM2 AppTy (fix a) (fix b)
+      ConTyIn _ -> return ty
+      AppTyIn a b -> liftM2 AppTyIn (fix a) (fix b)
       PredTy pat s mbP -> liftM3 PredTy (fix pat) (fix s) (fix mbP)
       FunTy a b -> liftM2 FunTy (fix a) (fix b)
       ListTy a -> liftM ListTy (fix a)

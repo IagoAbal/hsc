@@ -261,8 +261,11 @@ substType Subst1{substTyVarEnv} ty@(VarTy tyvar)
   = case Map.lookup tyvar substTyVarEnv of
         Just ty' -> return ty'
         Nothing  -> return ty
-substType s ty@(ConTy _) = return ty
-substType s (AppTy ty1 ty2) = liftM2 AppTy (substType s ty1) (substType s ty2)
+  -- remove
+substType s ty@(ConTyIn _) = return ty
+  -- remove
+substType s (AppTyIn ty1 ty2) = liftM2 AppTyIn (substType s ty1) (substType s ty2)
+substType s (ConTy tc args) = liftM (ConTy tc) $ mapM (substType s) args
 substType s (PredTy pat ty mbProp)
   = do ty' <- substType s ty
        (pat',s') <- substPat s pat

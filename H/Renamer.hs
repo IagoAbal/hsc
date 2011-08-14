@@ -302,8 +302,8 @@ instance Rename PolyType where
 
 instance Rename Type where
   rename (VarTy occ) = liftM VarTy $ getName occ
-  rename (ConTy tycon) = liftM ConTy $ rename tycon
-  rename (AppTy s t) = liftM2 AppTy (rename s) (rename t)
+  rename (ConTyIn tycon) = liftM ConTyIn $ rename tycon
+  rename (AppTyIn s t) = liftM2 AppTyIn (rename s) (rename t)
   rename (PredTy pat ty mbProp) = do
     ty' <- rename ty
     renameBndr pat $ \pat' ->
@@ -325,7 +325,7 @@ instance RenameBndr (Dom Pr) (Dom Rn) where
       mbProp' <- inPropContext $ rnMaybe mbProp
       f (Dom (Just pat') ty' mbProp')
 
-instance Rename TyCon where
+instance Rename TyName where
   rename (UserTyCon occ) = liftM UserTyCon $ getName occ
   rename (BuiltinTyCon btycon) = return $ BuiltinTyCon btycon
 
