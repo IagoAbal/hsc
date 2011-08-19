@@ -363,6 +363,19 @@ isElseGuard :: Exp Pr -> Bool
 isElseGuard ElseGuard = True
 isElseGuard _other    = False
 
+splitApp :: Exp p -> (Exp p,[Exp p])
+splitApp = go []
+  where go args (App f a) = go (a:args) f
+        go args f         = (f,args)
+
+tyApp :: (Ge p Tc) => Exp p -> [Type p] -> Exp p
+tyApp exp []  = exp
+tyApp exp tys = TyApp exp tys
+
+tyLam :: (Ge p Tc, TyVAR p ~ TyVar) => [TyVar] -> Exp p -> Exp p
+tyLam [] exp  = exp
+tyLam tvs exp = TyLam tvs exp
+
 instance PrettyNames p => Pretty (Exp p) where
   pretty (Lit lit) = pretty lit
   pretty ElseGuard = text "else"
@@ -564,12 +577,12 @@ instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted 
   sortOf UnitCon  = monoTy $ unitTy
   sortOf FalseCon = monoTy $ boolTy
   sortOf TrueCon  = monoTy $ boolTy
-  sortOf NilCon   = ForallTy [a_tv] $ a --> ListTy a
+  sortOf NilCon   = forallTy [a_tv] $ a --> ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
           a_uniq = -1001
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
-  sortOf ConsCon  = ForallTy [a_tv] $ a --> ListTy a --> ListTy a
+  sortOf ConsCon  = forallTy [a_tv] $ a --> ListTy a --> ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
           a_uniq = -1002
           a_tv = TyV a_nm typeKi False
@@ -690,6 +703,9 @@ instance Pretty Quantifier where
 
 -- ** Constructors
 
+app :: Exp p -> [Exp p] -> Exp p
+app f args = foldl App f args
+
 (.>.), (.>=.) :: Exp p -> Exp p -> Prop p
 x .>. y = InfixApp x gtOp y
 x .>=. y = InfixApp x geOp y
@@ -702,8 +718,14 @@ typeOf = sortOf
 -- | Rank-1 polymorphic types
 data PolyType p = ForallTy (TyParams p) (Type p)
 
+forallTy :: TyParams p -> Type p -> PolyType p
+forallTy = ForallTy
+
 monoTy :: Type p -> PolyType p
 monoTy = ForallTy []
+
+polyTyVars :: PolyType p -> [TyVAR p]
+polyTyVars (ForallTy tvs _) = tvs
 
 -- | Monomorphic types
 data Type p where
@@ -945,6 +967,13 @@ newMetaTy str kind = liftM MetaTy $ newMetaTyVar str kind
 
 (-->) :: Type p -> Type p -> Type p
 dom --> ran = Dom Nothing dom Nothing \--> ran
+
+funTy :: [Dom p] -> Range p -> Type p
+funTy doms rang =  foldr (\-->) rang doms
+
+patternDom :: Pat p -> Type p -> Dom p
+patternDom WildPat ty = Dom Nothing ty Nothing
+patternDom pat     ty = Dom (Just pat) ty Nothing
 
 patternTy :: Pat p -> Type p -> Type p
 patternTy WildPat    ty = ty
