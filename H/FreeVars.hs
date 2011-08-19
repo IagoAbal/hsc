@@ -145,7 +145,6 @@ fvType (ParenTy ty) = fvType ty
   -- this case may be tricky ...
 fvType (MetaTy _) = Set.empty
 
-
 fvDoms :: Ord (VAR p) => [Dom p] -> Set (VAR p)
 fvDoms []     = Set.empty
 fvDoms (d:ds) = fvDom d `Set.union` (fvDoms ds Set.\\ bsDom d)
@@ -158,3 +157,51 @@ fvDom (Dom (Just pat) ty mbprop)
 
 bsDom :: Ord (VAR p) => Dom p -> Set (VAR p)
 bsDom (Dom mbpat _ty _mbprop) = maybe Set.empty bsPat mbpat
+
+
+-- * Free type variables
+-- This is an incomplete implementation, but it suffices for checkSigma.
+-- We should go inside type predicates looking for free type variables.
+
+patsFTV :: Ord (TyVAR p) => [Pat p] -> Set (TyVAR p)
+patsFTV = Set.unions . map patFTV
+
+patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
+patFTV (VarPat x) = Set.empty     -- same than for fvPat
+patFTV (LitPat _) = Set.empty
+patFTV (InfixPat p1 _op p2) = patsFTV [p1,p2]
+patFTV (ConPat _con ps) = patsFTV ps
+patFTV (TuplePat ps) = patsFTV ps
+patFTV (ListPat ps) = patsFTV ps
+patFTV (ParenPat p) = patFTV p
+patFTV WildPat      = Set.empty
+patFTV (AsPat _x p)  = patFTV p
+patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
+
+polyTypesFTV :: Ord (TyVAR p) => [PolyType p] -> Set (TyVAR p)
+polyTypesFTV = Set.unions . map polyTypeFTV
+
+polyTypeFTV :: Ord (TyVAR p) => PolyType p -> Set (TyVAR p)
+polyTypeFTV (ForallTy tvs ty) = typeFTV ty Set.\\ (Set.fromList tvs)
+
+typesFTV :: Ord (TyVAR p) => [Type p] -> Set (TyVAR p)
+typesFTV = Set.unions . map typeFTV
+
+typeFTV :: Ord (TyVAR p) => Type p -> Set (TyVAR p)
+typeFTV (VarTy tv) = Set.singleton tv
+typeFTV (ConTyIn _) = Set.empty           -- go into TyCON ?
+typeFTV (AppTyIn t a) = typesFTV [t,a]
+typeFTV (ConTy _ args) = typesFTV args    -- go into TyCON ?
+typeFTV (PredTy pat ty _)  = patFTV pat `Set.union` typeFTV ty
+typeFTV (FunTy dom rang) = domFTV dom `Set.union` typeFTV rang
+typeFTV (ListTy ty) = typeFTV ty
+typeFTV (TupleTy ds) = domsFTV ds
+typeFTV (ParenTy ty) = typeFTV ty
+typeFTV (MetaTy _)   = Set.empty
+
+domsFTV :: Ord (TyVAR p) => [Dom p] -> Set (TyVAR p)
+domsFTV = Set.unions . map domFTV
+
+domFTV :: Ord (TyVAR p) => Dom p -> Set (TyVAR p)
+domFTV (Dom Nothing ty Nothing) = typeFTV ty
+domFTV (Dom (Just pat) ty _) = patFTV pat `Set.union` typeFTV ty
