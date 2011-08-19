@@ -617,6 +617,11 @@ data Op = BoolOp BoolOp
         | ConOp BuiltinCon
     deriving(Eq,Ord)
 
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted Op (PolyType p) where
+  sortOf (BoolOp bop) = sortOf bop
+  sortOf (IntOp iop)  = sortOf iop
+  sortOf (ConOp bcon) = sortOf bcon
+
 -- | Operators for building boolean expressions
 data BoolOp = NotB
             | OrB
@@ -630,6 +635,27 @@ data BoolOp = NotB
             | GtB
             | GeB
     deriving(Eq,Ord)
+
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BoolOp (PolyType p) where
+  sortOf NotB = monoTy $ boolTy --> boolTy
+  sortOf OrB = monoTy $ boolTy --> boolTy --> boolTy
+  sortOf AndB = monoTy $ boolTy --> boolTy --> boolTy
+  sortOf ImpB = monoTy $ boolTy --> boolTy --> boolTy
+  sortOf IffB = monoTy $ boolTy --> boolTy --> boolTy
+  sortOf EqB  = forallTy [a_tv] $ a --> a --> boolTy
+    where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
+          a_uniq = -2001
+          a_tv = TyV a_nm typeKi False
+          a = VarTy a_tv
+  sortOf NeqB  = forallTy [a_tv] $ a --> a --> boolTy
+    where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
+          a_uniq = -2002
+          a_tv = TyV a_nm typeKi False
+          a = VarTy a_tv
+  sortOf LtB = monoTy $ intTy --> intTy --> boolTy
+  sortOf LeB = monoTy $ intTy --> intTy --> boolTy
+  sortOf GtB = monoTy $ intTy --> intTy --> boolTy
+  sortOf GeB = monoTy $ intTy --> intTy --> boolTy
 
 notOp, orOp, andOp, impOp, iffOp :: Op
 eqOp, neqOp, ltOp, leOp, gtOp, geOp :: Op
@@ -654,6 +680,15 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
            | ModI
            | ExpI
     deriving(Eq,Ord)
+
+instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (PolyType p) where
+  sortOf NegI = monoTy $ intTy --> intTy
+  sortOf AddI = monoTy $ intTy --> intTy --> intTy
+  sortOf SubI = monoTy $ intTy --> intTy --> intTy
+  sortOf MulI = monoTy $ intTy --> intTy --> intTy
+  sortOf DivI = monoTy $ intTy --> intTy --> intTy
+  sortOf ModI = monoTy $ intTy --> intTy --> intTy
+  sortOf ExpI = monoTy $ intTy --> intTy --> intTy
 
 negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
 negOp = IntOp NegI
