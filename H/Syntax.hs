@@ -24,6 +24,7 @@ import Unique( Uniq, Uniquable(..), MonadUnique(..) )
 
 import Data.IORef( IORef, newIORef )
 import Data.Function ( on )
+import Control.Applicative ( pure, (<$>), (<*>), (<|>) )
 import Control.Monad ( liftM )
 import Control.Monad.IO.Class ( MonadIO(..) )
 
@@ -507,6 +508,9 @@ data Pat p where
     -- Add SrcLoc ?
   SigPat :: Pat p -> Type p -> Pat p
 
+-- | An /alt/ in a @case@ expression.
+data Alt p = Alt SrcLoc (Pat p) (Rhs p)
+
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
@@ -522,8 +526,101 @@ patBndrs (SigPat p _t) = patBndrs p
 patsBndrs :: [Pat p] -> [VAR p]
 patsBndrs = concatMap patBndrs
 
--- | An /alt/ in a @case@ expression.
-data Alt p = Alt SrcLoc (Pat p) (Rhs p)
+
+-- | Check if an arbitrary expression could be matched against some
+-- given pattern. This is an undecidable problem and since the purpose of
+-- this function is to detect trivial errors, it is conservative
+-- considering that an expression may match a pattern in case of doubt.
+-- NB: We assume that the given expression and pattern have compatible types.
+-- e.g. @Just 1 `matchableWith` Nothing == False@
+-- e.g. @tail [x] `matchableWith (y::ys) == True@
+matchableWith :: Eq (VAR p) => Exp p -> Pat p -> Bool
+
+matchableWith _       (VarPat _)   = True
+matchableWith _       WildPat      = True
+matchableWith (Lit lit)  (LitPat lit') = lit == lit'
+matchableWith e _ | (Var _,_) <- splitApp e = True
+matchableWith e (ConPat con' ps)
+  | (Con con,args) <- splitApp e
+  , con == con' = and $ zipWith matchableWith args ps
+matchableWith (InfixApp e1 (ConOp bcon) e2) (InfixPat p1 bcon' p2)
+  | bcon == bcon' = matchableWith e1 p1 && matchableWith e2 p2
+matchableWith (InfixApp _ (IntOp _) _) _ = True
+matchableWith (InfixApp _ (BoolOp _) _) _ = True
+matchableWith (Tuple es) (TuplePat ps)
+  | length es == length ps = and $ zipWith matchableWith es ps
+matchableWith (List es) (ListPat ps)
+  | length es == length ps = and $ zipWith matchableWith es ps
+matchableWith (PrefixApp _ _) _ = True
+matchableWith (QP _ _ _) _ = True
+matchableWith (Let _ e) p = matchableWith e p
+matchableWith (Ite _ t e) p = matchableWith t p && matchableWith e p
+
+  -- just to not complicate it too much...
+matchableWith (If _) _ = True
+matchableWith (Case _ _ _) _ = True
+matchableWith (EnumFromTo _ _) _ = True
+matchableWith (EnumFromThenTo _ _ _) _ = True
+
+  -- somewhat dirty? ... it relies a lot on type-compatibility
+matchableWith (List []) (ConPat _ []) = True
+matchableWith (List (_:xs)) (InfixPat _ _ ys_pat)
+  = matchableWith (List xs) ys_pat
+
+matchableWith e       (SigPat p _) = matchableWith e p
+matchableWith (Coerc _ e _) p      = matchableWith e p
+matchableWith (Paren e)     p      = matchableWith e p
+matchableWith e             (ParenPat p) = matchableWith e p
+matchableWith _ _ = False
+
+-- | Checks if two patterns are 'matchable', in the sense that their
+-- "shapes" can be matched one against the other.
+-- Some examples:
+--   @matchablePats (_::_) (x::xs) == True@
+--   @matchablePats [1,2,x] [1,2,_] == Truee@
+--   @matchablePats (_::_) [] == False@
+--   @matchablePats (1,b) (x,y) == True@
+--   @matchablePats (a,b,c) (x,y) == False@
+-- Note that this check does not detect any possible inconsistency,
+-- for instance @matchablePats (x1::x2::xs) (y::(ys:{[]:[Int]})) == True@.
+matchablePats :: Eq (VAR p) => Pat p -> Pat p -> Bool
+matchablePats (VarPat _)  _           = True
+matchablePats WildPat     _           = True
+matchablePats _           (VarPat _)  = True
+matchablePats _           WildPat     = True
+matchablePats (LitPat l1) (LitPat l2) = l1 == l2
+matchablePats (InfixPat p1 bcon p2) (InfixPat p1' bcon' p2')
+  = bcon == bcon' && matchablePats p1 p1' && matchablePats p2 p2'
+matchablePats (ConPat con ps) (ConPat con' ps')
+  = con == con' && and (zipWith matchablePats ps ps')
+matchablePats (TuplePat ps) (TuplePat ps')
+  = length ps == length ps' && and (zipWith matchablePats ps ps')
+matchablePats (ListPat ps) (ListPat ps')
+  = length ps == length ps' && and (zipWith matchablePats ps ps')
+matchablePats (ParenPat p) p'            = matchablePats p p'
+matchablePats p            (ParenPat p') = matchablePats p p'
+matchablePats (AsPat _ p)  p'            = matchablePats p p'
+matchablePats p            (AsPat _ p')  = matchablePats p p'
+matchablePats (SigPat p _) p'            = matchablePats p p'
+matchablePats p            (SigPat p' _) = matchablePats p p'
+matchablePats _p           _p'           = False
+
+-- | Converts a pattern to an expression.
+-- NB: Such a conversion is not possible in case of wild-card patterns.
+pat2exp :: Pat p -> Maybe (Exp p)
+pat2exp (VarPat x)   = pure $ Var x
+pat2exp (LitPat lit) = pure $ Lit lit
+pat2exp (InfixPat p1 bcon p2)
+  = (flip InfixApp con) <$> pat2exp p1 <*> pat2exp p2
+  where con = ConOp bcon
+pat2exp (ConPat con ps)
+  = (Con con `app`) <$> mapM pat2exp ps
+pat2exp (TuplePat ps) = Tuple <$> mapM pat2exp ps
+pat2exp (ListPat ps) = List <$> mapM pat2exp ps
+pat2exp (ParenPat p) = Paren <$> pat2exp p
+pat2exp WildPat      = Nothing
+pat2exp (AsPat _ p)  = pat2exp p
+pat2exp (SigPat p ty) = pat2exp p
 
 
 instance PrettyNames p => Pretty (Pat p) where
