@@ -73,6 +73,9 @@ fvPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
 fvPats = Set.unions . map fvPat
 
 fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
+  -- I think it should be 'fvPolyType $ varType x' but that would require
+  -- to fix the algorithm to work just with 'Var p'
+  -- other way would be to use type-classes... but it may have problems
 fvPat (VarPat x) = Set.empty
 fvPat (LitPat _) = Set.empty
 fvPat (InfixPat p1 _op p2) = fvPats [p1,p2]
