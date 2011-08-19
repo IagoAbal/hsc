@@ -6,7 +6,8 @@
              GADTs,
              TypeOperators,
              TypeFamilies,
-             UndecidableInstances
+             UndecidableInstances,
+             ScopedTypeVariables
              #-}
 
 -- | One-shot substitution
@@ -16,11 +17,14 @@ module H.Subst1 where
 
 import H.Syntax
 import H.Phase
+import H.FreeVars
 
 import Name
 import Sorted
 import Unique( MonadUnique )
 
+import Control.Arrow ( second )
+import Control.Applicative ( pure, (<$>), (<*>), (<|>) )
 import Control.Monad
 import Data.Map( Map )
 import qualified Data.Map as Map
@@ -43,6 +47,99 @@ data Subst1 p = Subst1 {
 mkSubst1 :: [(Var p,Exp p)] -> [(TyVar,Type p)] -> Set (Var p) -> Set TyVar -> Subst1 p
 mkSubst1 var_env tyvar_env var_scope tyvar_scope
   = Subst1 (Map.fromList var_env) (Map.fromList tyvar_env) var_scope tyvar_scope
+
+--- better names ?
+mkSubst1_FV :: forall p. (VAR p ~ Var p) => [(Var p,Exp p)] -> [(TyVar,Type p)] -> Subst1 p
+mkSubst1_FV var_env tyvar_env
+  = Subst1 (Map.fromList var_env) (Map.fromList tyvar_env) var_scope tyvar_scope
+  where var_scope :: Set (Var p)
+        var_scope = fvExps (map snd var_env) `Set.union` fvTypes (map snd tyvar_env)
+        tyvar_scope = Set.empty    -- Requires ftvExps ...
+
+subst_exp :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => [(Var p,Exp p)] -> [(TyVar,Type p)] -> Exp p -> m (Exp p)
+subst_exp var_env tyvar_env = substExp (mkSubst1_FV var_env tyvar_env)
+
+subst_mbExp :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => [(Var p,Exp p)] -> [(TyVar,Type p)] -> Maybe (Exp p) -> m (Maybe (Exp p))
+subst_mbExp var_env tyvar_env = substMaybeExp (mkSubst1_FV var_env tyvar_env)
+
+subst_type :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => [(Var p,Exp p)] -> [(TyVar,Type p)] -> Type p -> m (Type p)
+subst_type var_env tyvar_env = substType (mkSubst1_FV var_env tyvar_env)
+
+subst_doms :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => [(Var p,Exp p)] -> [(TyVar,Type p)] -> [Dom p] -> m [Dom p]
+subst_doms var_env tyvar_env = liftM fst . substDoms (mkSubst1_FV var_env tyvar_env)
+
+transformPred :: forall p m. (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => (Prop p -> Maybe (Prop p)) -> Type p -> m (Type p)
+transformPred f = go
+  where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
+        go :: Type p -> m (Type p)
+        go ty@(VarTy _)     = return ty
+        go (ConTy tc tys)   = liftM (ConTy tc) $ mapM go tys
+        go (PredTy pat ty mb_prop) = do
+          (pat',pat_s) <- go_pat pat
+          ty' <- go ty
+          mb_prop' <- subst_mbExp pat_s [] mb_prop
+          return (PredTy pat' ty' (apply_f mb_prop'))
+        go (FunTy dom rang) = do
+          (dom',dom_s) <- go_dom dom
+          rang' <- subst_type dom_s [] rang
+          rang'' <- go rang'
+          return (FunTy dom' rang'')
+        go (ListTy t)       = liftM ListTy (go t)
+        go (TupleTy ds)     = liftM TupleTy $ go_doms ds
+        go ty@(MetaTy _)    = return ty
+        go_poly :: PolyType p -> m (PolyType p)
+        go_poly (ForallTy tvs ty) = liftM (ForallTy tvs) $ go ty
+        go_doms :: [Dom p] -> m [Dom p]
+        go_doms [] = return []
+        go_doms (d:ds) = do
+          (d,d_s) <- go_dom d
+          ds' <- subst_doms d_s [] ds
+          ds'' <- go_doms ds
+          return (d:ds'')
+        go_dom :: Dom p -> m (Dom p, [(Var p,Exp p)])
+        go_dom (Dom Nothing ty Nothing) = do
+          ty' <- go ty
+          return (Dom Nothing ty Nothing,[])
+        go_dom (Dom (Just pat) ty mb_prop) = do
+          (pat',pat_s) <- go_pat pat
+          ty' <- go ty
+          mb_prop' <- subst_mbExp pat_s [] mb_prop
+          return  (Dom (Just pat') ty' (apply_f mb_prop'),pat_s)
+        go_bndr :: Var p -> m (Var p, [(Var p,Exp p)])
+        go_bndr x@V{varType} = do
+          varType' <- go_poly varType
+          let x' = x{varType = varType'}
+          return (x',[(x,Var x')])
+        go_pat :: Pat p -> m (Pat p, [(Var p,Exp p)])
+        go_pat (VarPat b) = do
+          (b',b_s) <- go_bndr b
+          return (VarPat b',b_s)
+        go_pat p@(LitPat _) = return (p,[])
+        go_pat (InfixPat p1 bcon p2) = do
+          (p1',p1_s) <- go_pat p1
+          (p2',p2_s) <- go_pat p2
+          return (InfixPat p1' bcon p2',p1_s++p2_s)
+        go_pat (ConPat con ps) = do
+          (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
+          return (ConPat con ps', concat ps_ss)
+        go_pat (TuplePat ps) = do
+          (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
+          return (TuplePat ps', concat ps_ss)
+        go_pat (ListPat ps) = do
+          (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
+          return (ListPat ps', concat ps_ss)
+        go_pat (ParenPat p) = do
+          (p',p_s) <- go_pat p
+          return (ParenPat p,p_s)
+        go_pat WildPat = return (WildPat,[])
+        go_pat (AsPat x p) = do
+          (x',x_s) <- go_bndr x
+          (p',p_s) <- go_pat p
+          return (AsPat x' p', x_s++p_s)
+        go_pat (SigPat p ty) = do
+          ty' <- go ty
+          (p',p_s) <- go_pat p
+          return (SigPat p' ty',p_s)
 
 
 mapAccumM :: Monad m => (acc -> x -> m (y,acc)) -> acc -> [x] -> m ([y], acc)
