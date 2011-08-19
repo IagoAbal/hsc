@@ -11,6 +11,7 @@
 
 -- | One-shot substitution
 -- It allows several *independent* substitutions to be performed in parallel.
+-- TO DO: Use GHC-like UniqSupply and implicit parameters to avoid the monadic stuff
 module H.Subst1 where
 
 import H.Syntax
