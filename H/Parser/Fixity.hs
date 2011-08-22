@@ -138,7 +138,7 @@ instance AppFixity (Decl Pr) where
 
 instance AppFixity (Bind Pr) where
   applyFixities fixs bind = case bind of
-      FunBind rec n sig matches  -> liftM2 (FunBind rec n) (fix sig) (mapM fix matches)
+      FunBind rec n sig NoPostTc matches  -> liftM3 (FunBind rec n) (fix sig) (return NoPostTc) (mapM fix matches)
       PatBind loc p rhs -> liftM2 (PatBind loc) (fix p) (fix rhs)
     where fix :: (Monad m, AppFixity ast) => ast -> m ast
           fix x = applyFixities fixs x

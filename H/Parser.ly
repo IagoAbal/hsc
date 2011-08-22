@@ -284,9 +284,9 @@ Value definitions
 
 > funbind :: { Bind Pr }
 > : srcloc varid apats rhs wherebinds
->         { FunBind Rec $2 NoTypeSig [Match $1 $3 (Rhs $4 $5)] }
+>         { FunBind Rec $2 NoTypeSig NoPostTc [Match $1 $3 (Rhs $4 $5)] }
 > | srcloc varid rhs wherebinds
->         { FunBind Rec $2 NoTypeSig [Match $1 [] (Rhs $3 $4)] }
+>         { FunBind Rec $2 NoTypeSig NoPostTc [Match $1 [] (Rhs $3 $4)] }
 
 > binds :: { [Bind Pr] }
 > : valdecllist     { getParsedBinds $1 }

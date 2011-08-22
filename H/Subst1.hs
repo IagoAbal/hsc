@@ -215,16 +215,18 @@ substBinds :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Bi
 substBinds = mapAccumM substBind
 
 substBind :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Bind p -> m (Bind p,Subst1 p)
-substBind s (FunBind NonRec fun sig matches) = do
+substBind s (FunBind NonRec fun sig (PostTc typs) matches) = do
   sig' <- substTypeSig s sig
-  matches' <- substMatches s matches  -- non-recursive bindings
-  (fun',s') <- substBndr s fun
-  return (FunBind NonRec fun' sig' matches',s')
-substBind s (FunBind Rec fun sig matches) = do
+  (typs', s') <- substTyBndrs s typs
+  matches' <- substMatches s' matches  -- non-recursive bindings
+  (fun',s'') <- substBndr s' fun
+  return (FunBind NonRec fun' sig' (PostTc typs') matches',s'')
+substBind s (FunBind Rec fun sig (PostTc typs) matches) = do
   sig' <- substTypeSig s sig
   (fun',s') <- substBndr s fun
-  matches' <- substMatches s' matches  -- recursive bindings
-  return (FunBind Rec fun' sig' matches',s')
+  (typs', s'') <- substTyBndrs s' typs
+  matches' <- substMatches s'' matches  -- recursive bindings
+  return (FunBind Rec fun' sig' (PostTc typs') matches',s'')
 substBind s (PatBind loc pat rhs) = do
   rhs' <- substRhs s rhs
   (pat',s') <- substPat s pat

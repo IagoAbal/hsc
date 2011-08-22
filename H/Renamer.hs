@@ -146,13 +146,13 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
 --         f (PatBind loc pat' rhs')
 
 instance RenameBndr (Bind Pr) (Bind Rn) where
-  renameBndr (FunBind _rec occ sig matches) f
+  renameBndr (FunBind _rec occ sig NoPostTc matches) f
     = inContext (text "In the definition of" <+> ppQuot occ) $ do
         sig' <- rename sig
         renameBndr occ $ \name -> do
           matches' <- rnList matches
           let rec' = checkFunBindRec name matches'
-          popContext $ f (FunBind rec' name sig' matches')
+          popContext $ f (FunBind rec' name sig' NoPostTc matches')
   renameBndr (PatBind loc pat rhs) f
     = inContextAt loc (text "In pattern binding" <+> ppQuot pat) $ do
         renameBndr pat $ \pat' -> do

@@ -42,8 +42,8 @@ mkFunTy (PredTy pat a mbProp) b = dom \--> b
 mkFunTy a b = a --> b
 
 funWithSig :: (SrcLoc,NAME Pr,PolyType Pr) -> Bind Pr -> P (Bind Pr)
-funWithSig (sigloc,sigfun,sigtype) (FunBind rec fun NoTypeSig ms)
-  | sigfun == fun = return $ FunBind rec fun sig ms
+funWithSig (sigloc,sigfun,sigtype) (FunBind rec fun NoTypeSig NoPostTc ms)
+  | sigfun == fun = return $ FunBind rec fun sig NoPostTc ms
   | otherwise     = fail ("Type signature for `" ++ prettyPrint sigfun ++ "' lacks an accompanying binding")
                         `atSrcLoc` sigloc
   where
@@ -62,30 +62,30 @@ getMonoBind :: Bind Pr -> [Decl Pr] -> P (Bind Pr, [Decl Pr])
 -- Then b' is the result of grouping more equations from ds that
 -- belong with b into a single MonoBinds, and ds' is the depleted
 -- list of parsed bindings.
-getMonoBind bind@(FunBind _ _ _ _) [] = return (bind,[])
+getMonoBind bind@(FunBind _ _ _ _ _) [] = return (bind,[])
   -- special case for functions of arity 0
   -- e.g. @x = 1@
   -- in this way @x = 1; x = 2@ will be reported as a duplicated
   -- definition instead of as a non-uniform definition.
-getMonoBind bind@(FunBind rec fun sig ms1@(Match _ [] _:_)) decls
+getMonoBind bind@(FunBind rec fun sig NoPostTc ms1@(Match _ [] _:_)) decls
   = return (bind,decls)
-getMonoBind bind@(FunBind rec fun sig ms1@(Match _ ps _:_)) decls
+getMonoBind bind@(FunBind rec fun sig _ ms1@(Match _ ps _:_)) decls
   = mergeMatches ms1 decls
   where arity = length ps
         mergeMatches :: [Match Pr] -> [Decl Pr] -> P (Bind Pr, [Decl Pr])
-        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig ms'@(Match loc ps' _:_)):ds)
+        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig NoPostTc ms'@(Match loc ps' _:_)):ds)
           | fun' == fun = if length ps' /= arity
                             then fail ("arity mismatch for `" ++ prettyPrint fun ++ "'")
                                     `atSrcLoc` loc
                             else mergeMatches (ms ++ ms') ds
-        mergeMatches ms ds = return (FunBind rec fun sig ms,ds)
+        mergeMatches ms ds = return (FunBind rec fun sig NoPostTc ms,ds)
 getMonoBind bind decls = return (bind,decls)
 
 
 
 groupDeclsBinds :: [Decl Pr] -> P [Decl Pr]
 groupDeclsBinds [] = return []
-groupDeclsBinds (ValDecl bind@(FunBind _ _ _ _):decls)
+groupDeclsBinds (ValDecl bind@(FunBind _ _ _ _ _):decls)
   = do (bind',decls') <- getMonoBind bind decls
        liftM (ValDecl bind':) $ groupDeclsBinds decls'
 groupDeclsBinds (decl:decls)
@@ -115,7 +115,7 @@ checkDupDecls = go Map.empty
     go booked (ValDecl (PatBind loc pat _):ds)
       = foldl (>>=) (return booked) [newDecl loc name | name <- patBndrs pat]
           >>= flip go ds
-    go booked (ValDecl (FunBind _ name _ (Match loc _ _:_)):ds)
+    go booked (ValDecl (FunBind _ name _ _ (Match loc _ _:_)):ds)
       = newDecl loc name booked >>= flip go ds
     go booked (GoalDecl loc _ name _ _:ds)
       = newDecl loc name booked >>= flip go ds

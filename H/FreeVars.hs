@@ -14,7 +14,7 @@ fvBinds :: Ord (VAR p) => [Bind p] -> Set (VAR p)
 fvBinds = Set.unions . map fvBind
 
 fvBind :: Ord (VAR p) => Bind p -> Set (VAR p)
-fvBind (FunBind _rec fun sig matches)
+fvBind (FunBind _rec fun sig _ptctyps matches)
   = fvTypeSig sig `Set.union` (Set.delete fun $ fvMatches matches)
 fvBind (PatBind _loc pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
 
@@ -22,7 +22,7 @@ bsBinds :: Ord (VAR p) => [Bind p] -> Set (VAR p)
 bsBinds = Set.unions . map bsBind
 
 bsBind :: Ord (VAR p) => Bind p -> Set (VAR p)
-bsBind (FunBind _rec fun _sig _matches) = Set.singleton fun
+bsBind (FunBind _rec fun _sig _ptctyps _matches) = Set.singleton fun
 bsBind (PatBind _loc pat rhs)           = bsPat pat
 
 fvTypeSig :: Ord (VAR p) => TypeSig p -> Set (VAR p)

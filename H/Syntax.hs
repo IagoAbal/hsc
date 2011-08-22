@@ -214,7 +214,7 @@ data Decl p where
             -> Prop p -> Decl p
 
 
-data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) [Match p]
+data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) (PostTcTyParams p) [Match p]
                   -- ^ a function defined by a *set* of equations
                   -- NB: Only uniform definitions are allowed
                   -- NB: @f = ...@ is considered a FunBind because that allows
@@ -274,7 +274,7 @@ instance Pretty GoalType where
   pretty LemmaGoal   = text "lemma"
 
 instance PrettyNames p => Pretty (Bind p) where
-  pretty (FunBind _rec fun sig matches) =
+  pretty (FunBind _rec fun sig _ matches) =
          ppTypeSig fun sig
       $$ ppBindings (map (ppMatch fun) matches)
   pretty (PatBind pos pat (Rhs grhs whereDecls)) =
