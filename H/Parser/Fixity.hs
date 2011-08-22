@@ -133,13 +133,15 @@ instance AppFixity (Decl Pr) where
       ValDecl bind -> liftM ValDecl $ fix bind
       GoalDecl loc gname gtype ptctyparams prop ->
           liftM (GoalDecl loc gname gtype ptctyparams) (fix prop)
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 instance AppFixity (Bind Pr) where
   applyFixities fixs bind = case bind of
       FunBind rec n sig matches  -> liftM2 (FunBind rec n) (fix sig) (mapM fix matches)
       PatBind loc p rhs -> liftM2 (PatBind loc) (fix p) (fix rhs)
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 instance AppFixity (TypeSig Pr) where
   applyFixities fixs NoTypeSig = return NoTypeSig
@@ -152,18 +154,21 @@ instance AppFixity (ConDecl Pr) where
 
 instance AppFixity (Match Pr) where
     applyFixities fixs (Match loc ps rhs) = liftM2 (Match loc) (mapM fix ps) (fix rhs)
-      where fix x = applyFixities fixs x
+      where fix :: (Monad m, AppFixity ast) => ast -> m ast
+            fix x = applyFixities fixs x
 
 instance AppFixity (Rhs Pr) where
   applyFixities fixs (Rhs grhs whr)
     = liftM2 Rhs (fix grhs) (mapM fix whr)
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 instance AppFixity (GRhs Pr) where
   applyFixities fixs grhs = case grhs of
       UnGuarded e      -> liftM UnGuarded $ fix e
       Guarded grhss   -> liftM Guarded $ fix grhss
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 instance AppFixity (GuardedRhss Pr) where
   applyFixities fixs (GuardedRhssIn grhss)
@@ -178,7 +183,8 @@ instance AppFixity (GuardedRhs Pr) where
 
 instance AppFixity (Alt Pr) where
     applyFixities fixs (Alt loc p galts) = liftM2 (Alt loc) (fix p) (fix galts)
-      where fix x = applyFixities fixs x
+      where fix :: (Monad m, AppFixity ast) => ast -> m ast
+            fix x = applyFixities fixs x
 
 instance AppFixity a => AppFixity (Maybe a) where
   applyFixities fixs Nothing = return Nothing
@@ -198,12 +204,14 @@ instance AppFixity (Type Pr) where
       ListTy a -> liftM ListTy (fix a)
       TupleTy l -> liftM TupleTy $ mapM fix l
       ParenTy a -> liftM ParenTy (fix a)
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 instance AppFixity (Dom Pr) where
   applyFixities fixs (Dom mbPat ty mbProp)
     = liftM3 Dom (fix mbPat) (fix ty) (fix mbProp)
-    where fix x = applyFixities fixs x
+    where fix :: (Monad m, AppFixity ast) => ast -> m ast
+          fix x = applyFixities fixs x
 
 -- the boring boilerplate stuff for expressions too
 -- Recursively fixes the "leaves" of the infix chains,
@@ -229,6 +237,7 @@ leafFix fixs e = case e of
     QP qt pats prop    -> liftM2 (QP qt) (mapM fix pats) (fix prop)
     _                       -> return e
   where
+    fix :: (Monad m, AppFixity ast) => ast -> m ast
     fix x = applyFixities fixs x
 
 leafFixP fixs p = case p of
@@ -240,4 +249,5 @@ leafFixP fixs p = case p of
         AsPat n p            -> liftM (AsPat n) $ fix p
         SigPat p t    -> liftM2 SigPat (fix p) (fix t)
         _                     -> return p
-      where fix x = applyFixities fixs x
+      where fix :: (Monad m, AppFixity ast) => ast -> m ast
+            fix x = applyFixities fixs x
