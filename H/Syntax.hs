@@ -778,13 +778,28 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
            | ExpI
     deriving(Eq,Ord)
 
+  -- / and % could be more specific but that would introduce a mutually recursive
+  -- dependency between both of them: that should be OK since they are built-in, but
+  -- since the language does not allow you to do that.. we don't allow that as well.
+  -- we may provide some assumed theorems, for instance
+  -- theorem div_mod = forall n m, (n/m) * m + (n%m) == n
 instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (PolyType p) where
   sortOf NegI = monoTy $ intTy --> intTy
   sortOf AddI = monoTy $ intTy --> intTy --> intTy
   sortOf SubI = monoTy $ intTy --> intTy --> intTy
   sortOf MulI = monoTy $ intTy --> intTy --> intTy
-  sortOf DivI = monoTy $ intTy --> intTy --> intTy
-  sortOf ModI = monoTy $ intTy --> intTy --> intTy
+  sortOf DivI = monoTy $ intTy
+                            --> (varDom m intTy (Var m ./=. lit_0)
+                            \--> intTy)
+    where m = V m_nm (monoTy intTy)
+          m_nm = mkSysName (mkOccName VarNS "m") m_uniq
+          m_uniq = -3002
+  sortOf ModI = monoTy $ intTy
+                            --> (varDom m intTy (Var m ./=. lit_0)
+                            \--> intTy)
+    where m = V m_nm (monoTy intTy)
+          m_nm = mkSysName (mkOccName VarNS "m") m_uniq
+          m_uniq = -3102
   sortOf ExpI = monoTy $ intTy --> intTy --> intTy
 
 negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
@@ -835,12 +850,27 @@ instance Pretty Quantifier where
 
 -- ** Constructors
 
+lit_0 :: Exp p
+lit_0 = Lit (IntLit 0)
+
 app :: Exp p -> [Exp p] -> Exp p
 app f args = foldl App f args
 
-(.>.), (.>=.) :: Exp p -> Exp p -> Prop p
+(.<.), (.<=.), (.>.), (.>=.) :: Exp p -> Exp p -> Prop p
+x .<. y = InfixApp x ltOp y
+x .<=. y = InfixApp x leOp y
 x .>. y = InfixApp x gtOp y
 x .>=. y = InfixApp x geOp y
+
+(.==.), (./=.) :: Exp p -> Exp p -> Prop p
+x .==. y = InfixApp x eqOp y
+x ./=. y = InfixApp x neqOp y
+
+(.+.), (.-.), (.*.), (./.) :: Exp p -> Exp p -> Exp p
+x .+. y = InfixApp x addOp y
+x .-. y = InfixApp x subOp y
+x .*. y = InfixApp x mulOp y
+x ./. y = InfixApp x divOp y
 
 -- * Types
 
@@ -1046,7 +1076,7 @@ natTyCon  = SynTyCon {
             }
   where n = V n_nm (monoTy intTy)
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
-        n_uniq = -2001
+        n_uniq = -4001
 
 instance Sorted BuiltinTyCon Kind where
   sortOf UnitTyCon = typeKi
@@ -1103,9 +1133,22 @@ dom --> ran = Dom Nothing dom Nothing \--> ran
 funTy :: [Dom p] -> Range p -> Type p
 funTy doms rang =  foldr (\-->) rang doms
 
+type2dom :: Type p -> Dom p
+type2dom ty = Dom Nothing ty Nothing
+
+dom :: Pat p -> Type p -> Prop p -> Dom p
+dom pat ty prop = Dom (Just pat) ty (Just prop)
+
+
+varDom :: VAR p -> Type p -> Prop p -> Dom p
+varDom x ty prop = Dom (Just (VarPat x)) ty (Just prop)
+
 patternDom :: Pat p -> Type p -> Dom p
 patternDom WildPat ty = Dom Nothing ty Nothing
 patternDom pat     ty = Dom (Just pat) ty Nothing
+
+vpatDom :: VAR p -> Type p -> Dom p
+vpatDom x = patternDom (VarPat x)
 
 patternTy :: Pat p -> Type p -> Type p
 patternTy WildPat    ty = ty
