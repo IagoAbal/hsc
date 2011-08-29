@@ -332,7 +332,10 @@ substPat s p@WildPat = return (p,s)
 substPat s (AsPat v p) = do (p',s') <- substPat s p
                             (v',s'') <- substBndr s' v
                             return (AsPat v' p',s'')
-
+substPat s (SigPat p ty) = do
+  (p',s') <- substPat s p
+  ty' <- substType s ty
+  return (SigPat p' ty',s')
 
 {- NOTE [SubstBndr.AsPat]
 Since the renamer ensures that, for 'v@pat', 'v' is fresh w.r.t. FV('pat')
@@ -373,6 +376,7 @@ substType s (PredTy pat ty mbProp)
        liftM (PredTy pat' ty') $ substMaybeExp s mbProp
 substType s (FunTy dom rang) = do (dom',s') <- substDom s dom
                                   liftM (FunTy dom') $ substType s' rang
+substType s (ListTy ty) = liftM ListTy $ substType s ty
 substType s (TupleTy ds) = liftM (TupleTy . fst) $ substDoms s ds
   -- substitution is not applied inside meta-types
 substType s mty@(MetaTy _mtv) = return mty
