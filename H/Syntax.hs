@@ -552,43 +552,52 @@ patsBndrs = concatMap patBndrs
 -- e.g. @Just 1 `matchableWith` Nothing == False@
 -- e.g. @tail [x] `matchableWith (y::ys) == True@
 matchableWith :: Eq (VAR p) => Exp p -> Pat p -> Bool
-
-matchableWith _       (VarPat _)   = True
-matchableWith _       WildPat      = True
-matchableWith (Lit lit)  (LitPat lit') = lit == lit'
-matchableWith e _ | (Var _,_) <- splitApp e = True
-matchableWith e (ConPat con' ps)
-  | (Con con,args) <- splitApp e
-  , con == con' = and $ zipWith matchableWith args ps
-matchableWith (InfixApp e1 (ConOp bcon) e2) (InfixPat p1 bcon' p2)
-  | bcon == bcon' = matchableWith e1 p1 && matchableWith e2 p2
-matchableWith (InfixApp _ (IntOp _) _) _ = True
-matchableWith (InfixApp _ (BoolOp _) _) _ = True
-matchableWith (Tuple es) (TuplePat ps)
-  | length es == length ps = and $ zipWith matchableWith es ps
-matchableWith (List es) (ListPat ps)
-  | length es == length ps = and $ zipWith matchableWith es ps
-matchableWith (PrefixApp _ _) _ = True
-matchableWith (QP _ _ _) _ = True
-matchableWith (Let _ e) p = matchableWith e p
-matchableWith (Ite _ t e) p = matchableWith t p && matchableWith e p
-
-  -- just to not complicate it too much...
-matchableWith (If _) _ = True
-matchableWith (Case _ _ _) _ = True
-matchableWith (EnumFromTo _ _) _ = True
-matchableWith (EnumFromThenTo _ _ _) _ = True
-
-  -- somewhat dirty? ... it relies a lot on type-compatibility
-matchableWith (List []) (ConPat _ []) = True
-matchableWith (List (_:xs)) (InfixPat _ _ ys_pat)
-  = matchableWith (List xs) ys_pat
-
-matchableWith e       (SigPat p _) = matchableWith e p
-matchableWith (Coerc _ e _) p      = matchableWith e p
-matchableWith (Paren e)     p      = matchableWith e p
-matchableWith e             (ParenPat p) = matchableWith e p
-matchableWith _ _ = False
+-- matchableWith _       (VarPat _)   = True
+-- matchableWith _       (WildPat _)      = True
+-- matchableWith (Lit lit)  (LitPat lit') = lit == lit'
+-- matchableWith e _ | (f,_) <- splitApp e
+--                   , is_a_var f            = True
+--   where is_a_var (Var _) = True
+--         is_a_var (TyLam _ e) = is_a_var e
+--         is_a_var (TyApp e _) = is_a_var e
+--         is_a_var (Paren e) = is_a_var e
+--         is_a_var (Coerc _ e _) = is_a_var e
+--         is_a_var _other = False
+-- matchableWith e (ConPat con' _ ps)
+--   | (Con con,args) <- splitApp e
+--   , con == con' = and $ zipWith matchableWith args ps
+-- matchableWith e (ConPat con' _ ps)
+--   | (TyApp (Con con) _,args) <- splitApp e
+--   , con == con' = and $ zipWith matchableWith args ps
+-- matchableWith (InfixApp e1 (Op (ConOp bcon)) e2) (InfixPat p1 bcon' _ p2)
+--   | bcon == bcon' = matchableWith e1 p1 && matchableWith e2 p2
+-- matchableWith (InfixApp e1 (TyApp (Op (ConOp bcon)) _) e2) (InfixPat p1 bcon' _ p2)
+--   | bcon == bcon' = matchableWith e1 p1 && matchableWith e2 p2
+-- matchableWith (InfixApp _ (Op (IntOp _)) _) _ = True
+-- matchableWith (InfixApp _ (Op (BoolOp _)) _) _ = True
+-- matchableWith (Tuple _ es) (TuplePat ps _)
+--   | length es == length ps = and $ zipWith matchableWith es ps
+-- matchableWith (List _ es) (ListPat ps _)
+--   | length es == length ps = and $ zipWith matchableWith es ps
+-- matchableWith (PrefixApp _ _) _ = True
+-- matchableWith (QP _ _ _) _ = True
+-- matchableWith (Let _ e) p = matchableWith e p
+-- matchableWith (Ite _ t e) p = matchableWith t p && matchableWith e p
+--   -- just to not complicate it too much...
+-- matchableWith (If _) _ = True
+-- matchableWith (Case _ _ _) _ = True
+-- matchableWith (EnumFromTo _ _) _ = True
+-- matchableWith (EnumFromThenTo _ _ _) _ = True
+--   -- somewhat dirty? ... it relies a lot on type-compatibility
+-- matchableWith (List _ []) (ConPat _ _ []) = True
+-- matchableWith (List a (_:xs)) (InfixPat _ _ _ ys_pat)
+--   = matchableWith (List a xs) ys_pat
+-- matchableWith e       (SigPat p _) = matchableWith e p
+-- matchableWith (Coerc _ e _) p      = matchableWith e p
+-- matchableWith (Paren e)     p      = matchableWith e p
+-- matchableWith e             (ParenPat p) = matchableWith e p
+  -- otherwise, be conversative and consider that 'e' matches 'p'
+matchableWith _e _p = True
 
 -- | Checks if two patterns are 'matchable', in the sense that their
 -- "shapes" can be matched one against the other.
