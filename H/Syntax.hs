@@ -631,22 +631,6 @@ matchablePats (SigPat p _) p'            = matchablePats p p'
 matchablePats p            (SigPat p' _) = matchablePats p p'
 matchablePats _p           _p'           = False
 
--- | Converts a pattern to an expression.
--- NB: Such a conversion is not possible in case of wild-card patterns.
-pat2exp :: Pat p -> Maybe (Exp p)
-pat2exp (VarPat x)   = pure $ Var x
-pat2exp (LitPat lit) = pure $ Lit lit
-pat2exp (InfixPat p1 bcon p2)
-  = (flip InfixApp con) <$> pat2exp p1 <*> pat2exp p2
-  where con = ConOp bcon
-pat2exp (ConPat con ps)
-  = (Con con `app`) <$> mapM pat2exp ps
-pat2exp (TuplePat ps) = Tuple <$> mapM pat2exp ps
-pat2exp (ListPat ps) = List <$> mapM pat2exp ps
-pat2exp (ParenPat p) = Paren <$> pat2exp p
-pat2exp WildPat      = Nothing
-pat2exp (AsPat _ p)  = pat2exp p
-pat2exp (SigPat p ty) = pat2exp p
 
 
 instance PrettyNames p => Pretty (Pat p) where
