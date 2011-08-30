@@ -44,6 +44,7 @@ fvMaybeExp = maybe Set.empty fvExp
 fvExp :: Ord (VAR p) => Exp p -> Set (VAR p)
 fvExp (Var x)   = Set.singleton x
 fvExp (Con _)   = Set.empty          -- ?
+fvExp (Op _)    = Set.empty
 fvExp (Lit _)   = Set.empty
 fvExp ElseGuard = Set.empty
 fvExp (PrefixApp op e) = fvExp e

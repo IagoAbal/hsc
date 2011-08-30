@@ -186,11 +186,12 @@ rnConDecl (ConDeclIn loc occ tys)
 instance Rename Exp where
   rename (Var occ) = liftM Var $ getName occ
   rename (Con con) = liftM Con $ rename con
+  rename (Op op)   = return (Op op)
   rename (Lit lit) = return $ Lit lit
   rename ElseGuard = undefined  -- bug
-  rename (PrefixApp op e) = liftM (PrefixApp op) $ rename e
-  rename (InfixApp e1 op e2)
-    = liftM2 (flip InfixApp op) (rename e1) (rename e2)
+  rename (PrefixApp (Op op) e) = liftM (PrefixApp (Op op)) $ rename e
+  rename (InfixApp e1 (Op op) e2)
+    = liftM2 (flip InfixApp (Op op)) (rename e1) (rename e2)
   rename (App f n) = liftM2 App (rename f) (rename n)
   rename (Lam (Just loc) pats body)
     = inContextAt loc (text "In lambda abstraction") $
@@ -209,8 +210,8 @@ instance Rename Exp where
   rename (Tuple l) = liftM Tuple $ mapM rename l
   rename (List l) = liftM List $ mapM rename l
   rename (Paren e) = liftM Paren $ rename e
-  rename (LeftSection e op) = liftM (flip LeftSection op) $ rename e
-  rename (RightSection op e) = liftM (RightSection op) $ rename e
+  rename (LeftSection e (Op op)) = liftM (flip LeftSection (Op op)) $ rename e
+  rename (RightSection (Op op) e) = liftM (RightSection (Op op)) $ rename e
   rename (EnumFromTo e1 e2) = liftM2 EnumFromTo (rename e1) (rename e2)
   rename (EnumFromThenTo e1 e2 e3)
     = liftM3 EnumFromThenTo (rename e1) (rename e2) (rename e3)

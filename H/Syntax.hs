@@ -310,15 +310,17 @@ data Exp p where
   Var :: VAR p -> Exp p
   -- | data constructor
   Con :: Con p -> Exp p
+  -- | operator
+  Op  :: Op -> Exp p
   -- | literal constant
   Lit :: Lit -> Exp p
   -- | @else@ guard expression
   -- It is used to facilitate parsing but then removed during renaming
   ElseGuard :: Exp Pr
   -- | prefix application
-  PrefixApp :: Op -> Exp p -> Exp p
+  PrefixApp :: OpExp p -> Exp p -> Exp p
   -- | infix application
-  InfixApp :: Exp p -> Op -> Exp p -> Exp p
+  InfixApp :: Exp p -> OpExp p -> Exp p -> Exp p
   -- | application
   App :: Exp p -> Exp p -> Exp p
   -- | type application
@@ -345,9 +347,9 @@ data Exp p where
   -- | parenthesized expression
   Paren :: Exp p -> Exp p
   -- | left section @(@/exp/ /qop/@)@
-  LeftSection :: Exp p -> Op -> Exp p
+  LeftSection :: Exp p -> OpExp p -> Exp p
   -- | right section @(@/qop/ /exp/@)@
-  RightSection :: Op -> Exp p -> Exp p
+  RightSection :: OpExp p -> Exp p -> Exp p
   -- | bounded arithmetic sequence, incrementing by 1
   EnumFromTo :: Exp p -> Exp p -> Exp p
   -- ^ bounded arithmetic sequence, with first two elements given
@@ -356,6 +358,9 @@ data Exp p where
   Coerc :: SrcLoc -> Exp p -> PolyType p -> Exp p
   -- | logic quantifier
   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
+
+-- | An Op or a TyApp on an Op
+type OpExp = Exp
 
 -- | Expressions of boolean type
 type Prop = Exp
@@ -380,8 +385,12 @@ tyLam tvs exp = TyLam tvs exp
 instance PrettyNames p => Pretty (Exp p) where
   pretty (Lit lit) = pretty lit
   pretty ElseGuard = text "else"
-  pretty (PrefixApp op a) = myFsep [pretty op, pretty a]
-  pretty (InfixApp a op b) = myFsep [pretty a, pretty op, pretty b]
+    -- no other possibility for prefix ops
+  pretty (PrefixApp (Op op) a) = myFsep [pretty op, pretty a]
+  pretty (InfixApp a opE b)
+    = case opE of
+          Op op  -> myFsep [pretty a, pretty op, pretty b]
+          _other -> myFsep [pretty opE, pretty a, pretty b]
   pretty (App a b) = myFsep [pretty a, pretty b]
   pretty (Lam _loc patList body) = myFsep $
     char '\\' : map pretty patList ++ [text "->", pretty body]
@@ -398,11 +407,19 @@ instance PrettyNames p => Pretty (Exp p) where
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
   pretty (Var var) = pretty var
-  pretty (Con con) = pretty con
-  pretty (Tuple expList) = parenList . map pretty $ expList
+  pretty (Con con) = ppPrefixCon con
+  pretty (Op op)   = ppPrefixOp op
+  pretty (Tuple _ expList) = parenList . map pretty $ expList
   pretty (Paren e) = parens . pretty $ e
-  pretty (LeftSection e op) = parens (pretty e <+> pretty op)
-  pretty (RightSection op e) = parens (pretty op <+> pretty e)
+  pretty (LeftSection e opE) -- = parens (pretty e <+> pretty op)
+      = case opE of
+          Op op  -> parens (pretty e <+> pretty op)
+          _other -> myFsep [pretty opE, pretty e]
+  pretty (RightSection opE e) -- = parens (pretty op <+> pretty e)
+      = case opE of
+          Op op  -> parens (pretty op <+> pretty e)
+          _other -> hang (hsep [text "( \\ x_ ->", pretty opE, text "x_"])
+                         4 (pretty e <> rparen)
   -- Lists
   pretty (List list) =
     bracketList . punctuate comma . map pretty $ list
@@ -693,6 +710,10 @@ instance Pretty (NAME p) => Pretty (Con p) where
   pretty (UserCon name)    = pretty name
   pretty (BuiltinCon bcon) = pretty bcon
 
+ppPrefixCon :: Pretty (NAME p) => Con p -> Doc
+ppPrefixCon (BuiltinCon ConsCon) = text "(::)"
+ppPrefixCon con                  = pretty con
+
 instance Pretty BuiltinCon where
   pretty UnitCon  = text "()"
   pretty FalseCon = text "False"
@@ -815,6 +836,9 @@ instance Pretty Op where
   pretty (BoolOp bop) = pretty bop
   pretty (IntOp iop)  = pretty iop
   pretty (ConOp cop)  = pretty cop
+
+ppPrefixOp :: Op -> Doc
+ppPrefixOp = parens . pretty
 
 instance Pretty BoolOp where
   pretty NotB = char '~'

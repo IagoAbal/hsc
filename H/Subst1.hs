@@ -257,10 +257,11 @@ substExp s@(Subst1{substVarEnv}) e@(Var x@(V name polyty))
         Just e' -> return e'   -- reunique e ?
         Nothing -> return e    -- ???
 substExp s con@(Con _) = return con     -- ? constructors are not substituted...
+substExp s op@(Op _) = return op
 substExp s lit@(Lit _) = return lit
-substExp s (PrefixApp op e) =  PrefixApp op `liftM` substExp s e
+substExp s (PrefixApp op e) = liftM2 PrefixApp (substExp s op) (substExp s e)
 substExp s (InfixApp e1 op e2)
-  = liftM2 (flip InfixApp op) (substExp s e1) (substExp s e2)
+  = liftM3 InfixApp (substExp s e1) (substExp s op) (substExp s e2)
 substExp s (App f n) = liftM2 App (substExp s f) (substExp s n)
 substExp s (TyApp e tys) = liftM2 TyApp (substExp s e) (substTypes s tys)
 substExp s (Lam loc pats body)
@@ -279,8 +280,8 @@ substExp s (Case e casety alts)
 substExp s (Tuple es) = liftM Tuple $ substExps s es
 substExp s (List es) = liftM List $ substExps s es
 substExp s (Paren e) = liftM Paren $ substExp s e
-substExp s (LeftSection e op) = liftM (flip LeftSection op) $ substExp s e
-substExp s (RightSection op e) = liftM (RightSection op) $ substExp s e
+substExp s (LeftSection e op) = liftM2 LeftSection (substExp s op) (substExp s e)
+substExp s (RightSection op e) = liftM2 RightSection (substExp s op) (substExp s e)
 substExp s (EnumFromTo e1 en) = liftM2 EnumFromTo (substExp s e1) (substExp s en)
 substExp s (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (substExp s e1) (substExp s e2) (substExp s en)

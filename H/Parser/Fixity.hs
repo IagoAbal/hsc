@@ -60,18 +60,18 @@ class AppFixity ast where
 instance AppFixity (Exp Pr) where
   applyFixities fixs = infFix fixs <=< leafFix fixs
     where -- This is the real meat case. We can assume a left-associative list to begin with.
-          infFix fixs (InfixApp a op2 z) = do
+          infFix fixs (InfixApp a (Op op2) z) = do
               e <- infFix fixs a
               case e of
-               InfixApp x op1 y -> do
+               InfixApp x (Op op1) y -> do
                   let (a1,p1) = askFixity fixs op1
                       (a2,p2) = askFixity fixs op2
                   when (p1 == p2 && (a1 /= a2 || a1 == AssocNone)) -- Ambiguous infix expression!
                     $ fail "Ambiguous infix expression"
                   if (p1 > p2 || p1 == p2 && (a1 == AssocLeft || a2 == AssocNone)) -- Already right order
-                   then return $ InfixApp e op2 z
-                   else liftM (InfixApp x op1) (infFix fixs $ InfixApp y op2 z)
-               _  -> return $ InfixApp e op2 z
+                   then return $ InfixApp e (Op op2) z
+                   else liftM (InfixApp x (Op op1)) (infFix fixs $ InfixApp y (Op op2) z)
+               _  -> return $ InfixApp e (Op op2) z
 
           infFix _ e = return e
 

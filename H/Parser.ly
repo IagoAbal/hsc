@@ -334,11 +334,11 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | exp0b       { $1 }
 
 > exp0a :: { Exp Pr }
-> : exp0b op exp10a   { InfixApp $1 $2 $3 }
+> : exp0b op exp10a   { InfixApp $1 (Op $2) $3 }
 > | exp10a      { $1 }
 
 > exp0b :: { Exp Pr }
-> : exp0b op exp10b   { InfixApp $1 $2 $3 }
+> : exp0b op exp10b   { InfixApp $1 (Op $2) $3 }
 > | exp10b      { $1 }
 
 > exp10a :: { Exp Pr }
@@ -354,8 +354,8 @@ the exp0 productions to distinguish these from the others (exp0a).
 
 > exp10b :: { Exp Pr }
 > : 'case' exp 'of' altslist  { Case $2 NoPostTc $4 }
-> | '~' fexp      { PrefixApp notOp $2 }
-> | '-' fexp      { PrefixApp negOp $2 }
+> | '~' fexp      { PrefixApp (Op notOp) $2 }
+> | '-' fexp      { PrefixApp (Op negOp) $2 }
 > | fexp        { $1 }
 
 > fexp :: { Exp Pr }
@@ -379,10 +379,11 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | gcon        { $1 }
 > | literal     { Lit $1 }
 > | '(' exp ')'     { Paren $2 }
+> | '(' op ')'      { Op $2 }
 > | '(' texps ')'     { Tuple $2 }
 > | '[' list ']'         { $2 }
-> | '(' exp0b op ')'    { LeftSection $2 $3  }
-> | '(' op exp0 ')'   { RightSection $2 $3 }
+> | '(' exp0b op ')'    { LeftSection $2 (Op $3)  }
+> | '(' op exp0 ')'   { RightSection (Op $2) $3 }
 
   > commas :: { Int }
   > : commas ','      { $1 + 1 }
