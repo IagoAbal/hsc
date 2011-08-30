@@ -69,7 +69,7 @@ instance Le b a => Ge a b where
 -- filled by the typechecker.
 data PostTc p a where
   NoPostTc :: Lt p Tc => PostTc p a
-  PostTc   :: a -> PostTc Tc a
+  PostTc   :: Ge p Tc => a -> PostTc p a
 
 instance Eq a => Eq (PostTc p a) where
   NoPostTc   == NoPostTc   = True
