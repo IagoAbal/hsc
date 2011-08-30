@@ -219,7 +219,7 @@ data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) (PostTcTyParams p) [Match p
                   -- NB: Only uniform definitions are allowed
                   -- NB: @f = ...@ is considered a FunBind because that allows
                   --     the annotation with a polymorphic type.
-            | PatBind SrcLoc (Pat p) (Rhs p)
+            | PatBind (Maybe SrcLoc) (Pat p) (Rhs p)
                   -- ^ pattern binding
 
 data TypeSig p = NoTypeSig
@@ -242,7 +242,7 @@ data ConDecl p where
 
 -- | Clauses of a function binding.
 data Match p
-	 = Match SrcLoc [Pat p] (Rhs p)
+	 = Match (Maybe SrcLoc) [Pat p] (Rhs p)
 
 data GoalType = TheoremGoal
               | LemmaGoal
@@ -324,7 +324,7 @@ data Exp p where
   -- | type application
   TyApp :: Ge p Tc => Exp p -> [Type p] -> Exp p
   -- | lambda expression
-  Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
+  Lam :: Maybe SrcLoc -> [Pat p] -> Exp p -> Exp p
   -- | local declarations with @let@
   Let :: [Bind p] -> Exp p -> Exp p
   -- | type lambda

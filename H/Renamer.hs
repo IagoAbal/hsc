@@ -153,11 +153,11 @@ instance RenameBndr (Bind Pr) (Bind Rn) where
           matches' <- rnList matches
           let rec' = checkFunBindRec name matches'
           popContext $ f (FunBind rec' name sig' NoPostTc matches')
-  renameBndr (PatBind loc pat rhs) f
+  renameBndr (PatBind (Just loc) pat rhs) f
     = inContextAt loc (text "In pattern binding" <+> ppQuot pat) $ do
         renameBndr pat $ \pat' -> do
           rhs' <- rename rhs
-          popContext $ f (PatBind loc pat' rhs')
+          popContext $ f (PatBind (Just loc) pat' rhs')
 
 instance Rename TypeSig where
   rename NoTypeSig = return NoTypeSig
@@ -166,10 +166,10 @@ instance Rename TypeSig where
         liftM (TypeSig loc) $ rename polyty
 
 instance Rename Match where
-  rename (Match loc pats rhs)
+  rename (Match (Just loc) pats rhs)
     = inContextAt loc (text "In function equation") $ do
         checkDupPatBndrs pats
-        renameBndr pats $ \pats' -> liftM (Match loc pats') $ rename rhs
+        renameBndr pats $ \pats' -> liftM (Match (Just loc) pats') $ rename rhs
 
 
 rnConDecl :: ConDecl Pr -> RnM (ConDecl Rn,(OccName,Name))
@@ -192,9 +192,9 @@ instance Rename Exp where
   rename (InfixApp e1 op e2)
     = liftM2 (flip InfixApp op) (rename e1) (rename e2)
   rename (App f n) = liftM2 App (rename f) (rename n)
-  rename (Lam loc pats body)
+  rename (Lam (Just loc) pats body)
     = inContextAt loc (text "In lambda abstraction") $
-        renameBndr pats $ \pats' -> liftM (Lam loc pats') $ rename body
+        renameBndr pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
   rename (Ite g t e)

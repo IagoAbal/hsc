@@ -73,7 +73,7 @@ getMonoBind bind@(FunBind rec fun sig _ ms1@(Match _ ps _:_)) decls
   = mergeMatches ms1 decls
   where arity = length ps
         mergeMatches :: [Match Pr] -> [Decl Pr] -> P (Bind Pr, [Decl Pr])
-        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig NoPostTc ms'@(Match loc ps' _:_)):ds)
+        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig NoPostTc ms'@(Match (Just loc) ps' _:_)):ds)
           | fun' == fun = if length ps' /= arity
                             then fail ("arity mismatch for `" ++ prettyPrint fun ++ "'")
                                     `atSrcLoc` loc
@@ -112,10 +112,10 @@ checkDupDecls = go Map.empty
       = foldl (>>=) (return booked) [ newDecl loc name
                                     | (loc,name) <- (loc,name):map getConName constrs]
           >>= flip go ds
-    go booked (ValDecl (PatBind loc pat _):ds)
+    go booked (ValDecl (PatBind (Just loc) pat _):ds)
       = foldl (>>=) (return booked) [newDecl loc name | name <- patBndrs pat]
           >>= flip go ds
-    go booked (ValDecl (FunBind _ name _ _ (Match loc _ _:_)):ds)
+    go booked (ValDecl (FunBind _ name _ _ (Match (Just loc) _ _:_)):ds)
       = newDecl loc name booked >>= flip go ds
     go booked (GoalDecl loc _ name _ _:ds)
       = newDecl loc name booked >>= flip go ds
