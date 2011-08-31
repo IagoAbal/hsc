@@ -29,6 +29,7 @@ module H.Pretty where
 import Name
 
 import Control.Monad
+import Debug.Trace ( trace )
 import qualified Text.PrettyPrint as P
 
 
@@ -141,10 +142,16 @@ class Pretty a where
   pretty = prettyPrec 0
   prettyPrec _ = pretty
 
+class PrettyBndr b where
+  prettyBndr :: b -> Doc
+
 -- Pretty printing of names
 
 instance Pretty OccName where
   pretty = text . occString
+
+instance PrettyBndr OccName where
+  prettyBndr = pretty
 
 instance Pretty Name where
   pretty (Name _ occ@(OccName ns _) uniq)
@@ -155,6 +162,8 @@ instance Pretty Name where
           -- For regular variables we need to print the 'Uniq'.
           _other  -> pretty occ <> char '_' <> int uniq
 
+instance PrettyBndr Name where
+  prettyBndr = pretty
 
 -- * Pretty printing combinators
 
@@ -380,3 +389,9 @@ fullRenderWithMode ppMode m i f fn e mD =
 fullRender :: P.Mode -> Int -> Float -> (P.TextDetails -> a -> a)
         -> a -> Doc -> a
 fullRender = fullRenderWithMode defaultMode
+
+
+-- * Tracing
+
+traceDoc :: Doc -> a -> a
+traceDoc = trace . render

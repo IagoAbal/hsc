@@ -56,6 +56,8 @@ instance Sorted (Var p) (PolyType p) where
 instance Pretty (Var p) where
   pretty = pretty . varName
 
+instance PrettyNames p => PrettyBndr (Var p) where
+  prettyBndr x = parens $ pretty x <> colon <> pretty (varType x)
 
   -- | Essentially a kinded 'Name'
 data TyVar = TyV {
@@ -85,6 +87,9 @@ instance Sorted TyVar Kind where
 
 instance Pretty TyVar where
   pretty = pretty . tyVarName
+
+instance PrettyBndr TyVar where
+  prettyBndr tv = parens $ pretty tv <> colon <> pretty (tyVarKind tv)
 
 -- ** Fresh variables
 
@@ -146,9 +151,10 @@ type instance GoalNAME Ti = Name
 type instance GoalNAME Vc = Name
 
 
-class (Pretty (VAR p), Pretty (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
+class (Pretty (VAR p), PrettyBndr (VAR p), Pretty (TyVAR p), PrettyBndr (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
 instance PrettyNames Pr where
 instance PrettyNames Rn where
+instance PrettyNames Tc where
 
 -- ** Parameters
 
@@ -253,12 +259,12 @@ instance PrettyNames p => Pretty (Decl p) where
   pretty (TypeDecl loc name nameList htype) =
     blankline $
     mySep ( [text "type", pretty name]
-      ++ map pretty nameList
+      ++ map prettyBndr nameList
       ++ [equals, pretty htype])
   pretty (DataDecl loc name nameList constrList) =
     blankline $
     mySep ( [text "data", pretty name]
-      ++ map pretty nameList)
+      ++ map prettyBndr nameList)
       <+> myVcat (zipWith (<+>) (equals : repeat (char '|'))
                (map pretty constrList))
 --   pretty (TypeSig pos name polyType)
@@ -290,7 +296,7 @@ ppMatch fun (Match pos ps (Rhs grhs whereDecls)) =
     myFsep (lhs ++ [ppGRhs ValDef grhs])
     $$$ ppWhere whereDecls
       where
-    lhs = pretty fun : map (prettyPrec 2) ps
+    lhs = prettyBndr fun : map (prettyPrec 2) ps
 
 ppWhere :: PrettyNames p => WhereBinds p -> Doc
 ppWhere [] = empty
@@ -634,7 +640,7 @@ matchablePats _p           _p'           = False
 
 
 instance PrettyNames p => Pretty (Pat p) where
-  prettyPrec _ (VarPat var) = pretty var
+  prettyPrec _ (VarPat var) = prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
   prettyPrec p (InfixPat a cop _ b) = parensIf (p > 0) $
     myFsep [pretty a, pretty cop, pretty b]
@@ -647,7 +653,7 @@ instance PrettyNames p => Pretty (Pat p) where
   prettyPrec _ (ParenPat p) = parens . pretty $ p
   -- special case that would otherwise be buggy
   prettyPrec _ (AsPat var pat) =
-    hcat [pretty var, char '@', pretty pat]
+    hcat [prettyBndr var, char '@', pretty pat]
   prettyPrec _ (WildPat _) = char '_'
   prettyPrec _ (SigPat pat ty) =
     parens $ myFsep [pretty pat, text ":", pretty ty]
