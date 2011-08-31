@@ -167,7 +167,7 @@ substBndr s@Subst1{substVarEnv,substVarScope} var@V{varName,varType} = do
                  env'   = Map.delete var substVarEnv   -- restrict domain
                  env''  = Map.insert var (Var var') env'
                  scope' = Set.insert var substVarScope -- update scope
-             return (var,s{substVarEnv = env'', substVarScope = scope'})
+             return (var',s{substVarEnv = env'', substVarScope = scope'})
 
 
 substTyBndrs :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [TyVar] -> m ([TyVar],Subst1 p)
