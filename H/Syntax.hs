@@ -953,11 +953,14 @@ type PostTcType p = PostTc p (Type p)
 type PostTcTypes p = PostTc p [Type p]
 
   -- (args,result)
-splitFunTy :: Type p -> ([Type p],Type p)
-splitFunTy (FunTy d t) = (a:args,res)
-  where a = dom2type d
-        (args,res) = splitFunTy t
+splitFunTy :: Type p -> ([Dom p],Type p)
+splitFunTy (FunTy a t) = (a:args,res)
+  where (args,res) = splitFunTy t
 splitFunTy ty = ([],ty)
+
+funTyArity :: Type p -> Int
+funTyArity ty = length args
+  where (args,res) = splitFunTy ty
 
 -- | Removes outermost predicate-types
 mu_0 :: Type p -> Type p
@@ -1153,6 +1156,9 @@ newMetaTy str kind = liftM MetaTy $ newMetaTyVar str kind
 
 infixr \-->, -->, ++>
 
+appTyIn :: (Lt p Tc, TyCON p ~ TyName p) => TyName p -> [Type p] -> Type p
+appTyIn tc args = foldl AppTyIn (ConTyIn tc) args
+
 (\-->) :: Dom p -> Range p -> Type p
 (\-->) = FunTy
 
@@ -1220,3 +1226,6 @@ typeKi = TypeKi
 
 (++>) :: Kind -> Kind -> Kind
 (++>) = FunKi
+
+funKi :: [Kind] -> Kind -> Kind
+funKi doms rang =  foldr (++>) rang doms
