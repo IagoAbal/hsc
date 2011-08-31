@@ -22,11 +22,13 @@ import Data.IORef
 newtype H env log st a = H { unH :: RWST (Henv env) log st (ErrorT Message IO) a }
   deriving (Functor, Monad, MonadIO)
 
-runH :: H env log st a -> SrcContext -> UniqSupply -> env -> st -> IO (Either Message (a,st,log))
+runH :: H env log st a -> SrcContext -> UniqSupply -> env -> st -> IO (Either Message (a,st,log),UniqSupply)
 runH m (SrcContext loc descr isprop) us env st0 = do
   us_ref <- newIORef us
   let henv0 = Henv [(loc,descr)] isprop us_ref env
-  runErrorT (runRWST (unH m) henv0 st0)
+  res <- runErrorT (runRWST (unH m) henv0 st0)
+  us' <- readIORef us_ref
+  return (res,us')
 
 data Henv env
   = Henv {

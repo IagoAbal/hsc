@@ -38,12 +38,12 @@ import qualified Data.Set as Set
 
 
 
-rnModule :: Module Pr -> IO (Either Message (Module Rn))
-rnModule (Module loc modname decls)
-  = do res <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname) False) newSupply Map.empty ()
+rnModule :: UniqSupply -> Module Pr -> IO (Either Message (Module Rn),UniqSupply)
+rnModule us (Module loc modname decls)
+  = do (res,us') <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname) False) us Map.empty ()
        case res of
-            Left err -> return $ Left err
-            Right (decls',(),()) -> return $ Right $ Module loc modname decls'
+            Left err -> return (Left err,us')
+            Right (decls',(),()) -> return (Right $ Module loc modname decls',us')
 
 
 -- newtype RnM a = RnM { unRnM :: ReaderT (Map OccName Name) m a }
