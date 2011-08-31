@@ -1151,6 +1151,8 @@ newMetaTy str kind = liftM MetaTy $ newMetaTyVar str kind
 
 -- ** Constructors
 
+infixr \-->, -->, ++>
+
 (\-->) :: Dom p -> Range p -> Type p
 (\-->) = FunTy
 
