@@ -484,14 +484,19 @@ Variables, Constructors and Operators.
 
 > gcon :: { Exp Pr }
 > : '(' ')'   { Con unitCon }
-> | '[' ']'   { Con nilCon }
 > | 'False'   { Con falseCon }
 > | 'True'    { Con trueCon }
+> | '(' '::' ')' { Con consCon }
+> | '[' ']'   { Con nilCon }
 > | conid     { Con (UserCon $1) }
 
+Constructors that may appear in a ConPat pattern
+
 > con :: { Con Pr }
-> : '(' ')'   { BuiltinCon UnitCon }
-> | '[' ']'   { BuiltinCon NilCon }
+> : '(' ')'   { unitCon }
+> | 'False'   { falseCon }
+> | 'True'    { trueCon }
+> | '[' ']'   { nilCon }
 > | conid     { UserCon $1 }
 
 > var   :: { VAR Pr }
