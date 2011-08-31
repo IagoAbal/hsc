@@ -20,46 +20,49 @@ import Control.Monad.Error
 import Data.Function ( on )
 
 
--- | A kappa type contains no dependency nor any reference to local
--- variables.
+-- | A kappa type contains no reference to local variables.
 -- Importance: A meta-variable can only be instantiated with a kappa type.
 kappaType :: Type Tc -> TcM (Type Tc)
-kappaType ty@(VarTy _) = return ty
-  -- 'kappaType' does not expand type synonyms, that is unifier's task.
-kappaType (ConTy tc args) = liftM (ConTy tc) $ mapM kappaType args
--- kappaType ty@(ConTy _) = return ty
--- kappaType (AppTy t a) = liftM2 AppTy (kappaType t) (kappaType a)
-kappaType (PredTy pat ty Nothing) = do
-  ty' <- kappaType ty
-  return (patternTy pat ty')
-kappaType (PredTy pat ty (Just prop)) = do
-  ty' <- kappaType ty
-  gbl <- asks tcGblVars
-    -- This is so easy because we have a no-shadowing representation
-    -- otherwise we would have to keep track of any variable in scope
-    -- because it may be shadowing a global variable.
-  let valid p = (fvExp p Set.\\ bsPat pat) `Set.isSubsetOf` gbl
-      mbprop' = filterProp valid prop
-  return (predTy pat ty mbprop')
-kappaType (FunTy d r) = liftM2 FunTy (kappaDom d) (kappaType r)
-kappaType (ListTy a) = liftM ListTy $ kappaType a
-kappaType (TupleTy ds) = liftM TupleTy $ mapM kappaDom ds
-  -- 'kappaType' does not "go" into meta type variables,
-  -- that is unifier's task.
-kappaType ty@(MetaTy _) = return ty
+kappaType ty = do
+  gbl_vars <- asks tcGblVars
+  return $ go gbl_vars ty
+  where
+      go :: Set (Var Tc)  -- valid variables
+            -> Type Tc -> Type Tc
+      go _vv ty@(VarTy _)    = ty
+      go  vv (ConTy tc args) = ConTy tc $ map (go vv) args
+      go  vv (PredTy pat ty Nothing) = patternTy pat (go vv ty)
+      go  vv (PredTy pat ty (Just prop))
+        = predTy pat (go vv ty) (go_prop vv_prop prop)
+        where vv_prop = vv `Set.union` bsPat pat
+      go vv (FunTy d r) = FunTy d' $ go vv' r
+        where (d',vv') = go_dom vv d
+      go vv (ListTy a) = ListTy $ go vv a
+      go vv (TupleTy ds) = TupleTy $ go_doms vv ds
+        -- 'kappaType' does not "go" into meta type variables,
+        -- that is unifier's task.
+      go vv ty@(MetaTy _) = ty
+      go_prop :: Set (Var Tc) -> Prop Tc -> Maybe (Prop Tc)
+      go_prop vv prop
+        = filterProp valid prop
+          -- This is so easy because we have a no-shadowing representation
+          -- otherwise we would have to keep track of any variable in scope
+          -- because it may be shadowing a global variable.
+        where valid :: Prop Tc -> Bool
+              valid p = fvExp p `Set.isSubsetOf` vv
+      go_dom :: Set (Var Tc) -> Dom Tc -> (Dom Tc,Set (Var Tc))
+      go_dom vv (Dom Nothing ty Nothing) = (Dom Nothing (go vv ty) Nothing,vv)
+      go_dom vv (Dom (Just pat) ty Nothing)
+        = (Dom (Just pat) (go vv ty) Nothing,vv `Set.union` bsPat pat)
+      go_dom vv (Dom (Just pat) ty (Just prop))
+        = (Dom (Just pat) (go vv ty) (go_prop vv' prop),vv')
+        where vv' = vv `Set.union` bsPat pat
+      go_doms :: Set (Var Tc) -> [Dom Tc] -> [Dom Tc]
+      go_doms _vv [] = []
+      go_doms  vv (d:ds) = d' : go_doms vv' ds
+        where (d',vv') = go_dom vv d
 
 
-  -- FIX I think kappa types should allow dependent types, because we may want to
-  -- unify a metaty with a dependent type...
-kappaDom :: Dom Tc -> TcM (Dom Tc)
-kappaDom (Dom Nothing ty Nothing) = do
-  ty' <- kappaType ty
-  return (Dom Nothing ty' Nothing)
-kappaDom (Dom (Just pat) ty mbprop) = do
-  ty' <- kappaType $ predTy pat ty mbprop
-  return (Dom Nothing ty' Nothing)
-
-  
 
 -- unifyKind :: Kind -> Kind -> TcM ()
 -- unifyKind TypeKi TypeKi = return ()
@@ -96,10 +99,10 @@ unifyKappa ty1 (MetaTy mtv2) = unifyVar RightToLeft mtv2 ty1
 
 unifyKappa (FunTy d1 r1) (FunTy d2 r2) = do
   unifyKappa (dom2type d1) (dom2type d2)
-  unifyKappa r1 r2
+  unify r1 r2
 unifyKappa (ListTy ty1) (ListTy ty2) = unifyKappa ty1 ty2
 unifyKappa (TupleTy ds1) (TupleTy ds2)
-  | length ds1 == length ds2 = zipWithM_ (unifyKappa `on` dom2type) ds1 ds2
+  | length ds1 == length ds2 = zipWithM_ (unify `on` dom2type) ds1 ds2
 
   -- See [Unifying predicate types]
 unifyKappa (PredTy _ ty1 _) ty2 = unifyKappa ty1 ty2
