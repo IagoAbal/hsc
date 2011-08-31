@@ -874,20 +874,20 @@ app :: Exp p -> [Exp p] -> Exp p
 app f args = foldl App f args
 
 (.<.), (.<=.), (.>.), (.>=.) :: Exp p -> Exp p -> Prop p
-x .<. y = InfixApp x ltOp y
-x .<=. y = InfixApp x leOp y
-x .>. y = InfixApp x gtOp y
-x .>=. y = InfixApp x geOp y
+x .<. y = InfixApp x (Op ltOp) y
+x .<=. y = InfixApp x (Op leOp) y
+x .>. y = InfixApp x (Op gtOp) y
+x .>=. y = InfixApp x (Op geOp) y
 
 (.==.), (./=.) :: Exp p -> Exp p -> Prop p
-x .==. y = InfixApp x eqOp y
-x ./=. y = InfixApp x neqOp y
+x .==. y = InfixApp x (Op eqOp) y
+x ./=. y = InfixApp x (Op neqOp) y
 
 (.+.), (.-.), (.*.), (./.) :: Exp p -> Exp p -> Exp p
-x .+. y = InfixApp x addOp y
-x .-. y = InfixApp x subOp y
-x .*. y = InfixApp x mulOp y
-x ./. y = InfixApp x divOp y
+x .+. y = InfixApp x (Op addOp) y
+x .-. y = InfixApp x (Op subOp) y
+x .*. y = InfixApp x (Op mulOp) y
+x ./. y = InfixApp x (Op divOp) y
 
 -- * Types
 
