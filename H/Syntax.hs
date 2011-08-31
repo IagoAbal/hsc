@@ -400,6 +400,8 @@ instance PrettyNames p => Pretty (Exp p) where
   pretty (App a b) = myFsep [pretty a, pretty b]
   pretty (Lam _loc patList body) = myFsep $
     char '\\' : map pretty patList ++ [text "->", pretty body]
+  pretty (TyApp e tys) = myFsep $ pretty e : map (\ty -> char '@' <> ppAType ty) tys
+  pretty (TyLam tvs body) = myFsep $ char '\\' : map prettyBndr tvs ++ [text "->", pretty body]
   pretty (Let expList letBody) =
     myFsep [text "let" <+> ppBody letIndent (map pretty expList),
       text "in", pretty letBody]
@@ -996,6 +998,7 @@ instance PrettyNames p => Pretty (Type p) where
   prettyPrec _ (TupleTy l) = parenList . map ppTupleDom $ l
   prettyPrec p (AppTyIn a b) = parensIf (p > prec_btype) $
       myFsep [pretty a, ppAType b]
+  prettyPrec _ (ConTy tc []) = pretty tc
   prettyPrec p (ConTy tc args) = parensIf (p > prec_btype) $
       myFsep $ pretty tc : map ppAType args
   prettyPrec _ (VarTy name) = pretty name
