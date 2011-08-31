@@ -7,6 +7,7 @@ import H.Phase
 
 import Data.Set ( Set )
 import qualified Data.Set as Set
+import Data.Foldable
 
 
 
@@ -59,8 +60,8 @@ fvExp (TyLam tvs body) = fvExp body
 fvExp (Ite g t e) = fvExps [g,t,e]
 fvExp (If grhss) = fvGuardedRhss grhss
 fvExp (Case e _ptcty alts) = fvExp e `Set.union` fvAlts alts
-fvExp (Tuple es) = fvExps es
-fvExp (List es) = fvExps es
+fvExp (Tuple _ es) = fvExps es
+fvExp (List _ es) = fvExps es
 fvExp (Paren e) = fvExp e
 fvExp (LeftSection e _op) = fvExp e
 fvExp (RightSection _op e) = fvExp e
@@ -79,12 +80,12 @@ fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
   -- other way would be to use type-classes... but it may have problems
 fvPat (VarPat x) = Set.empty
 fvPat (LitPat _) = Set.empty
-fvPat (InfixPat p1 _op p2) = fvPats [p1,p2]
-fvPat (ConPat _con ps) = fvPats ps
-fvPat (TuplePat ps) = fvPats ps
-fvPat (ListPat ps) = fvPats ps
+fvPat (InfixPat p1 _op _ p2) = fvPats [p1,p2]
+fvPat (ConPat _con _ ps) = fvPats ps
+fvPat (TuplePat ps _) = fvPats ps
+fvPat (ListPat ps _) = fvPats ps
 fvPat (ParenPat p) = fvPat p
-fvPat WildPat      = Set.empty
+fvPat (WildPat _)     = Set.empty
 fvPat (AsPat _x p)  = fvPat p
 fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
 
@@ -94,12 +95,12 @@ bsPats = Set.unions . map bsPat
 bsPat :: Ord (VAR p) => Pat p -> Set (VAR p)
 bsPat (VarPat x) = Set.singleton x
 bsPat (LitPat _) = Set.empty
-bsPat (InfixPat p1 _op p2) = bsPats [p1,p2]
-bsPat (ConPat _con ps) = bsPats ps
-bsPat (TuplePat ps) = bsPats ps
-bsPat (ListPat ps) = bsPats ps
+bsPat (InfixPat p1 _op _ p2) = bsPats [p1,p2]
+bsPat (ConPat _con _ ps) = bsPats ps
+bsPat (TuplePat ps _) = bsPats ps
+bsPat (ListPat ps _) = bsPats ps
 bsPat (ParenPat p) = bsPat p
-bsPat WildPat      = Set.empty
+bsPat (WildPat _)      = Set.empty
 bsPat (AsPat x p)  = Set.insert x $ bsPat p
 bsPat (SigPat p _ty) = bsPat p
 
@@ -173,12 +174,12 @@ patsFTV = Set.unions . map patFTV
 patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
 patFTV (VarPat x) = Set.empty     -- same than for fvPat
 patFTV (LitPat _) = Set.empty
-patFTV (InfixPat p1 _op p2) = patsFTV [p1,p2]
-patFTV (ConPat _con ps) = patsFTV ps
-patFTV (TuplePat ps) = patsFTV ps
-patFTV (ListPat ps) = patsFTV ps
+patFTV (InfixPat p1 _op _ p2) = patsFTV [p1,p2]
+patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys)
+patFTV (TuplePat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
+patFTV (ListPat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ParenPat p) = patFTV p
-patFTV WildPat      = Set.empty
+patFTV (WildPat ptcty)     = foldMap typeFTV ptcty
 patFTV (AsPat _x p)  = patFTV p
 patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
 

@@ -226,8 +226,8 @@ leafFix fixs e = case e of
     Ite e a b                -> liftM3 Ite (fix e) (fix a) (fix b)
     If grhss                 -> liftM If $ fix grhss
     Case e ptcty alts             -> liftM2 (flip Case ptcty) (fix e) $ mapM fix alts
-    Tuple exps              -> liftM Tuple $ mapM fix exps
-    List exps               -> liftM List $ mapM fix  exps
+    Tuple NoPostTc exps              -> liftM (Tuple NoPostTc) $ mapM fix exps
+    List NoPostTc exps               -> liftM (List NoPostTc) $ mapM fix  exps
     Paren e                 -> liftM Paren $ fix e
     LeftSection e op        -> liftM (flip LeftSection op) (fix e)
     RightSection op e       -> liftM (RightSection op) $ fix e
@@ -241,10 +241,10 @@ leafFix fixs e = case e of
     fix x = applyFixities fixs x
 
 leafFixP fixs p = case p of
-        InfixPat p1 con p2       -> liftM2 (flip InfixPat con) (fix p1) (fix p2)
-        ConPat n ps             -> liftM (ConPat n) $ mapM fix ps
-        TuplePat ps             -> liftM TuplePat $ mapM fix ps
-        ListPat ps              -> liftM ListPat $ mapM fix ps
+        InfixPat p1 con NoPostTc p2       -> liftM3 (flip InfixPat con) (fix p1) (return NoPostTc) (fix p2)
+        ConPat n NoPostTc ps             -> liftM (ConPat n NoPostTc) $ mapM fix ps
+        TuplePat ps NoPostTc             -> liftM (flip TuplePat NoPostTc) $ mapM fix ps
+        ListPat ps NoPostTc              -> liftM (flip ListPat NoPostTc) $ mapM fix ps
         ParenPat p              -> liftM ParenPat $ fix p
         AsPat n p            -> liftM (AsPat n) $ fix p
         SigPat p t    -> liftM2 SigPat (fix p) (fix t)

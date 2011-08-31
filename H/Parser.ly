@@ -380,7 +380,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | literal     { Lit $1 }
 > | '(' exp ')'     { Paren $2 }
 > | '(' op ')'      { Op $2 }
-> | '(' texps ')'     { Tuple $2 }
+> | '(' texps ')'     { Tuple NoPostTc $2 }
 > | '[' list ']'         { $2 }
 > | '(' exp0b op ')'    { LeftSection $2 (Op $3)  }
 > | '(' op exp0 ')'   { RightSection (Op $2) $3 }
@@ -405,11 +405,11 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
   > : pat1 ':' type   { SigPat $1 $3 }
 
 > pat1 :: { Pat Pr }
-> : fpat '::' pat1    { InfixPat $1 ConsCon $3 }
+> : fpat '::' pat1    { InfixPat $1 ConsCon NoPostTc $3 }
 > | fpat      { $1 }
 
 > fpat :: { Pat Pr }
-> : con apats   { ConPat $1 $2 }
+> : con apats   { ConPat $1 NoPostTc $2 }
 > | apat        { $1 }
 
 > apat :: { Pat Pr }
@@ -418,13 +418,13 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 
 > apat1 :: { Pat Pr }
 > : var       { VarPat $1 }
-> | con        { ConPat $1 [] }
+> | con        { ConPat $1 NoPostTc [] }
 > | literal     { LitPat $1 }
 > | '(' pat ':' type ')'     { SigPat $2 $4 }
 > | '(' pat ')'     { ParenPat $2 }
-> | '(' tpats ')'     { TuplePat $2 }
-> | '[' lpats ']'     { ListPat $2 }
-> | '_'             { WildPat }
+> | '(' tpats ')'     { TuplePat $2 NoPostTc }
+> | '[' lpats ']'     { ListPat $2 NoPostTc }
+> | '_'             { WildPat NoPostTc }
 
 > tpats :: { [Pat Pr] }
 > : tpats ',' pat     { $1 ++ [$3] }
@@ -442,8 +442,8 @@ The rules below are little bit contorted to keep lexps left-recursive while
 avoiding another shift/reduce-conflict.
 
 > list :: { Exp Pr }
-> : exp       { List [$1] }
-> | lexps       { List $1 }
+> : exp       { List NoPostTc [$1] }
+> | lexps       { List NoPostTc $1 }
 > | exp '..' exp      { EnumFromTo $1 $3 }
 > | exp ',' exp '..' exp    { EnumFromThenTo $1 $3 $5 }
 

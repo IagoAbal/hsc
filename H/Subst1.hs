@@ -31,6 +31,7 @@ import Data.Map( Map )
 import qualified Data.Map as Map
 import Data.Set( Set )
 import qualified Data.Set as Set
+import qualified Data.Traversable as T
 
 
 -- * One-shot substition
@@ -116,23 +117,29 @@ transformPred f = go
           (b',b_s) <- go_bndr b
           return (VarPat b',b_s)
         go_pat p@(LitPat _) = return (p,[])
-        go_pat (InfixPat p1 bcon p2) = do
+        go_pat (InfixPat p1 bcon ptctys p2) = do
           (p1',p1_s) <- go_pat p1
+          ptctys' <- T.mapM (mapM go) ptctys
           (p2',p2_s) <- go_pat p2
-          return (InfixPat p1' bcon p2',p1_s++p2_s)
-        go_pat (ConPat con ps) = do
+          return (InfixPat p1' bcon ptctys' p2',p1_s++p2_s)
+        go_pat (ConPat con ptctys ps) = do
           (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
-          return (ConPat con ps', concat ps_ss)
-        go_pat (TuplePat ps) = do
+          ptctys' <- T.mapM (mapM go) ptctys
+          return (ConPat con ptctys' ps', concat ps_ss)
+        go_pat (TuplePat ps ptcty) = do
           (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
-          return (TuplePat ps', concat ps_ss)
-        go_pat (ListPat ps) = do
+          ptcty' <- T.mapM go ptcty
+          return (TuplePat ps' ptcty', concat ps_ss)
+        go_pat (ListPat ps ptcty) = do
           (ps',ps_ss) <- liftM unzip $ mapM go_pat ps
-          return (ListPat ps', concat ps_ss)
+          ptcty' <- T.mapM go ptcty
+          return (ListPat ps' ptcty', concat ps_ss)
         go_pat (ParenPat p) = do
           (p',p_s) <- go_pat p
           return (ParenPat p,p_s)
-        go_pat WildPat = return (WildPat,[])
+        go_pat (WildPat ptcty) = do
+          ptcty' <- T.mapM go ptcty
+          return (WildPat ptcty',[])
         go_pat (AsPat x p) = do
           (x',x_s) <- go_bndr x
           (p',p_s) <- go_pat p
@@ -277,8 +284,8 @@ substExp s (Ite g t e) = liftM3 Ite (substExp s g) (substExp s t) (substExp s e)
 substExp s (If grhss) = liftM If $ substGuardedRhss s grhss
 substExp s (Case e casety alts)
   = liftM3 Case (substExp s e) (substPostTcType s casety) (substAlts s alts)
-substExp s (Tuple es) = liftM Tuple $ substExps s es
-substExp s (List es) = liftM List $ substExps s es
+substExp s (Tuple ptcty es) = liftM2 Tuple (T.mapM (substType s) ptcty) (substExps s es)
+substExp s (List ptcty es) = liftM2 List (T.mapM (substType s) ptcty) (substExps s es)
 substExp s (Paren e) = liftM Paren $ substExp s e
 substExp s (LeftSection e op) = liftM2 LeftSection (substExp s op) (substExp s e)
 substExp s (RightSection op e) = liftM2 RightSection (substExp s op) (substExp s e)
@@ -317,18 +324,27 @@ substPat :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Pat p
 substPat s (VarPat var) = do (var',s') <- substBndr s var
                              return (VarPat var',s')
 substPat s p@(LitPat _) = return (p,s)
-substPat s (InfixPat p1 con p2)
+substPat s (InfixPat p1 con ptctys p2)
   = do ([p1',p2'],s') <- substPats s [p1,p2]
-       return (InfixPat p1' con p2',s')
-substPat s (ConPat con ps) = do (ps',s') <- substPats s ps
-                                return (ConPat con ps',s')
-substPat s (TuplePat ps) = do (ps',s') <- substPats s ps
-                              return (TuplePat ps',s')
-substPat s (ListPat ps) = do (ps',s') <- substPats s ps
-                             return (ListPat ps',s')
+       ptctys' <- T.mapM (substTypes s) ptctys
+       return (InfixPat p1' con ptctys' p2',s')
+substPat s (ConPat con ptctys ps) = do
+  (ps',s') <- substPats s ps
+  ptctys' <- T.mapM (substTypes s) ptctys
+  return (ConPat con ptctys' ps',s')
+substPat s (TuplePat ps ptcty) = do
+  (ps',s') <- substPats s ps
+  ptcty' <- T.mapM (substType s) ptcty
+  return (TuplePat ps' ptcty',s')
+substPat s (ListPat ps ptcty) = do
+  (ps',s') <- substPats s ps
+  ptcty' <- T.mapM (substType s) ptcty
+  return (ListPat ps' ptcty',s')
 substPat s (ParenPat p) = do (p',s') <- substPat s p
                              return (ParenPat p',s')
-substPat s p@WildPat = return (p,s)
+substPat s (WildPat ptcty) = do
+  ptcty' <- T.mapM (substType s) ptcty
+  return (WildPat ptcty',s)
   -- See [SubstBndr.AsPat]
 substPat s (AsPat v p) = do (p',s') <- substPat s p
                             (v',s'') <- substBndr s' v

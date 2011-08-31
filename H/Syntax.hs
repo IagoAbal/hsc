@@ -341,9 +341,9 @@ data Exp p where
             -- ^ the type of the whole case expression
         -> [Alt p] -> Exp p
   -- | tuple expression
-  Tuple :: [Exp p] -> Exp p
+  Tuple :: PostTcType p -> [Exp p] -> Exp p
   -- | list expression
-  List :: [Exp p] -> Exp p
+  List :: PostTcType p -> [Exp p] -> Exp p
   -- | parenthesized expression
   Paren :: Exp p -> Exp p
   -- | left section @(@/exp/ /qop/@)@
@@ -421,7 +421,7 @@ instance PrettyNames p => Pretty (Exp p) where
           _other -> hang (hsep [text "( \\ x_ ->", pretty opE, text "x_"])
                          4 (pretty e <> rparen)
   -- Lists
-  pretty (List list) =
+  pretty (List _ list) =
     bracketList . punctuate comma . map pretty $ list
   pretty (EnumFromTo from to) =
     bracketList [pretty from, text "..", pretty to]
@@ -508,17 +508,17 @@ data Pat p where
   -- | literal constant
   LitPat :: Lit -> Pat p
   -- | pattern with infix data constructor
-  InfixPat :: Pat p -> BuiltinCon -> Pat p -> Pat p
+  InfixPat :: Pat p -> BuiltinCon -> PostTcTypes p -> Pat p -> Pat p
   -- | data constructor and argument
-  ConPat :: Con p -> [Pat p] -> Pat p
+  ConPat :: Con p -> PostTcTypes p -> [Pat p] -> Pat p
   -- | tuple pattern
-  TuplePat :: [Pat p] -> Pat p
+  TuplePat :: [Pat p] -> PostTcType p -> Pat p
   -- | list pattern
-  ListPat :: [Pat p] -> Pat p
+  ListPat :: [Pat p] -> PostTcType p -> Pat p
   -- | parenthesized pattern
   ParenPat :: Pat p -> Pat p
   -- | wildcard pattern (@_@)
-  WildPat :: Pat p
+  WildPat :: PostTcType p -> Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
   -- ^ pattern signature
@@ -531,12 +531,12 @@ data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
-patBndrs (InfixPat p1 op p2) = patBndrs p1 ++ patBndrs p2
-patBndrs (ConPat con ps) = patsBndrs ps
-patBndrs (TuplePat ps) = patsBndrs ps
-patBndrs (ListPat ps) = patsBndrs ps
+patBndrs (InfixPat p1 op _ p2) = patBndrs p1 ++ patBndrs p2
+patBndrs (ConPat con _ ps) = patsBndrs ps
+patBndrs (TuplePat ps _) = patsBndrs ps
+patBndrs (ListPat ps _) = patsBndrs ps
 patBndrs (ParenPat p) = patBndrs p
-patBndrs WildPat      = []
+patBndrs (WildPat _)  = []
 patBndrs (AsPat v p)  = v : patBndrs p
 patBndrs (SigPat p _t) = patBndrs p
 
@@ -611,17 +611,17 @@ matchableWith _e _p = True
 -- for instance @matchablePats (x1::x2::xs) (y::(ys:{[]:[Int]})) == True@.
 matchablePats :: Eq (VAR p) => Pat p -> Pat p -> Bool
 matchablePats (VarPat _)  _           = True
-matchablePats WildPat     _           = True
+matchablePats (WildPat _)    _           = True
 matchablePats _           (VarPat _)  = True
-matchablePats _           WildPat     = True
+matchablePats _           (WildPat _)     = True
 matchablePats (LitPat l1) (LitPat l2) = l1 == l2
-matchablePats (InfixPat p1 bcon p2) (InfixPat p1' bcon' p2')
+matchablePats (InfixPat p1 bcon _ p2) (InfixPat p1' bcon' _ p2')
   = bcon == bcon' && matchablePats p1 p1' && matchablePats p2 p2'
-matchablePats (ConPat con ps) (ConPat con' ps')
+matchablePats (ConPat con _ ps) (ConPat con' _ ps')
   = con == con' && and (zipWith matchablePats ps ps')
-matchablePats (TuplePat ps) (TuplePat ps')
+matchablePats (TuplePat ps _) (TuplePat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
-matchablePats (ListPat ps) (ListPat ps')
+matchablePats (ListPat ps _) (ListPat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
 matchablePats (ParenPat p) p'            = matchablePats p p'
 matchablePats p            (ParenPat p') = matchablePats p p'
@@ -636,19 +636,19 @@ matchablePats _p           _p'           = False
 instance PrettyNames p => Pretty (Pat p) where
   prettyPrec _ (VarPat var) = pretty var
   prettyPrec _ (LitPat lit) = pretty lit
-  prettyPrec p (InfixPat a cop b) = parensIf (p > 0) $
+  prettyPrec p (InfixPat a cop _ b) = parensIf (p > 0) $
     myFsep [pretty a, pretty cop, pretty b]
-  prettyPrec p (ConPat con []) = pretty con
-  prettyPrec p (ConPat con ps) = parensIf (p > 1) $
+  prettyPrec p (ConPat con _ []) = pretty con
+  prettyPrec p (ConPat con _ ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
-  prettyPrec _ (TuplePat ps) = parenList . map pretty $ ps
-  prettyPrec _ (ListPat ps) =
+  prettyPrec _ (TuplePat ps _) = parenList . map pretty $ ps
+  prettyPrec _ (ListPat ps _) =
     bracketList . punctuate comma . map pretty $ ps
   prettyPrec _ (ParenPat p) = parens . pretty $ p
   -- special case that would otherwise be buggy
   prettyPrec _ (AsPat var pat) =
     hcat [pretty var, char '@', pretty pat]
-  prettyPrec _ WildPat = char '_'
+  prettyPrec _ (WildPat _) = char '_'
   prettyPrec _ (SigPat pat ty) =
     parens $ myFsep [pretty pat, text ":", pretty ty]
 
@@ -935,13 +935,14 @@ data Dom p = Dom {
              , domMbProp :: Maybe (Prop p)
              }
 
-dom2type :: Dom p -> Type p
+dom2type :: Ge p Tc => Dom p -> Type p
 dom2type (Dom mbPat ty mbProp) = predTy pat ty mbProp
-  where pat = maybe WildPat id mbPat
+  where pat = maybe (WildPat (PostTc ty)) id mbPat
 
 type Range = Type
 
 type PostTcType p = PostTc p (Type p)
+type PostTcTypes p = PostTc p [Type p]
 
   -- (args,result)
 splitFunTy :: Type p -> ([Type p],Type p)
@@ -1161,14 +1162,14 @@ varDom :: VAR p -> Type p -> Prop p -> Dom p
 varDom x ty prop = Dom (Just (VarPat x)) ty (Just prop)
 
 patternDom :: Pat p -> Type p -> Dom p
-patternDom WildPat ty = Dom Nothing ty Nothing
+patternDom (WildPat _) ty = Dom Nothing ty Nothing
 patternDom pat     ty = Dom (Just pat) ty Nothing
 
 vpatDom :: VAR p -> Type p -> Dom p
 vpatDom x = patternDom (VarPat x)
 
 patternTy :: Pat p -> Type p -> Type p
-patternTy WildPat    ty = ty
+patternTy (WildPat _)    ty = ty
 patternTy (VarPat _) ty = ty
 patternTy pat        ty = PredTy pat ty Nothing
 

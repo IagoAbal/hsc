@@ -207,8 +207,8 @@ instance Rename Exp where
   rename (Case e NoPostTc alts)
     = inContext (text "In case expression") $
         liftM2 (flip Case NoPostTc) (rename e) (rnList alts)
-  rename (Tuple l) = liftM Tuple $ mapM rename l
-  rename (List l) = liftM List $ mapM rename l
+  rename (Tuple NoPostTc l) = liftM (Tuple NoPostTc) $ mapM rename l
+  rename (List NoPostTc l) = liftM (List NoPostTc) $ mapM rename l
   rename (Paren e) = liftM Paren $ rename e
   rename (LeftSection e (Op op)) = liftM (flip LeftSection (Op op)) $ rename e
   rename (RightSection (Op op) e) = liftM (RightSection (Op op)) $ rename e
@@ -277,17 +277,17 @@ instance Rename Alt where
 instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (VarPat occ) f = renameBndr occ $ f . VarPat
   renameBndr (LitPat lit) f = f (LitPat lit)
-  renameBndr (InfixPat p1 op p2) f
+  renameBndr (InfixPat p1 op NoPostTc p2) f
     = renameBndr p1 $ \p1' ->
       renameBndr p2 $ \p2' ->
-        f (InfixPat p1' op p2')
-  renameBndr (ConPat con ps) f = do
+        f (InfixPat p1' op NoPostTc p2')
+  renameBndr (ConPat con NoPostTc ps) f = do
     con' <- rename con
-    renameBndr ps $ f . ConPat con'
-  renameBndr (TuplePat ps) f = renameBndr ps $ f . TuplePat
-  renameBndr (ListPat ps) f = renameBndr ps $ f . ListPat
+    renameBndr ps $ f . (ConPat con' NoPostTc)
+  renameBndr (TuplePat ps NoPostTc) f = renameBndr ps $ f . (flip TuplePat NoPostTc)
+  renameBndr (ListPat ps NoPostTc) f = renameBndr ps $ f . (flip ListPat NoPostTc)
   renameBndr (ParenPat p) f = renameBndr p $ f . ParenPat
-  renameBndr WildPat f = f WildPat
+  renameBndr (WildPat NoPostTc) f = f (WildPat NoPostTc)
   renameBndr (SigPat p t) f = do t' <- rename t
                                  renameBndr p $ f . (flip SigPat t')
 
