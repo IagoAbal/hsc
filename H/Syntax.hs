@@ -646,6 +646,12 @@ matchablePats _p           _p'           = False
 
 
 instance PrettyNames p => Pretty (Pat p) where
+    -- special case
+  prettyPrec _ (SigPat (VarPat var) ty) =
+    parens $ myFsep [pretty var, text ":", pretty ty]
+    -- special case
+  prettyPrec _ (SigPat (AsPat var pat) ty) =
+    parens $ myFsep [hcat [pretty var, char '@', pretty pat], text ":", pretty ty]
   prettyPrec _ (VarPat var) = prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
   prettyPrec p (InfixPat a cop _ b) = parensIf (p > 0) $
@@ -995,10 +1001,16 @@ instance PrettyNames p => Pretty (PolyType p) where
     = myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
 
 instance PrettyNames p => Pretty (Type p) where
-  prettyPrec _ (PredTy pat ty Nothing)
-    = braces $ mySep [pretty pat, char ':', pretty ty]
-  prettyPrec _ (PredTy pat ty (Just prop))
-    = braces $ mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
+  prettyPrec _ (PredTy (VarPat var) ty mb_prop)
+    = braces $ mySep ([pretty var, char ':', pretty ty] ++ pp_prop)
+    where pp_prop = case mb_prop of
+                        Nothing -> [empty]
+                        Just prop -> [char '|', pretty prop]
+  prettyPrec _ (PredTy pat ty mb_prop)
+    = braces $ mySep ([pretty pat, char ':', pretty ty] ++ pp_prop)
+    where pp_prop = case mb_prop of
+                        Nothing -> [empty]
+                        Just prop -> [char '|', pretty prop]
   prettyPrec p (FunTy a b) = parensIf (p > 0) $
     myFsep [ppDomType a, text "->", pretty b]
   prettyPrec _ (ListTy a)  = brackets $ pretty a
@@ -1016,18 +1028,31 @@ instance PrettyNames p => Pretty (Type p) where
 instance PrettyNames p => Pretty (Dom p) where
   prettyPrec p (Dom Nothing ty Nothing) = prettyPrec p ty
   -- dependent arrow
-  prettyPrec _p (Dom (Just pat) ty Nothing)
-    = braces $ mySep [pretty pat, char ':', pretty ty]
-  prettyPrec _p (Dom (Just pat) ty (Just prop))
-    = braces $ mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
+  prettyPrec _p (Dom (Just (VarPat var)) ty mb_prop)
+    = braces $ mySep ([pretty var, char ':', pretty ty] ++ pp_prop)
+    where pp_prop = case mb_prop of
+                        Nothing -> [empty]
+                        Just prop -> [char '|', pretty prop]
+  prettyPrec _p (Dom (Just pat) ty mb_prop)
+    = braces $ mySep ([pretty pat, char ':', pretty ty] ++ pp_prop)
+    where pp_prop = case mb_prop of
+                        Nothing -> [empty]
+                        Just prop -> [char '|', pretty prop]
   prettyPrec _p _other = undefined
 
 ppTupleDom :: PrettyNames p => Dom p -> Doc
 ppTupleDom (Dom Nothing ty Nothing) = pretty ty
-ppTupleDom (Dom (Just pat) ty Nothing)
-  = mySep [pretty pat, char ':', pretty ty]
-ppTupleDom (Dom (Just pat) ty (Just prop))
-  = mySep [pretty pat, char ':', pretty ty, char '|', pretty prop]
+  -- special case
+ppTupleDom (Dom (Just (VarPat var)) ty mb_prop)
+  = mySep ([pretty var, char ':', pretty ty] ++ pp_prop)
+  where pp_prop = case mb_prop of
+                      Nothing -> [empty]
+                      Just prop -> [char '|', pretty prop]
+ppTupleDom (Dom (Just pat) ty mb_prop)
+  = mySep ([pretty pat, char ':', pretty ty] ++ pp_prop)
+  where pp_prop = case mb_prop of
+                      Nothing -> [empty]
+                      Just prop -> [char '|', pretty prop]
 
 -- ** Type constructors
 
