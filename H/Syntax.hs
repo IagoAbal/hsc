@@ -142,6 +142,7 @@ type family TyCON phase
 type instance TyCON Pr = TyName Pr
 type instance TyCON Rn = TyName Rn
 type instance TyCON Tc = TyCon Tc
+type instance TyCON Ti = TyCon Ti
 
 type family GoalNAME phase
 type instance GoalNAME Pr = OccName
@@ -175,6 +176,12 @@ type TyParams p = [TyVAR p]
 
 type PostTcTyParams p = PostTc p [TyVar]
 
+-- * IsPostTc
+
+class (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p, GoalNAME p ~ Name) => IsPostTc p where
+
+instance IsPostTc Tc where
+instance IsPostTc Ti where
 
 -- * Modules
 
