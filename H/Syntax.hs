@@ -621,7 +621,7 @@ matchableWith _e            _p           = True
 --   @matchablePats (a,b,c) (x,y) == False@
 -- Note that this check does not detect any possible inconsistency,
 -- for instance @matchablePats (x1::x2::xs) (y::(ys:{[]:[Int]})) == True@.
-matchablePats :: Eq (VAR p) => Pat p -> Pat p -> Bool
+matchablePats :: IsPostTc p => Pat p -> Pat p -> Bool
 matchablePats (VarPat _)  _           = True
 matchablePats (WildPat _)    _           = True
 matchablePats _           (VarPat _)  = True
@@ -635,6 +635,12 @@ matchablePats (TuplePat ps _) (TuplePat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
 matchablePats (ListPat ps _) (ListPat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
+matchablePats (ListPat (p:ps) ptcty) (InfixPat p' _ _ q)
+  = matchablePats p p' && matchablePats (ListPat ps ptcty) q
+matchablePats (InfixPat p _ _ q) (ListPat (p':ps') ptcty)
+  = matchablePats p p' && matchablePats (ListPat ps' ptcty) q
+matchablePats (ListPat [] _) (ConPat _ _ []) = True
+matchablePats (ConPat _ _ []) (ListPat [] _) = True
 matchablePats (ParenPat p) p'            = matchablePats p p'
 matchablePats p            (ParenPat p') = matchablePats p p'
 matchablePats (AsPat _ p)  p'            = matchablePats p p'
