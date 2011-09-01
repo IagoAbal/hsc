@@ -146,7 +146,7 @@ propMTV (QP qt pats body) = patsMTV pats `Set.union` propMTV body
 
 -- | Converts a pattern to an expression.
 -- NB: Such a conversion is not possible in case of wild-card patterns.
-pat2exp :: Pat Tc -> Maybe (Exp Tc)
+pat2exp :: IsPostTc p => Pat p -> Maybe (Exp p)
 pat2exp (LitPat lit) = pure $ Lit lit
 pat2exp (VarPat x)   = pure $ Var x
 pat2exp (InfixPat p1 bcon (PostTc typs) p2)
