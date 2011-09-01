@@ -801,7 +801,19 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
           | bcon == bcon' = do (s',bs') <- get_subst (s,bs) q1 p1
                                get_subst (s',bs') q2 p2
         get_subst (s,bs) (ConPat con _ qs) (ConPat con' _ ps)
-          | con == con' = foldM (\(s1,bs1) (q,p) -> get_subst (s1,bs1) q p) (s,bs) $ zip qs ps
+          | con == con' = fold_get_subst (s,bs) qs ps
+        get_subst acc    (TuplePat qs _) (TuplePat ps _)
+          = fold_get_subst acc qs ps
+        get_subst (s,bs) (ListPat qs _) (ListPat ps _)
+          = fold_get_subst (s,bs) qs ps
+        get_subst acc (ListPat [] _) (ConPat _ _ []) = return acc
+        get_subst acc (ConPat _ _ []) (ListPat [] _) = return acc
+        get_subst acc (ListPat (q:qs) ptcty) (InfixPat p1 _ _ p2) = do
+          acc' <- get_subst acc q p1
+          get_subst acc' (ListPat qs ptcty) p2
+        get_subst acc (InfixPat q1 _ _ q2) (ListPat (p:ps) ptcty) = do
+          acc' <- get_subst acc q1 p
+          get_subst acc' q2 (ListPat ps ptcty)
         get_subst (s,bs) q           (AsPat x p)
           | not (Set.member x fvs) = get_subst (s,bs) q p
         get_subst (s,bs) (AsPat y q) (AsPat x p) = get_subst ((x,Var y):s,bs) q p
@@ -824,7 +836,7 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
                         <+> (sep $ punctuate comma $ map ppQuot $ Set.toList $ bsPat dpat)
                         <+> text "cannot be bound by pattern" <+> ppQuot lpat
           -- error $ "illegal dependent type, variables X are not being matched ... " ++ prettyPrint lpat ++ " .. " ++ prettyPrint dpat
-
+        fold_get_subst (s,bs) qs ps = foldM (\(s1,bs1) (q,p) -> get_subst (s1,bs1) q p) (s,bs) $ zip qs ps
 
 {- Note [Instantiating domains]
 
