@@ -18,6 +18,8 @@ import H.Subst1 ( transformPred )
 import H.SrcLoc
 import H.SrcContext
 
+import qualified Util.Set as Set
+
 import Name
 import Unique
 import Sorted
@@ -355,12 +357,11 @@ letType binds ty
           = FunBind rec name sig ptctyps (map unLocMatch matches)
         unLocMatch (Match mb_loc pats rhs) = Match Nothing pats rhs
         ty_fv = fvType ty
-        disjointWith s1 s2 = Set.null (s1 `Set.intersection` s2)
         filter_binds []                   = []
         filter_binds rev_binds@(b:bs)
-          | bsBind b `disjointWith` ty_fv = filter_binds bs
-          | otherwise                     = rev_binds
-        f prop | bsBinds binds' `disjointWith` fvExp prop = Nothing
+          | bsBind b `Set.disjointWith` ty_fv = filter_binds bs
+          | otherwise                         = rev_binds
+        f prop | bsBinds binds' `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let binds' prop
 
 checkExpType :: Exp Rn -> Type Tc -> TcM (Exp Tc)
@@ -758,7 +759,7 @@ instFunTy (Dom (Just p) _ _,rang) e
       when (not $ matchableWith e p) $
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty p)
       transformPred f rang
-  where f prop | Set.null (bsPat p `Set.intersection` fvExp prop) = Nothing
+  where f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let [PatBind Nothing p (Rhs (UnGuarded e) [])] prop
 
 rangeSubst :: Exp Tc
@@ -815,7 +816,7 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
           -- dpat bounds no variable
         get_subst (s,bs) _lpat dpat  | Set.null (bsPat dpat) = return (s,bs)
           -- no variable bound by dpat is free in rang
-        get_subst (s,bs) _lpat dpat  | Set.null (bsPat dpat `Set.intersection` fvs) = return (s,bs)
+        get_subst (s,bs) _lpat dpat  | bsPat dpat `Set.disjointWith` fvs = return (s,bs)
         get_subst (s,bs) lpat  (VarPat x) | Just e <- pat2exp lpat = return ((x,e):s,bs)
         get_subst (s,bs) (VarPat y) dpat = do
           yexp' <- substExp s [] (Var y)
