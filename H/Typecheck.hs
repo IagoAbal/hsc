@@ -16,7 +16,7 @@ import H.Message
 import H.FreeVars
 import H.Subst1 ( transformPred )
 import H.SrcLoc
-import H.SrcContext ( SrcContext(..), MonadContext(..) )
+import H.SrcContext
 
 import Name
 import Unique
@@ -42,7 +42,8 @@ tcModule us (Module loc modname decls)
 
   -- poly-types must have kind *
 kcPolyType :: PolyType Rn -> TcM (PolyType Tc)
-kcPolyType (ForallTy ns ty) = do
+kcPolyType rnpty@(ForallTy ns ty)
+  = inForallTypeCtxt rnpty $ do
   tvs_sk <- mapM skoTyVar tvs
   ty'_sk <- extendTyVarEnv (zip ns tvs_sk) $
               checkKind ty typeKi
@@ -69,7 +70,8 @@ kcType rntype@(AppTyIn t a) = traceDoc (text "AppTyIn" <+> pretty rntype) $ do
         | otherwise  -> throwError $ errCannotUnify "kinds" k1 a_ki
       _other      -> throwError $ text "Cannot unify kind" <+> pretty t_ki <+> text "with ? -> ?"
 --   PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
-kcType (PredTy pat ty mbprop) = do
+kcType rnty@(PredTy pat ty mbprop)
+  = inTypeCtxt rnty $ do
   ty' <- checkKind ty typeKi
   (pat',pat_env) <- tcPat pat (Check ty')
   mbprop' <- extendVarEnv pat_env $
@@ -155,7 +157,7 @@ tcDecls (goaldecl@(GoalDecl _ _ _ _ _):decls) = do
 -- TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Type p -> Decl p
 kcTypeDecl ::	Decl Rn -> TcM (Decl Tc, [(TyName Rn,TyCon Tc)])
 kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
-  = inContextAt loc (text "In type declaration" <+> ppQuot ty_name) $ do
+  = inTypeDeclCtxt loc (ppQuot ty_name) $ do
       ForallTy tvs ty_rhs' <- kcPolyType $ forallTy ty_params ty_rhs
       let ty_var = mkTyVar ty_name tc_kind
           tycon = SynTyCon {
@@ -168,7 +170,8 @@ kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
 
 -- DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
 kcDataDecl :: Decl Rn -> TcM (Decl Tc,[(TyName Rn,TyCon Tc)],[(Con Rn,Con Tc)])
-kcDataDecl (DataDecl loc ty_name typarams constrs) = do
+kcDataDecl (DataDecl loc ty_name typarams constrs)
+  = inDataDeclCtxt loc (ppQuot ty_name) $ do
     let tvs = map (flip mkTyVar typeKi) typarams
     (constrs',cons_env) <- liftM unzip $
                            extendTyConEnv tycon_env $
@@ -181,7 +184,8 @@ kcDataDecl (DataDecl loc ty_name typarams constrs) = do
         con_res_ty = appTyIn (UserTyCon ty_name) (map VarTy typarams)
 --         ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))
-        tc_constr ty_tvs (ConDecl loc con_name doms) = do
+        tc_constr ty_tvs (ConDecl loc con_name doms)
+          = inConDeclCtxt loc (ppQuot con_name) $ do
           con_ty@(ForallTy con_tvs con_tau) <- kcPolyType (forallTy typarams $ funTy doms con_res_ty)
           let con = V con_name con_ty
           con_tau' <- substType [] (zip con_tvs (map VarTy ty_tvs)) con_tau
@@ -192,7 +196,8 @@ kcDataDecl (DataDecl loc ty_name typarams constrs) = do
 -- maybe we should generalise 'quantify' a little more to don't repeat the code here
 -- GoalDecl :: SrcLoc -> GoalType -> GoalNAME p -> PostTcTyParams p -> Prop p -> Decl p
 tcGoalDecl :: Decl Rn -> TcM (Decl Tc)
-tcGoalDecl (GoalDecl loc gtype g_name NoPostTc prop) = do
+tcGoalDecl (GoalDecl loc gtype g_name NoPostTc prop)
+  = inGoalDeclCtxt loc gtype (ppQuot g_name) $ do
   prop' <- checkExpType prop boolTy
   prop'_z <- zonkExp prop'
   let prop_mtvs = Set.toAscList $ propMTV prop'_z
@@ -217,12 +222,14 @@ tcBinds binds = go [] [] binds
           
 
 tc_bind :: [Bind Tc] -> Bind Rn -> TcM (Bind Tc,[(Name,Var Tc)])
-tc_bind prev_binds (PatBind loc pat rhs) = do
+tc_bind prev_binds (PatBind (Just loc) pat rhs)
+  = inPatBindCtxt loc (ppQuot pat) $ do
   (rhs',rhs_ty) <- inferRhs rhs
   rhs_ty' <- letType prev_binds rhs_ty
   (pat',pat_env) <- checkPat pat rhs_ty'
-  return (PatBind loc pat' rhs',pat_env)
-tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches) = do
+  return (PatBind (Just loc) pat' rhs',pat_env)
+tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches)
+  = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "FunBind-NonRec-TypeSig" <+> pretty fun <+> text "==============") $ do
   pty' <- kcPolyType pty
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "type_sig=" <+> pretty pty') $ do
@@ -235,7 +242,8 @@ tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches) = do
   let fun' = V fun pty'
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "matches''=" <+> sep (map (ppMatch fun') matches'')) $ do
   return (FunBind NonRec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
-tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches) = do
+tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
+  = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "FunBind-NonRec-NoTypeSig" <+> pretty fun <+> text "==============") $ do
   (matches',tau_fun_ty) <- inferMatches matches
   traceDoc (text "FunBind" <+> pretty fun <+> text "tau_fun_ty=" <+> pretty tau_fun_ty) $ do
@@ -243,7 +251,8 @@ tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches) = do
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "fun_ty=" <+> pretty fun_ty) $ do
   let fun' = V fun fun_ty
   return (FunBind NonRec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
-tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches) = do
+tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
+  = inFunBindCtxt (ppQuot fun) $ do
   pty' <- kcPolyType pty
   let poly_tvs = polyTyVars pty'
       fun' = V fun pty'
@@ -252,7 +261,8 @@ tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches) = do
                 tcMatches matches (Check skol_ty)
   matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'
   return (FunBind Rec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
-tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _]) = do
+tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
+  = inFunBindCtxt (ppQuot fun) $ do
   (pats',pats_tys,_) <- inferPats pats
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (zipWith patternDom pats' pats_tys) res_ty
@@ -262,7 +272,8 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
   let fun' = V fun fun_ty
   return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
-tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_)) = do
+tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_))
+  = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches" <+> pretty fun <+> text "==============") $ do
   (_,pats_tys,_) <- inferPats pats
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred pats_ty =" <+> (sep $ map pretty pats_tys)) $ do
@@ -290,13 +301,14 @@ tcMatches matches (Check exp_ty)
   = mapM (flip checkMatch exp_ty) matches
   -- when we infer the type for one single match then we can
   -- infer pattern types
-tcMatches [Match loc pats rhs] (Infer ref) = do
+tcMatches [Match (Just loc) pats rhs] (Infer ref)
+  = inFunMatchCtxt loc $ do
   (pats',pats_tys,pats_env) <- inferPats pats
   (rhs',rhs_ty) <- extendVarEnv pats_env $
                      inferRhs rhs
   let doms = zipWith patternDom pats' pats_tys
   liftIO $ writeIORef ref (funTy doms rhs_ty)
-  return [Match loc pats' rhs']
+  return [Match (Just loc) pats' rhs']
 tcMatches (m:ms) (Infer ref) = do
   (m',m_ty) <- inferMatch m
   ms' <- mapM (flip checkMatch m_ty) ms
@@ -315,20 +327,22 @@ inferMatch match = do
 
 -- Match SrcLoc [Pat p] (Rhs p)
 tcMatch :: Match Rn -> Expected (Type Tc) -> TcM (Match Tc)
-tcMatch (Match loc pats rhs) (Check exp_ty) = do
+tcMatch (Match (Just loc) pats rhs) (Check exp_ty)
+  = inFunMatchCtxt loc $ do
   traceDoc (text "tcMatch-Check pats=" <+> (sep $ map pretty pats)) $ do
   (pats',pats_env,rhs_exp_ty) <- checkEq pats exp_ty
   rhs' <- extendVarEnv pats_env $
             checkRhs rhs rhs_exp_ty
   traceDoc (text "tcMatch-Check checkRhs done") $ do
-  return (Match loc pats' rhs')
-tcMatch (Match loc pats rhs) (Infer ref) = do
+  return (Match (Just loc) pats' rhs')
+tcMatch (Match (Just loc) pats rhs) (Infer ref)
+  = inFunMatchCtxt loc $ do
   (pats',pats_tys,pats_env) <- inferPats pats
   (rhs',rhs_ty) <- extendVarEnv pats_env $
                      inferRhs rhs
   let doms = map type2dom pats_tys
   liftIO $ writeIORef ref (funTy doms rhs_ty)
-  return (Match loc pats' rhs')
+  return (Match (Just loc) pats' rhs')
 
 -- This could be more fine tuned but it is OK
 letType :: [Bind Tc] -> Type Tc -> TcM (Type Tc)
@@ -380,7 +394,7 @@ tcExp (PrefixApp op arg) exp_ty = do
   return (PrefixApp op' arg')
 --   InfixApp :: Exp p -> Op -> Exp p -> Exp p
 tcExp rnexp@(InfixApp e1 op e2) exp_ty
-  = inContext (text "In expression" <+> ppQuot rnexp) $ do
+  = inExprCtxt rnexp $ do
       (op', [e1',e2']) <- tcApp op [e1,e2] exp_ty
       return (InfixApp e1' op' e2')
 --   App :: Exp p -> Exp p -> Exp p
@@ -388,20 +402,21 @@ tcExp (App fun arg) exp_ty = do
   (fun',[arg']) <- tcApp fun [arg] exp_ty
   return (App fun' arg')
 --   Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
-tcExp (Lam loc pats body) (Check exp_ty) = do
---   (doms,resty) <- unifyFuns n_pats exp_ty
+tcExp (Lam (Just loc) pats body) (Check exp_ty)
+  = inLambdaAbsCtxt loc $ do
   (pats',pats_env,resty) <- checkEq pats exp_ty
   body' <- extendVarEnv pats_env $
              checkExpType body resty
-  return (Lam loc pats' body')
+  return (Lam (Just loc) pats' body')
   where n_pats = length pats
-tcExp (Lam loc pats body) (Infer ref) = do
+tcExp (Lam (Just loc) pats body) (Infer ref)
+  = inLambdaAbsCtxt loc $ do
   (pats',pats_tys,pats_env) <- inferPats pats
   (body',body_ty) <- extendVarEnv pats_env $
                        inferExpType body
   let doms = zipWith patternDom pats' pats_tys
   liftIO $ writeIORef ref (funTy doms body_ty)
-  return (Lam loc pats' body')
+  return (Lam (Just loc) pats' body')
 --   Let :: [Bind p] -> Exp p -> Exp p
 tcExp (Let binds body) (Check exp_ty) = do
   (binds',binds_env) <- tcBinds binds
@@ -416,7 +431,8 @@ tcExp (Let binds body) (Infer ref) = do
   liftIO $ writeIORef ref body_ty'
   return (Let binds' body')
 --   Ite :: Prop p -> Exp p -> Exp p -> Exp p
-tcExp (Ite g t e) exp_ty = do
+tcExp (Ite g t e) exp_ty
+  = inIteExprCtxt g $ do
   g' <- checkExpType g boolTy
   mty <- newMetaTy "a" typeKi
   t' <- checkExpType t mty
@@ -424,9 +440,11 @@ tcExp (Ite g t e) exp_ty = do
   mty ~>? exp_ty
   return (Ite g' t' e')
 --   If :: GuardedRhss p -> Exp p
-tcExp (If grhss) exp_ty = liftM If $ tcGuardedRhss grhss exp_ty
+tcExp (If grhss) exp_ty
+  = inIfExprCtxt $ liftM If $ tcGuardedRhss grhss exp_ty
 --   Case :: Exp p -> PostTcType p -> [Alt p] -> Exp p
-tcExp (Case scrut NoPostTc alts) exp_ty = do
+tcExp (Case scrut NoPostTc alts) exp_ty
+  = inCaseExprCtxt scrut $ do
   (scrut',scrut_ty) <- inferExpType scrut
   (alts',case_ty) <- tcAlts alts scrut_ty exp_ty
   return (Case scrut' (PostTc case_ty) alts')
@@ -438,7 +456,8 @@ tcExp (Tuple NoPostTc es) exp_ty = do
   es' <- zipWithM checkExpType es mtys
   return (Tuple (PostTc tup_ty) es')
 --   List :: [Exp p] -> Exp p
-tcExp (List NoPostTc es) exp_ty = do
+tcExp rnexp@(List NoPostTc es) exp_ty
+  = inExprCtxt rnexp $ do
   mty <- newMetaTy "a" typeKi
   let list_ty = ListTy mty
   list_ty ~>? exp_ty
@@ -476,7 +495,8 @@ tcExp (EnumFromThenTo e1 e2 e3) exp_ty = do
   (ListTy intTy) ~>? exp_ty
   return (EnumFromThenTo e1' e2' e3')
 --   Coerc :: SrcLoc -> Exp p -> PolyType p -> Exp p
-tcExp (Coerc loc exp pty) exp_ty = do
+tcExp (Coerc loc exp pty) exp_ty
+  = inCoercExprCtxt loc $ do
   pty' <- kcPolyType pty
   traceDoc (text "Coerc pty'=" <+> pretty pty') $ do
   exp' <- checkSigma exp pty'
@@ -484,12 +504,13 @@ tcExp (Coerc loc exp pty) exp_ty = do
   e'' <- instSigma e' pty' exp_ty
   return e''
 --   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
-tcExp (QP qt pats prop) exp_ty = do
-    (pats',_,pats_env) <- inferPats pats
-    prop' <- extendVarEnv pats_env $
-               checkExpType prop boolTy
-    boolTy ~>? exp_ty
-    return (QP qt pats' prop')
+tcExp (QP qt pats prop) exp_ty
+  = inQPExprCtxt qt pats $ do
+  (pats',_,pats_env) <- inferPats pats
+  prop' <- extendVarEnv pats_env $
+             checkExpType prop boolTy
+  boolTy ~>? exp_ty
+  return (QP qt pats' prop')
 
 
 tcApp :: Exp Rn -> [Exp Rn] -> Expected (Type Tc) -> TcM (Exp Tc,[Exp Tc])
@@ -532,7 +553,8 @@ checkAlt alt scrut_ty ty = tcAlt alt scrut_ty (Check ty)
 
 -- data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 tcAlt :: Alt Rn -> Type Tc -> Expected (Type Tc) -> TcM (Alt Tc)
-tcAlt (Alt loc pat rhs) scrut_ty exp_ty = do
+tcAlt (Alt loc pat rhs) scrut_ty exp_ty
+  = inCaseAltCtxt loc pat $ do
   (pat',pat_env) <- checkPat pat scrut_ty
   rhs' <- extendVarEnv pat_env $
             tcRhs rhs exp_ty
@@ -610,7 +632,8 @@ checkGuardedRhs :: GuardedRhs Rn -> Type Tc -> TcM (GuardedRhs Tc)
 checkGuardedRhs grhs ty = tcGuardedRhs grhs (Check ty)
 
 tcGuardedRhs :: GuardedRhs Rn -> Expected (Type Tc) -> TcM (GuardedRhs Tc)
-tcGuardedRhs (GuardedRhs loc g e) exp_ty = do
+tcGuardedRhs (GuardedRhs loc g e) exp_ty
+  = inGuardedRhsCtxt loc $ do
   g' <- checkExpType g boolTy
   e' <- tcExp e exp_ty
   return (GuardedRhs loc g' e')

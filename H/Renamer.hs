@@ -16,7 +16,7 @@ module H.Renamer where
 import H.Syntax
 import H.FreeVars
 import H.SrcLoc
-import H.SrcContext ( SrcContext(..), MonadContext(..) )
+import H.SrcContext
 import H.Phase
 import H.Pretty
 import H.Message
@@ -104,7 +104,7 @@ instance RenameBndr OccName Name where
 
 instance RenameBndr (Decl Pr) (Decl Rn) where
   renameBndr (TypeDecl loc name typarams htype) f
-    = inContextAt loc (text "In type declaration" <+> ppQuot name) $ do
+    = inTypeDeclCtxt loc (ppQuot name) $ do
         inContext (text "In type header") $ checkDupTyParams typarams
         renameBndr name $ \name' -> do
           (typarams', htype') <- renameBndr typarams $ \typarams' -> do
@@ -112,7 +112,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
                                    return (typarams',htype')
           popContext $ f (TypeDecl loc name' typarams' htype')
   renameBndr (DataDecl loc occ typarams constrs) f
-    = inContextAt loc (text "In data declaration" <+> ppQuot occ) $ do
+    = inDataDeclCtxt loc (ppQuot occ) $ do
         inContext (text "In data header") $ checkDupTyParams typarams
         renameBndr occ $ \name -> do
           (typarams',constrs',cmap)
@@ -124,7 +124,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
   renameBndr (ValDecl bind) f =
     renameBndr bind $ f . ValDecl
   renameBndr (GoalDecl loc gtype gname NoPostTc prop) f
-    = inContextAt loc (text "In" <+> pretty gtype <+> ppQuot gname) $
+    = inGoalDeclCtxt loc gtype (ppQuot gname) $
         renameBndr gname $ \gname' -> do
           prop' <- inPropContext $ rename prop
           popContext $ f (GoalDecl loc gtype gname' NoPostTc prop') 
@@ -147,14 +147,14 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
 
 instance RenameBndr (Bind Pr) (Bind Rn) where
   renameBndr (FunBind _rec occ sig NoPostTc matches) f
-    = inContext (text "In the definition of" <+> ppQuot occ) $ do
+    = inFunBindCtxt (ppQuot occ) $ do
         sig' <- rename sig
         renameBndr occ $ \name -> do
           matches' <- rnList matches
           let rec' = checkFunBindRec name matches'
           popContext $ f (FunBind rec' name sig' NoPostTc matches')
   renameBndr (PatBind (Just loc) pat rhs) f
-    = inContextAt loc (text "In pattern binding" <+> ppQuot pat) $ do
+    = inPatBindCtxt loc (ppQuot pat) $ do
         renameBndr pat $ \pat' -> do
           rhs' <- rename rhs
           popContext $ f (PatBind (Just loc) pat' rhs')
@@ -167,14 +167,14 @@ instance Rename TypeSig where
 
 instance Rename Match where
   rename (Match (Just loc) pats rhs)
-    = inContextAt loc (text "In function equation") $ do
+    = inFunMatchCtxt loc $ do
         checkDupPatBndrs pats
         renameBndr pats $ \pats' -> liftM (Match (Just loc) pats') $ rename rhs
 
 
 rnConDecl :: ConDecl Pr -> RnM (ConDecl Rn,(OccName,Name))
 rnConDecl (ConDeclIn loc occ tys)
-  = inContextAt loc (text "In data constructor declaration" <+> ppQuot occ) $ do
+  = inConDeclCtxt loc (ppQuot occ) $ do
       let doms = map type2dom tys
       doms' <- renameBndr doms return
       renameBndr occ $ \name ->
@@ -194,18 +194,18 @@ instance Rename Exp where
     = liftM2 (flip InfixApp (Op op)) (rename e1) (rename e2)
   rename (App f n) = liftM2 App (rename f) (rename n)
   rename (Lam (Just loc) pats body)
-    = inContextAt loc (text "In lambda abstraction") $
+    = inLambdaAbsCtxt loc $
         renameBndr pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
   rename (Ite g t e)
-    = inContext (text "In 'if-then-else' expression") $
+    = inIteExprCtxt g $
         liftM3 Ite (rename g) (rename t) (rename e)
   rename (If grhss)
-    = inContext (text "In 'if' expression") $
+    = inIfExprCtxt $
         liftM If $ rename grhss
   rename (Case e NoPostTc alts)
-    = inContext (text "In case expression") $
+    = inCaseExprCtxt e $
         liftM2 (flip Case NoPostTc) (rename e) (rnList alts)
   rename (Tuple NoPostTc l) = liftM (Tuple NoPostTc) $ mapM rename l
   rename (List NoPostTc l) = liftM (List NoPostTc) $ mapM rename l
@@ -216,11 +216,11 @@ instance Rename Exp where
   rename (EnumFromThenTo e1 e2 e3)
     = liftM3 EnumFromThenTo (rename e1) (rename e2) (rename e3)
   rename (Coerc loc e polyty)
-    = inContextAt loc (text "Type coercion") $
+    = inCoercExprCtxt loc $
         liftM2 (Coerc loc) (rename e) (rename polyty)
   rename (QP qt pats body) = do
     checkQuantifierInPropContext qt
-    inContext (text "In" <+> quotes (pretty qt) <+> text "formula") $ do
+    inQPExprCtxt qt pats $ do
       checkDupPatBndrs pats
       renameBndr pats $ \pats' ->
         liftM (QP qt pats') $ rename body
@@ -264,12 +264,12 @@ instance Rename GuardedRhss where
 
 instance Rename GuardedRhs where
   rename (GuardedRhs loc guard exp)
-    = inContextAt loc (text "In guarded alternative") $
+    = inGuardedRhsCtxt loc $
         liftM2 (GuardedRhs loc) (rename guard) (rename exp)
 
 instance Rename Alt where
   rename (Alt loc pat rhs)
-    = inContextAt loc (text "In the case alternative" <+> ppQuot pat) $ do
+    = inCaseAltCtxt loc pat $ do
         checkDupPatBndrs [pat]
         renameBndr pat $ \pat' -> liftM (Alt loc pat') $ rename rhs
 
@@ -295,8 +295,8 @@ instance Rename PolyType where
     -- special case for error messages
   rename (ForallTy [] ty)
     = liftM (ForallTy []) $ rename ty
-  rename (ForallTy typarams ty)
-    = inContext (text "In 'forall' type") $ do
+  rename prpty@(ForallTy typarams ty)
+    = inForallTypeCtxt prpty $ do
         checkDupTyParams typarams
         renameBndr typarams $ \typarams' ->
           liftM (ForallTy typarams') $ rename ty
