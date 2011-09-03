@@ -185,8 +185,8 @@ finExp (Lam mb_loc pats body)
   = lambdaAbsCtxt $ finPats pats $ \pats' ->
                       liftM (Lam mb_loc pats') $ finExp body
   where lambdaAbsCtxt = case mb_loc of
-                            Nothing  -> id
-                            Just loc -> inLambdaAbsCtxt loc
+                            Nothing  -> inContext (text "In lambda abstraction: \\" <+> (myFsep $ map pretty pats) <+> text "-> ...")
+                            Just loc -> inLambdaAbsCtxt loc pats
 finExp (Let bs body) = finBinds bs $ \bs' -> liftM (Let bs') $ finExp body
 finExp (TyLam tvs expr) = liftM (TyLam tvs) $ finExp expr
 finExp (Ite g t e) = inIteExprCtxt g $

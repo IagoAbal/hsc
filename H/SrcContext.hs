@@ -55,8 +55,8 @@ inFunMatchCtxt loc = inContextAt loc (text "In function equation")
 inGoalDeclCtxt :: MonadContext m => SrcLoc -> GoalType -> Doc -> m a -> m a
 inGoalDeclCtxt loc gtype pp_name = inContextAt loc (text "In" <+> pretty gtype <+> pp_name)
 
-inLambdaAbsCtxt :: MonadContext m => SrcLoc -> m a -> m a
-inLambdaAbsCtxt loc = inContextAt loc (text "In lambda abstraction")
+inLambdaAbsCtxt :: (MonadContext m, PrettyNames p) => SrcLoc -> [Pat p] -> m a -> m a
+inLambdaAbsCtxt loc pats = inContextAt loc (text "In lambda abstraction: \\" <+> (myFsep $ map pretty pats) <+> text "-> ...")
 
 inCaseAltCtxt :: (MonadContext m, PrettyNames p) => SrcLoc -> Pat p -> m a -> m a
 inCaseAltCtxt loc pat = inContextAt loc (text "In the case alternative" <+> ppQuot pat)

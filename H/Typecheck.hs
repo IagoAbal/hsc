@@ -404,14 +404,14 @@ tcExp (App fun arg) exp_ty = do
   return (App fun' arg')
 --   Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
 tcExp (Lam (Just loc) pats body) (Check exp_ty)
-  = inLambdaAbsCtxt loc $ do
+  = inLambdaAbsCtxt loc pats $ do
   (pats',pats_env,resty) <- checkEq pats exp_ty
   body' <- extendVarEnv pats_env $
              checkExpType body resty
   return (Lam (Just loc) pats' body')
   where n_pats = length pats
 tcExp (Lam (Just loc) pats body) (Infer ref)
-  = inLambdaAbsCtxt loc $ do
+  = inLambdaAbsCtxt loc pats $ do
   (pats',pats_tys,pats_env) <- inferPats pats
   (body',body_ty) <- extendVarEnv pats_env $
                        inferExpType body

@@ -194,7 +194,7 @@ instance Rename Exp where
     = liftM2 (flip InfixApp (Op op)) (rename e1) (rename e2)
   rename (App f n) = liftM2 App (rename f) (rename n)
   rename (Lam (Just loc) pats body)
-    = inLambdaAbsCtxt loc $
+    = inLambdaAbsCtxt loc pats $
         renameBndr pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
