@@ -10,7 +10,8 @@ import H.Pretty
 import H.Phase
 import H.Prop
 import H.FreeVars
-import H.Subst1 ( transformPred, subst_exp, subst_type )
+import H.Subst1 ( subst_exp, subst_type )
+import H.TransformPred
 
 import qualified Util.Set as Set
 
@@ -191,7 +192,7 @@ instFunTy (Dom (Just p) _ _,rang) e
   | otherwise = do
       when (not $ matchableWith e p) $
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty p)
-      transformPred f rang
+      tpType f rang
   where f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let [PatBind Nothing p (Rhs (UnGuarded e) [])] prop
 
@@ -332,7 +333,7 @@ it is an identifier starting with an underscore.
 letType :: [Bind Tc] -> Type Tc -> TcM (Type Tc)
 letType binds ty
   | [] <- binds' = return ty
-  | otherwise    = transformPred f ty
+  | otherwise    = tpType f ty
   where binds' = map unLocBind $ reverse $ filter_binds $ reverse binds
         unLocBind (PatBind mb_loc pat rhs) = PatBind Nothing pat rhs
         unLocBind (FunBind rec name sig ptctyps matches)
