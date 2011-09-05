@@ -58,6 +58,9 @@ mkSysName = Name SystemNm
 class Named a where
   nameOf :: a -> Name
 
+occNameOf :: Named a => a -> OccName
+occNameOf = nameOcc . nameOf
+
 -- ** Fresh names
 
 newName :: MonadUnique m => NameSpace -> String -> m Name
