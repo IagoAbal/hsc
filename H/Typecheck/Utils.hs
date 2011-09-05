@@ -8,6 +8,7 @@ import H.Typecheck.Zonk
 import H.Syntax
 import H.Pretty
 import H.Phase
+import H.Prop
 import H.FreeVars
 import H.Subst1 ( transformPred, subst_exp, subst_type )
 
@@ -344,3 +345,14 @@ letType binds ty
           | otherwise                         = rev_binds
         f prop | bsBinds binds' `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let binds' prop
+
+instPredTyProp :: (IsPostTc p, MonadUnique m) =>
+                    Exp p -> Pat p -> Type p -> Maybe (Prop p) -> m (Maybe (Prop p))
+instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
+instPredTyProp  e pat  ty mb_prop
+ | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop
+ | otherwise = return $ Just $ Case e (PostTc boolTy)
+                                [Alt Nothing pat (rhsExp prop)
+                                ,Alt Nothing (WildPat (PostTc ty)) (rhsExp _False_)
+                                ]
+ where prop = maybe _True_ id mb_prop
