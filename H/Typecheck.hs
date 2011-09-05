@@ -15,7 +15,6 @@ import H.Monad
 import H.Message
 import H.FreeVars
 import H.Subst1 ( transformPred )
-import H.SrcLoc
 import H.SrcContext
 
 import qualified Util.Set as Set
@@ -27,10 +26,8 @@ import Sorted
 import Data.IORef
 import Data.Set ( Set )
 import qualified Data.Set as Set
-import qualified Data.Map as Map
 import Control.Monad
 import Control.Monad.Error
-import Control.Monad.IO.Class
 
 
 tcModule :: UniqSupply -> Module Rn -> IO (Either Message (Module Tc),UniqSupply)
@@ -953,11 +950,3 @@ instSigma exp s1 (Infer ref)  = do
 (~>?) :: Type Tc -> Expected (Type Tc) -> TcM ()
 t1 ~>? (Check t2)  = t1 ~> t2
 t1 ~>? (Infer ref) = liftIO $ writeIORef ref t1
-
--- instPatSigma :: PolyType Tc -> Expected (Type Tc) -> TcM ()
--- instPatSigma s1 (Check t2) = do
---   (t1,_) <- instantiate s1
---   t1 ~> t2
--- instPatSigma s1 (Infer ref)  = do
---   (t1,_) <- instantiate s1
---   liftIO $ writeIORef ref t1
