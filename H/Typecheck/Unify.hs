@@ -105,6 +105,11 @@ unifyKappa (ListTy ty1) (ListTy ty2) = unifyKappa ty1 ty2
 unifyKappa (TupleTy ds1) (TupleTy ds2)
   | length ds1 == length ds2 = zipWithM_ (unify `on` dom2type) ds1 ds2
 
+unifyKappa ty1@(PredTy pat1 _ _) ty2@(PredTy pat2 _ _)
+  | not (matchablePats pat1 pat2)
+  = throwError $ text "Cannot unify" <+> pretty ty1 <+> text "with" <+> pretty ty2
+                $$ text "because patterns" <+> ppQuot pat1 <+> text "and" <+> ppQuot pat2
+                    <+> text "are incompatible"
   -- See [Unifying predicate types]
 unifyKappa (PredTy _ ty1 _) ty2 = unifyKappa ty1 ty2
 unifyKappa ty1 (PredTy _ ty2 _) = unifyKappa ty1 ty2
