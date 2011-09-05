@@ -161,3 +161,9 @@ pat2exp (ParenPat p) = Paren <$> pat2exp p
 pat2exp (WildPat _)     = Nothing
 pat2exp (AsPat _ p)  = pat2exp p
 pat2exp (SigPat p ty) = pat2exp p
+
+
+expandSyn :: (IsPostTc p, MonadUnique m) => Type p -> m (Maybe (Type p))
+expandSyn (ConTy (SynTyCon _ ps rhs) args)
+  = liftM Just $ subst_type [] (zip ps args) rhs
+expandSyn _other = return  Nothing

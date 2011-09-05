@@ -161,12 +161,6 @@ skolemise (ForallTy tvs ty) = do
   ty' <- substType [] (zip tvs tys_sk) ty
   return (tvs_sk,ty')
 
-expandSyn :: Type Tc -> TcM (Maybe (Type Tc))
-expandSyn (ConTy (SynTyCon _ ps rhs) args)
-  = liftM Just $ substType [] (zip ps args) rhs
-expandSyn _other = return  Nothing
-
-
 readMetaTyVar :: MetaTyVar -> TcM (Maybe (Type Tc))
 readMetaTyVar = liftIO . readIORef . mtvRef
 

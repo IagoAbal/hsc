@@ -5,6 +5,7 @@ module H.Typecheck.Unify where
 import H.Typecheck.TcM
 import H.Typecheck.MetaTyVar
 import H.Typecheck.Zonk
+import H.Typecheck.Utils
 
 import H.Syntax
 import H.Phase
