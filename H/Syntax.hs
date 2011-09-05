@@ -178,7 +178,7 @@ type PostTcTyParams p = PostTc p [TyVar]
 
 -- * IsPostTc
 
-class (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p, GoalNAME p ~ Name) => IsPostTc p where
+class (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p, GoalNAME p ~ Name, PrettyNames p) => IsPostTc p where
 
 instance IsPostTc Tc where
 instance IsPostTc Ti where
