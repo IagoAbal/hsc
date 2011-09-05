@@ -396,6 +396,25 @@ tyLam :: (Ge p Tc, TyVAR p ~ TyVar) => [TyVar] -> Exp p -> Exp p
 tyLam [] exp  = exp
 tyLam tvs exp = TyLam tvs exp
 
+isAtomicExp :: Exp p -> Bool
+isAtomicExp (Var _)   = True
+isAtomicExp (Con _)   = True
+isAtomicExp (Op _)    = True
+isAtomicExp (Lit _)   = True
+isAtomicExp ElseGuard = True
+isAtomicExp (Tuple _ _) = True
+isAtomicExp (List _ _) = True
+isAtomicExp (Paren _) = True
+isAtomicExp (LeftSection _ _) = True
+isAtomicExp (RightSection _ _) = True
+isAtomicExp (EnumFromTo _ _) = True
+isAtomicExp (EnumFromThenTo _ _ _) = True
+isAtomicExp _other    = False
+
+ppParenExp :: PrettyNames p => Exp p -> Doc
+ppParenExp e | isAtomicExp e = pretty e
+             | otherwise     = parens $ pretty e
+
 instance PrettyNames p => Pretty (Exp p) where
   pretty (Lit lit) = pretty lit
   pretty ElseGuard = text "else"
@@ -404,8 +423,8 @@ instance PrettyNames p => Pretty (Exp p) where
   pretty (InfixApp a opE b)
     = case opE of
           Op op  -> myFsep [pretty a, pretty op, pretty b]
-          _other -> myFsep [pretty opE, pretty a, pretty b]
-  pretty (App a b) = myFsep [pretty a, pretty b]
+          _other -> myFsep [pretty opE, ppParenExp a, ppParenExp b]
+  pretty (App a b) = myFsep [pretty a, ppParenExp b]
   pretty (Lam _loc patList body) = myFsep $
     char '\\' : map pretty patList ++ [text "->", pretty body]
   pretty (TyApp e tys) = myFsep $ pretty e : map (\ty -> char '@' <> ppAType ty) tys
