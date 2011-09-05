@@ -156,6 +156,7 @@ class (Pretty (VAR p), PrettyBndr (VAR p), Pretty (TyVAR p), PrettyBndr (TyVAR p
 instance PrettyNames Pr where
 instance PrettyNames Rn where
 instance PrettyNames Tc where
+instance PrettyNames Ti where
 
 -- ** Parameters
 
