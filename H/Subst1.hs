@@ -149,7 +149,6 @@ transformPred f = go
           (p',p_s) <- go_pat p
           return (SigPat p' ty',p_s)
 
-
 mapAccumM :: Monad m => (acc -> x -> m (y,acc)) -> acc -> [x] -> m ([y], acc)
 mapAccumM _ acc []     = return ([],acc)
 mapAccumM f acc (x:xs) = do (y,acc') <- f acc x
@@ -321,8 +320,9 @@ substPats :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> [Pat
 substPats = mapAccumM substPat
 
 substPat :: (MonadUnique m, VAR p ~ Var p, TyVAR p ~ TyVar) => Subst1 p -> Pat p -> m (Pat p,Subst1 p)
-substPat s (VarPat var) = do (var',s') <- substBndr s var
-                             return (VarPat var',s')
+substPat s (VarPat var) = do
+  (var',s') <- substBndr s var
+  return (VarPat var',s')
 substPat s p@(LitPat _) = return (p,s)
 substPat s (InfixPat p1 con ptctys p2)
   = do ([p1',p2'],s') <- substPats s [p1,p2]
