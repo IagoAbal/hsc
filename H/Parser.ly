@@ -466,7 +466,7 @@ Case alternatives
 > | alt       { [$1] }
 
 > alt :: { Alt Pr }
-> : srcloc pat altrhs { Alt $1 $2 (Rhs $3 []) }
+> : srcloc pat altrhs { Alt (Just $1) $2 (Rhs $3 []) }
 
 > altrhs :: { GRhs Pr }
 > : '->' exp      { UnGuarded $2 }

@@ -222,9 +222,9 @@ finAlts :: [Alt Tc] -> TiM [Alt Ti]
 finAlts = mapM finAlt
 
 finAlt :: Alt Tc -> TiM (Alt Ti)
-finAlt (Alt loc pat rhs)
+finAlt (Alt (Just loc) pat rhs)
   = inCaseAltCtxt loc pat $
-      finPat pat $ \pat'-> liftM (Alt loc pat') $ finRhs rhs
+      finPat pat $ \pat'-> liftM (Alt (Just loc) pat') $ finRhs rhs
 
 finRhs :: Rhs Tc -> TiM (Rhs Ti)
 finRhs (Rhs grhs whr)

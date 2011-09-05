@@ -554,12 +554,12 @@ checkAlt alt scrut_ty ty = tcAlt alt scrut_ty (Check ty)
 
 -- data Alt p = Alt SrcLoc (Pat p) (Rhs p)
 tcAlt :: Alt Rn -> Type Tc -> Expected (Type Tc) -> TcM (Alt Tc)
-tcAlt (Alt loc pat rhs) scrut_ty exp_ty
+tcAlt (Alt (Just loc) pat rhs) scrut_ty exp_ty
   = inCaseAltCtxt loc pat $ do
   (pat',pat_env) <- checkPat pat scrut_ty
   rhs' <- extendVarEnv pat_env $
             tcRhs rhs exp_ty
-  return (Alt loc pat' rhs')
+  return (Alt (Just loc) pat' rhs')
   
 
 inferRhs :: Rhs Rn -> TcM (Rhs Tc,Type Tc)

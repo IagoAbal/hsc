@@ -541,7 +541,7 @@ data Pat p where
   SigPat :: Pat p -> Type p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
-data Alt p = Alt SrcLoc (Pat p) (Rhs p)
+data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
 
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]

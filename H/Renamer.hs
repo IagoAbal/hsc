@@ -268,10 +268,10 @@ instance Rename GuardedRhs where
         liftM2 (GuardedRhs loc) (rename guard) (rename exp)
 
 instance Rename Alt where
-  rename (Alt loc pat rhs)
+  rename (Alt (Just loc) pat rhs)
     = inCaseAltCtxt loc pat $ do
         checkDupPatBndrs [pat]
-        renameBndr pat $ \pat' -> liftM (Alt loc pat') $ rename rhs
+        renameBndr pat $ \pat' -> liftM (Alt (Just loc) pat') $ rename rhs
 
 
 instance RenameBndr (Pat Pr) (Pat Rn) where
