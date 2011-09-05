@@ -474,6 +474,9 @@ data Else p where
   Else   :: Ge p Rn => SrcLoc -> Exp p -> Else p
   NoElse :: Ge p Rn => Else p
 
+rhsExp :: Exp p -> Rhs p
+rhsExp e = Rhs (UnGuarded e) []
+
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
 First, a set of guards has to be exhaustive, which may cause the
@@ -988,6 +991,9 @@ isSynTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type p -> Bool
 isSynTy (ConTy SynTyCon{} _) = True
 isSynTy _other               = False
 
+isMetaTy :: Type Tc -> Bool
+isMetaTy (MetaTy _) = True
+isMetaTy _other     = False
 
 ppDomType :: PrettyNames p => Dom p -> Doc
 ppDomType = prettyPrec prec_btype
@@ -1165,6 +1171,9 @@ instance Eq MetaTyVar where
 
 instance Ord MetaTyVar where
   compare = compare `on` mtvName
+
+instance Named MetaTyVar where
+  nameOf = mtvName
 
 instance Sorted MetaTyVar Kind where
   sortOf = mtvKind
