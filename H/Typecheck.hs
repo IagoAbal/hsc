@@ -13,18 +13,13 @@ import H.Phase
 import H.Pretty
 import H.Monad
 import H.Message
-import H.FreeVars
-import H.Subst1 ( transformPred )
 import H.SrcContext
-
-import qualified Util.Set as Set
 
 import Name
 import Unique
 import Sorted
 
 import Data.IORef
-import Data.Set ( Set )
 import qualified Data.Set as Set
 import Control.Monad
 import Control.Monad.Error
@@ -343,23 +338,6 @@ tcMatch (Match (Just loc) pats rhs) (Infer ref)
   liftIO $ writeIORef ref (funTy doms rhs_ty)
   return (Match (Just loc) pats' rhs')
 
--- This could be more fine tuned but it is OK
-letType :: [Bind Tc] -> Type Tc -> TcM (Type Tc)
-letType binds ty
-  | [] <- binds' = return ty
-  | otherwise    = transformPred f ty
-  where binds' = map unLocBind $ reverse $ filter_binds $ reverse binds
-        unLocBind (PatBind mb_loc pat rhs) = PatBind Nothing pat rhs
-        unLocBind (FunBind rec name sig ptctyps matches)
-          = FunBind rec name sig ptctyps (map unLocMatch matches)
-        unLocMatch (Match mb_loc pats rhs) = Match Nothing pats rhs
-        ty_fv = fvType ty
-        filter_binds []                   = []
-        filter_binds rev_binds@(b:bs)
-          | bsBind b `Set.disjointWith` ty_fv = filter_binds bs
-          | otherwise                         = rev_binds
-        f prop | bsBinds binds' `Set.disjointWith` fvExp prop = Nothing
-               | otherwise = Just $ Let binds' prop
 
 checkExpType :: Exp Rn -> Type Tc -> TcM (Exp Tc)
 checkExpType exp ty = tcExp exp (Check ty)
@@ -742,155 +720,6 @@ checkEq (pat:pats) exp_ty  = do
   return (pat':pats',pat_env++pats_env,resty)
 
 
--- * Instantiation of function types
-
-instFunTy :: (Dom Tc,Range Tc) -> Exp Tc -> TcM (Range Tc)
-  -- non-dependent arrow
-instFunTy (Dom Nothing _ Nothing,rang) _ = return rang  
-instFunTy (Dom (Just p) _ _,rang) _
-  | Set.null (bsPat p) = return rang
-  -- dependent arrow
-instFunTy (Dom (Just p) _ _,rang) e
-  | Just s <- rangeSubst e p rang = substType s [] rang
-  | otherwise = do
-      when (not $ matchableWith e p) $
-        throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty p)
-      transformPred f rang
-  where f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
-               | otherwise = Just $ Let [PatBind Nothing p (Rhs (UnGuarded e) [])] prop
-
-rangeSubst :: Exp Tc
-              -> Pat Tc   -- ^ domain pattern
-              -> Range Tc
-              -> Maybe [(Var Tc,Exp Tc)]    -- ^ substitution for range  
-rangeSubst e pat_dom rang = traceDoc (text "rangeSubst" <+> pretty e <+> pretty pat_dom) $ get_subst e pat_dom
-  where rang_fv = fvType rang
-        get_subst :: Exp Tc -> Pat Tc -> Maybe [(Var Tc,Exp Tc)]
-        get_subst _ (WildPat _) = Just []
-        get_subst e (VarPat x) | not (x `Set.member` rang_fv) = Just []
-                               | otherwise = Just [(x,e)]
-        get_subst e (ConPat con' _ ps)
-          | (f,args) <- splitApp e
-          , Just con <- get_con f
-          , con == con' = liftM concat $ zipWithM get_subst args ps
-          where get_con (Con con) = Just con
-                get_con (TyApp e _) = get_con e
-                get_con (Coerc _ e _) = get_con e
-                get_con (Paren e) = get_con e
-                get_con _other    = Nothing
-        get_subst (InfixApp e1 (Op (ConOp bcon)) e2) (InfixPat p1 bcon' _ p2)
-          | traceDoc (text "rangeSubst Infix") $ bcon == bcon' = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
-        get_subst (InfixApp e1 (TyApp (Op (ConOp bcon)) _) e2) (InfixPat p1 bcon' _ p2)
-          | traceDoc (text "rangeSubst Infix") $ bcon == bcon' = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
-        get_subst (Tuple _ es) (TuplePat ps _)
-          | length es == length ps = liftM concat $ zipWithM get_subst es ps
-        get_subst (List _ es) (ListPat ps _)
-          | length es == length ps = liftM concat $ zipWithM get_subst es ps
-        get_subst e (SigPat p _) = get_subst e p
-        get_subst e (AsPat x p) = liftM ((x,e):) $ get_subst e p
-        get_subst (Paren e) p    = get_subst e p
-        get_subst e (ParenPat p) = get_subst e p
-        get_subst _ _ = traceDoc (text "rangeSubst Nothing") $  Nothing
-
-instFunTyWithPat :: (Dom Tc,Range Tc) -> Pat Tc -> TcM (Range Tc)
-  -- non-dependent arrow
-instFunTyWithPat (Dom Nothing _ Nothing,rang) _lpat = return rang
-  -- dependent arrow
-instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
-  when (not $ matchablePats lpat dpat) $
-    throwError (text "Pattern" <+> pretty lpat <+> text "is not compatible with the expected pattern" <+> pretty dpat)
-  (s,bs) <- patRangeSubst lpat dpat rang
-  rang' <- substType s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
-  traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
-
-patRangeSubst :: Pat Tc   -- ^ argument pattern
-              -> Pat Tc   -- ^ domain pattern
-              -> Range Tc
-              -> TcM ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)])    -- ^ substitution for range, let-bindings
-patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty pat_lam <+> pretty pat_dom) $ get_subst ([],[]) pat_lam pat_dom
-  where fvs = fvType rang `Set.union` fvPat pat_dom
-        get_subst :: ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)]) -> Pat Tc -> Pat Tc -> TcM ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)])
-          -- dpat bounds no variable
-        get_subst (s,bs) _lpat dpat  | Set.null (bsPat dpat) = return (s,bs)
-          -- no variable bound by dpat is free in rang
-        get_subst (s,bs) _lpat dpat  | bsPat dpat `Set.disjointWith` fvs = return (s,bs)
-        get_subst (s,bs) lpat  (VarPat x) | Just e <- pat2exp lpat = return ((x,e):s,bs)
-        get_subst (s,bs) (VarPat y) dpat = do
-          yexp' <- substExp s [] (Var y)
-          return (s,bs++[(dpat,yexp')])
-        get_subst (s,bs) (InfixPat q1 bcon _ q2) (InfixPat p1 bcon' _ p2)
-          | bcon == bcon' = do (s',bs') <- get_subst (s,bs) q1 p1
-                               get_subst (s',bs') q2 p2
-        get_subst (s,bs) (ConPat con _ qs) (ConPat con' _ ps)
-          | con == con' = fold_get_subst (s,bs) qs ps
-        get_subst acc    (TuplePat qs _) (TuplePat ps _)
-          = fold_get_subst acc qs ps
-        get_subst (s,bs) (ListPat qs _) (ListPat ps _)
-          = fold_get_subst (s,bs) qs ps
-        get_subst acc (ListPat [] _) (ConPat _ _ []) = return acc
-        get_subst acc (ConPat _ _ []) (ListPat [] _) = return acc
-        get_subst acc (ListPat (q:qs) ptcty) (InfixPat p1 _ _ p2) = do
-          acc' <- get_subst acc q p1
-          get_subst acc' (ListPat qs ptcty) p2
-        get_subst acc (InfixPat q1 _ _ q2) (ListPat (p:ps) ptcty) = do
-          acc' <- get_subst acc q1 p
-          get_subst acc' q2 (ListPat ps ptcty)
-        get_subst (s,bs) q           (AsPat x p)
-          | not (Set.member x fvs) = get_subst (s,bs) q p
-        get_subst (s,bs) (AsPat y q) (AsPat x p) = get_subst ((x,Var y):s,bs) q p
-        get_subst (s,bs) q           (AsPat x p)
-          | Just e <- pat2exp q =  get_subst ((x,e):s,bs) q p
-        get_subst acc (AsPat y q) p           = get_subst acc q p
-        get_subst acc (SigPat q _) p            = get_subst acc q p
-        get_subst acc q            (SigPat p _) = get_subst acc q p
-        get_subst acc (ParenPat q) p            = get_subst acc q p
-        get_subst acc q            (ParenPat p) = get_subst acc q p
-          -- just check preconditions... change it by an earlier assert
-        get_subst _acc lpat dpat
-         | not (matchablePats lpat dpat) = error "bug found!"
-          -- Here 'dpat' (hence, 'pat_dom') bounds some variable that is
-          -- being used in rang but such (sub-)expression is ignored by
-          -- 'pat_lam'.
-          -- See [Instantiating domains]
-        get_subst _acc lpat dpat
-          = throwError $ text "Illegal pattern for the given pattern-type: variable(s)"
-                        <+> (sep $ punctuate comma $ map ppQuot $ Set.toList $ bsPat dpat)
-                        <+> text "cannot be bound by pattern" <+> ppQuot lpat
-          -- error $ "illegal dependent type, variables X are not being matched ... " ++ prettyPrint lpat ++ " .. " ++ prettyPrint dpat
-        fold_get_subst (s,bs) qs ps = foldM (\(s1,bs1) (q,p) -> get_subst (s1,bs1) q p) (s,bs) $ zip qs ps
-
-{- Note [Instantiating domains]
-
-Suppose that the range of a function depends on a variable bound by the domain
-that is ignored by the argument pattern, as in:
-
-  foo : {(x::_):[Int]} -> {r:Int|r>x}
-  foo _ = e
-
-So, what type must we use for checking 'e'? The only choice is to
-quantify 'x' universally and check 'e' against the type {r:Int|forall x. r > x}.
-In the VC phase this will lead to the following TCC:
-  forall x. e > x
-which is not valid. In general, this situation usually lead to non-valid TCCs.
-Moreover, to make such quantification we would have to implement a more complex
-algorithm, because that cannot be done by a simply substitution.
-
-So, because the above reasons I have decided to ban this case, so it is
-considered invalid for an equation or lambda expression to ignore a variable
-bound by the domain and used to define the range.
-
-There are other situations, perhaps less intuitive, for instance
-
-  bar : {l@(_::_):[Int]} -> {r:Int|r>head l}
-  bar (x::_) = e
-
-but these examples are a bit involved, bad style... and more important, very
-easy to fix! In a real-world implementation the user may write @bar (x::_xs) = e@
-so the typechecker can perform the substitution (_xs is a valid variable),
-but the renaming phase will not complain about _xs being an unused binding because
-it is an identifier starting with an underscore.
-
--}
 
 -- * ...
 
