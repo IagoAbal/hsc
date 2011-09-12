@@ -290,6 +290,10 @@ instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (WildPat NoPostTc) f = f (WildPat NoPostTc)
   renameBndr (SigPat p t) f = do t' <- rename t
                                  renameBndr p $ f . (flip SigPat t')
+  renameBndr (AsPat x p) f
+    = renameBndr p $ \p' ->
+      renameBndr x $ \x' ->
+        f (AsPat x' p')
 
 instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
