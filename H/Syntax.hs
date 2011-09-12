@@ -1148,7 +1148,7 @@ instance Pretty BuiltinTyCon where
 data TyCon p
   = AlgTyCon {
       tyConName   :: TyName p
-    , tyConParams :: [TyVar]
+--     , tyConParams :: [TyVar]
     }
   | SynTyCon {
       tyConName   :: TyName p
@@ -1177,15 +1177,15 @@ natTyName  = BuiltinTyCon NatTyCon
 unitTyCon, boolTyCon, intTyCon, natTyCon :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => TyCon p
 unitTyCon = AlgTyCon {
               tyConName   = BuiltinTyCon UnitTyCon
-            , tyConParams = []
+--             , tyConParams = []
             }
 boolTyCon = AlgTyCon {
               tyConName   = BuiltinTyCon BoolTyCon
-            , tyConParams = []
+--             , tyConParams = []
             }
 intTyCon  = AlgTyCon {
               tyConName   = BuiltinTyCon IntTyCon
-            , tyConParams = []
+--             , tyConParams = []
             }
 natTyCon  = SynTyCon {
               tyConName   = BuiltinTyCon NatTyCon
