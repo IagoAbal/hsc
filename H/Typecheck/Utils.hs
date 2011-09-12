@@ -10,7 +10,7 @@ import H.Pretty
 import H.Phase
 import H.Prop
 import H.FreeVars
-import H.Subst1 ( subst_exp, subst_type )
+import H.Subst1 ( subst_exp, subst_type, subst_doms )
 import H.TransformPred
 
 import qualified Util.Set as Set
@@ -352,3 +352,21 @@ instPredTyProp  e pat  ty mb_prop
                                 ,Alt Nothing (WildPat (PostTc ty)) (rhsExp _False_)
                                 ]
  where prop = maybe _True_ id mb_prop
+
+
+instDoms :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> Dom p -> [Dom p] -> m [Dom p]
+instDoms  _e _dom                    [] = return []
+  -- non-dependent
+instDoms _e (Dom Nothing _ Nothing) ds = return ds
+instDoms _e (Dom (Just pat) _ _)    ds
+  | Set.null (bsPat pat) = return ds
+  -- dependent arrow
+instDoms e (Dom (Just pat) _ _)     ds
+  | Just s <- patExpSubst e pat (fvDoms ds) = subst_doms s [] ds
+  | otherwise = do
+      when (not $ matchableWith e pat) $
+        throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty pat)
+      tpDoms f ds
+  where f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
+               | otherwise = Just $ Let [PatBind Nothing pat (Rhs (UnGuarded e) [])] prop
+instDoms _e _other _ds = undefined -- impossible
