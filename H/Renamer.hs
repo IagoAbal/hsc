@@ -15,24 +15,20 @@ module H.Renamer where
 
 import H.Syntax
 import H.FreeVars
-import H.SrcLoc
 import H.SrcContext
 import H.Phase
 import H.Pretty
 import H.Message
-import qualified H.Message as Msg
 import H.Monad
 
 import Name
 import Unique
 
-import Control.Applicative
 import Control.Monad.Error
 import Control.Monad.Reader
 import Data.List
 import Data.Map ( Map )
 import qualified Data.Map as Map
-import Data.Set ( Set )
 import qualified Data.Set as Set
 
 
@@ -237,7 +233,6 @@ instance Rename Con where
 
 instance Rename Rhs where
   rename (Rhs grhs whr)
---     = undefined
     = renameBndr whr $ \whr' -> liftM (flip Rhs whr') $ rename grhs
 
 instance Rename GRhs where
@@ -263,9 +258,9 @@ instance Rename GuardedRhss where
                check (grhs':acc) rest
 
 instance Rename GuardedRhs where
-  rename (GuardedRhs loc guard exp)
+  rename (GuardedRhs loc guard expr)
     = inGuardedRhsCtxt loc $
-        liftM2 (GuardedRhs loc) (rename guard) (rename exp)
+        liftM2 (GuardedRhs loc) (rename guard) (rename expr)
 
 instance Rename Alt where
   rename (Alt (Just loc) pat rhs)
@@ -294,6 +289,7 @@ instance RenameBndr (Pat Pr) (Pat Rn) where
     = renameBndr p $ \p' ->
       renameBndr x $ \x' ->
         f (AsPat x' p')
+  renameBndr _other  _f = undefined -- impossible
 
 instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
@@ -314,6 +310,7 @@ instance Rename (Type c) where
         checkDupTyParams typarams
         renameBndr typarams $ \typarams' ->
           liftM (ForallTy typarams') $ rename ty
+  rename _other = undefined -- impossible
 
 instance RenameBndr (Dom Pr) (Dom Rn) where
   renameBndr (Dom Nothing ty Nothing) f = do
@@ -324,6 +321,7 @@ instance RenameBndr (Dom Pr) (Dom Rn) where
     renameBndr pat $ \pat' -> do
       mbProp' <- inPropContext $ rnMaybe mbProp
       f (Dom (Just pat') ty' mbProp')
+  renameBndr _other _f = undefined -- impossible
 
 instance Rename TyName where
   rename (UserTyCon occ) = liftM UserTyCon $ getName occ
