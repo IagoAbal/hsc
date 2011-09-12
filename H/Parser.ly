@@ -204,15 +204,15 @@ shift/reduce-conflict, so we don't handle this case here, but in bodyaux.
 ----------------------------------------------------------------------
 Types
 
-> type :: { Type Pr }
+> type :: { Tau Pr }
 > : btype '->' type   { mkFunTy $1 $3 }
 > | btype       { $1 }
 
-> btype :: { Type Pr }
+> btype :: { Tau Pr }
 > : btype atype     { AppTyIn $1 $2 }
 > | atype       { $1 }
 
-> atype :: { Type Pr }
+> atype :: { Tau Pr }
 > : gtycon            { ConTyIn $1 }
 > | tyvar             { VarTy $1 }
 > | '(' tuptypes ')'   { TupleTy $2 }
@@ -229,9 +229,9 @@ Types
 > |  utycon     { $1 }
 
 
-> polytype :: { PolyType Pr }
+> polytype :: { Sigma Pr }
 > : 'forall' typarams '.' type  { ForallTy $2 $4 }
-> | type                        { ForallTy [] $1 }
+> | type                        { tau2sigma $1 }
 
 
 > tuptypes :: { [Dom Pr] }
@@ -263,11 +263,11 @@ Datatype declarations
 
 -- : srcloc scontype    { ConDecl $1 (fst $2) (snd $2) }
 
-> atypes :: { [Type Pr] }
+> atypes :: { [Tau Pr] }
 > : atypes atype   { $1 ++ [$2] }
 > | {- empty -} { [] }
 
-  > scontype :: { (TyNAME Pr, [Type Pr]) }
+  > scontype :: { (TyNAME Pr, [Tau Pr]) }
   > : btype       {% do { (c,ts) <- splitTyConApp $1;
   >                       return (c,ts) } }
 
@@ -279,7 +279,7 @@ Value definitions
 > | funbind                         { $1 }
 > | srcloc pat rhs wherebinds       { PatBind (Just $1) $2 (Rhs $3 $4) }
 
-> funsig :: { (SrcLoc,NAME Pr,PolyType Pr) }
+> funsig :: { (SrcLoc,NAME Pr,Sigma Pr) }
 > : srcloc varid ':' polytype { ($1,$2,$4) }
 
 > funbind :: { Bind Pr }

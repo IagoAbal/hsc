@@ -28,6 +28,7 @@ import Control.Applicative ( pure, (<$>), (<*>), (<|>) )
 import Control.Monad ( liftM )
 import Control.Monad.IO.Class ( MonadIO(..) )
 
+import Unsafe.Coerce ( unsafeCoerce )
 
 
 -- * Variables
@@ -35,7 +36,7 @@ import Control.Monad.IO.Class ( MonadIO(..) )
   -- | A typed 'Name'
 data Var p = V {
                varName :: !Name
-             , varType :: PolyType p
+             , varType :: Sigma p
              }
 
 instance Eq (Var p) where
@@ -50,7 +51,7 @@ instance Named (Var p) where
 instance Uniquable (Var p) where
   uniqOf = uniqOf . nameOf
 
-instance Sorted (Var p) (PolyType p) where
+instance Sorted (Var p) (Sigma p) where
   sortOf = varType
 
 instance Pretty (Var p) where
@@ -93,7 +94,7 @@ instance PrettyBndr TyVar where
 
 -- ** Fresh variables
 
-newVar :: MonadUnique m => String -> PolyType p -> m (Var p)
+newVar :: MonadUnique m => String -> Sigma p -> m (Var p)
 newVar str ty = do name <- newName VarNS str
                    return $ V name ty
 
@@ -211,7 +212,7 @@ instance Pretty ModuleName where
 
 data Decl p where
   -- | type synonym 
-  TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Type p -> Decl p
+  TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Tau p -> Decl p
   -- | inductive data type
   DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
 --   -- | type signature
@@ -237,7 +238,7 @@ data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) (PostTcTyParams p) [Match p
                   -- ^ pattern binding
 
 data TypeSig p = NoTypeSig
-               | TypeSig SrcLoc (PolyType p)
+               | TypeSig SrcLoc (Sigma p)
 
 type WhereBinds p = [Bind p]
 
@@ -251,7 +252,7 @@ data IsRec p where
 
 -- | Declaration of a data constructor.
 data ConDecl p where
-  ConDeclIn :: SrcLoc -> NAME Pr -> [Type Pr] -> ConDecl Pr
+  ConDeclIn :: SrcLoc -> NAME Pr -> [Tau Pr] -> ConDecl Pr
   ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
 
 -- | Clauses of a function binding.
@@ -338,7 +339,7 @@ data Exp p where
   -- | application
   App :: Exp p -> Exp p -> Exp p
   -- | type application
-  TyApp :: Ge p Tc => Exp p -> [Type p] -> Exp p
+  TyApp :: Ge p Tc => Exp p -> [Tau p] -> Exp p
   -- | lambda expression
   Lam :: Maybe SrcLoc -> [Pat p] -> Exp p -> Exp p
   -- | local declarations with @let@
@@ -369,7 +370,7 @@ data Exp p where
   -- ^ bounded arithmetic sequence, with first two elements given
   EnumFromThenTo :: Exp p -> Exp p -> Exp p -> Exp p
   -- | explicit type coercion
-  Coerc :: SrcLoc -> Exp p -> PolyType p -> Exp p
+  Coerc :: SrcLoc -> Exp p -> Sigma p -> Exp p
   -- | logic quantifier
   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
 
@@ -388,7 +389,7 @@ splitApp = go []
   where go args (App f a) = go (a:args) f
         go args f         = (f,args)
 
-tyApp :: (Ge p Tc) => Exp p -> [Type p] -> Exp p
+tyApp :: (Ge p Tc) => Exp p -> [Tau p] -> Exp p
 tyApp exp []  = exp
 tyApp exp tys = TyApp exp tys
 
@@ -561,7 +562,7 @@ data Pat p where
   AsPat :: VAR p -> Pat p -> Pat p
   -- ^ pattern signature
     -- Add SrcLoc ?
-  SigPat :: Pat p -> Type p -> Pat p
+  SigPat :: Pat p -> Tau p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
@@ -712,6 +713,10 @@ data Lit = IntLit Integer
 instance Pretty Lit where
   pretty (IntLit i) = integer i
 
+-- instance IsPostTc p => Sorted Lit (PolyType p) where
+--   sortOf (IntLit lit) | lit >= 0  = monoTy $ natTy
+--                       | otherwise = monoTy $ intTy
+
 -- ** Data constructors
 
 data Con p = UserCon (NAME p)
@@ -727,10 +732,10 @@ data BuiltinCon = UnitCon
                 | ConsCon
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BuiltinCon (PolyType p) where
-  sortOf UnitCon  = monoTy $ unitTy
-  sortOf FalseCon = monoTy $ boolTy
-  sortOf TrueCon  = monoTy $ boolTy
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BuiltinCon (Sigma p) where
+  sortOf UnitCon  = unitTy
+  sortOf FalseCon = boolTy
+  sortOf TrueCon  = boolTy
   sortOf NilCon   = forallTy [a_tv] $ ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
           a_uniq = -1001
@@ -742,7 +747,7 @@ instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted 
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted (Con p) (PolyType p) where
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted (Con p) (Sigma p) where
   sortOf (UserCon ucon)    = sortOf ucon
   sortOf (BuiltinCon bcon) = sortOf bcon
 
@@ -775,7 +780,7 @@ data Op = BoolOp BoolOp
         | ConOp BuiltinCon
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted Op (PolyType p) where
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted Op (Sigma p) where
   sortOf (BoolOp bop) = sortOf bop
   sortOf (IntOp iop)  = sortOf iop
   sortOf (ConOp bcon) = sortOf bcon
@@ -794,12 +799,12 @@ data BoolOp = NotB
             | GeB
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BoolOp (PolyType p) where
-  sortOf NotB = monoTy $ boolTy --> boolTy
-  sortOf OrB = monoTy $ boolTy --> boolTy --> boolTy
-  sortOf AndB = monoTy $ boolTy --> boolTy --> boolTy
-  sortOf ImpB = monoTy $ boolTy --> boolTy --> boolTy
-  sortOf IffB = monoTy $ boolTy --> boolTy --> boolTy
+instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BoolOp (Sigma p) where
+  sortOf NotB = boolTy --> boolTy
+  sortOf OrB = boolTy --> boolTy --> boolTy
+  sortOf AndB = boolTy --> boolTy --> boolTy
+  sortOf ImpB = boolTy --> boolTy --> boolTy
+  sortOf IffB = boolTy --> boolTy --> boolTy
   sortOf EqB  = forallTy [a_tv] $ a --> a --> boolTy
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
           a_uniq = -2001
@@ -810,10 +815,10 @@ instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted 
           a_uniq = -2002
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
-  sortOf LtB = monoTy $ intTy --> intTy --> boolTy
-  sortOf LeB = monoTy $ intTy --> intTy --> boolTy
-  sortOf GtB = monoTy $ intTy --> intTy --> boolTy
-  sortOf GeB = monoTy $ intTy --> intTy --> boolTy
+  sortOf LtB = intTy --> intTy --> boolTy
+  sortOf LeB = intTy --> intTy --> boolTy
+  sortOf GtB = intTy --> intTy --> boolTy
+  sortOf GeB = intTy --> intTy --> boolTy
 
 notOp, orOp, andOp, impOp, iffOp :: Op
 eqOp, neqOp, ltOp, leOp, gtOp, geOp :: Op
@@ -844,24 +849,24 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
   -- since the language does not allow you to do that.. we don't allow that as well.
   -- we may provide some assumed theorems, for instance
   -- theorem div_mod = forall n m, (n/m) * m + (n%m) == n
-instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (PolyType p) where
-  sortOf NegI = monoTy $ intTy --> intTy
-  sortOf AddI = monoTy $ intTy --> intTy --> intTy
-  sortOf SubI = monoTy $ intTy --> intTy --> intTy
-  sortOf MulI = monoTy $ intTy --> intTy --> intTy
-  sortOf DivI = monoTy $ intTy
+instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (Sigma p) where
+  sortOf NegI = intTy --> intTy
+  sortOf AddI = intTy --> intTy --> intTy
+  sortOf SubI = intTy --> intTy --> intTy
+  sortOf MulI = intTy --> intTy --> intTy
+  sortOf DivI = intTy
                             --> (varDom m intTy (Var m ./=. lit_0)
                             \--> intTy)
-    where m = V m_nm (monoTy intTy)
+    where m = V m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3002
-  sortOf ModI = monoTy $ intTy
+  sortOf ModI = intTy
                             --> (varDom m intTy (Var m ./=. lit_0)
                             \--> intTy)
-    where m = V m_nm (monoTy intTy)
+    where m = V m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3102
-  sortOf ExpI = monoTy $ intTy --> intTy --> intTy
+  sortOf ExpI = intTy --> intTy --> intTy
 
 negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
 negOp = IntOp NegI
@@ -938,86 +943,106 @@ x ./. y = InfixApp x (Op divOp) y
 
 -- * Types
 
-typeOf :: Sorted a (Type p) => a -> Type p
+typeOf :: Sorted a (Type c p) => a -> Type c p
 typeOf = sortOf
 
 -- | Rank-1 polymorphic types
-data PolyType p = ForallTy (TyParams p) (Type p)
+-- data PolyType p = ForallTy (TyParams p) (Type p)
 
-forallTy :: TyParams p -> Type p -> PolyType p
+-- forallTy :: TyParams p -> Type p -> PolyType p
 forallTy = ForallTy
 
-monoTy :: Type p -> PolyType p
-monoTy = ForallTy []
+-- monoTy :: Type p -> PolyType p
+-- monoTy = ForallTy []
 
-polyTyVars :: PolyType p -> [TyVAR p]
-polyTyVars (ForallTy tvs _) = tvs
+quantifiedTyVars :: Sigma p -> [TyVAR p]
+quantifiedTyVars (ForallTy tvs _) = tvs
+quantifiedTyVars _other           = []
+
+data SIG
+data TAU
+
+type Sigma = Type SIG
+type Tau   = Type TAU
+
+tau2sigma :: Tau p -> Sigma p
+tau2sigma = unsafeCoerce
+
+tau2type :: Tau p -> Type c p
+tau2type = unsafeCoerce
+
+sigma2tau :: Sigma p -> Tau p
+sigma2tau (ForallTy _ _) = error "bug sigma2tau"  -- FIX
+sigma2tau ty             = unsafeCoerce ty
+
 
 -- | Monomorphic types
-data Type p where
+data Type c p where
   -- | type variable
-  VarTy :: TyVAR p -> Type p
+  VarTy :: TyVAR p -> Type c p
   -- | named type or type constructor
-  ConTyIn :: Lt p Tc => TyCON p -> Type p
+  ConTyIn :: Lt p Tc => TyCON p -> Type c p
   -- | application of a type constructor
-  AppTyIn :: Lt p Tc => Type p -> Type p -> Type p
-  ConTy :: Ge p Tc => TyCON p -> [Type p] -> Type p
+  AppTyIn :: Lt p Tc => Tau p -> Tau p -> Type c p
+  ConTy :: Ge p Tc => TyCON p -> [Tau p] -> Type c p
   -- | subset type
-  PredTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
+  PredTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p
   -- | function type
-  FunTy :: Dom p -> Range p -> Type p
+  FunTy :: Dom p -> Range p -> Type c p
   -- | list type
-  ListTy :: Type p -> Type p
+  ListTy :: Tau p -> Type c p
   -- | tuple type
-  TupleTy :: [Dom p] -> Type p
+  TupleTy :: [Dom p] -> Type c p
   -- | parenthised type
-  ParenTy :: Type Pr -> Type Pr 
+  ParenTy :: Tau Pr -> Type c Pr 
   -- | meta type variable
-  MetaTy :: MetaTyVar -> Type Tc
+  MetaTy :: MetaTyVar -> Type c Tc
+  -- | rank-1 polymorphic type
+  ForallTy :: TyParams p -> Tau p -> Sigma p
 
   -- NB: The @Dom Nothing ty (Just prop)@ is pointless
 data Dom p = Dom {
                domMbPat  :: Maybe (Pat p)
-             , domType   :: Type p
+             , domType   :: Tau p
              , domMbProp :: Maybe (Prop p)
              }
 
-dom2type :: Ge p Tc => Dom p -> Type p
+dom2type :: Ge p Tc => Dom p -> Type c p
 dom2type (Dom mbPat ty mbProp) = predTy pat ty mbProp
   where pat = maybe (WildPat (PostTc ty)) id mbPat
 
-type Range = Type
+type Range = Tau
 
-type PostTcType p = PostTc p (Type p)
-type PostTcTypes p = PostTc p [Type p]
+type PostTcType p = PostTc p (Tau p)
+type PostTcTypes p = PostTc p [Tau p]
 
   -- (args,result)
-splitFunTy :: Type p -> ([Dom p],Type p)
+splitFunTy :: Tau p -> ([Dom p],Tau p)
 splitFunTy (FunTy a t) = (a:args,res)
   where (args,res) = splitFunTy t
 splitFunTy ty = ([],ty)
 
-funTyArity :: Type p -> Int
+funTyArity :: Tau p -> Int
 funTyArity ty = length args
   where (args,res) = splitFunTy ty
 
 -- | Removes outermost predicate-types
-mu_0 :: Type p -> Type p
+mu_0 :: Tau p -> Tau p
 mu_0 (PredTy _ ty _) = mu_0 ty
 mu_0 ty              = ty
 
-isSynTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type p -> Bool
+isSynTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type c p -> Bool
 isSynTy (ConTy SynTyCon{} _) = True
 isSynTy _other               = False
 
-isMetaTy :: Type Tc -> Bool
+isMetaTy :: Type c Tc -> Bool
 isMetaTy (MetaTy _) = True
 isMetaTy _other     = False
 
 ppDomType :: PrettyNames p => Dom p -> Doc
 ppDomType = prettyPrec prec_btype
 
-ppAType :: PrettyNames p => Type p -> Doc
+ppAType :: PrettyNames p => Type c p -> Doc
 ppAType = prettyPrec prec_atype
 
 -- precedences for types
@@ -1026,13 +1051,13 @@ prec_btype = 1  -- left argument of ->,
     -- or either argument of an infix data constructor
 prec_atype = 2  -- argument of type or data constructor, or of a class
 
-instance PrettyNames p => Pretty (PolyType p) where
-  pretty (ForallTy [] ty)
-    = pretty ty
-  pretty (ForallTy typarams ty)
-    = myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
+-- instance PrettyNames p => Pretty (Sigma p) where
+--   pretty (ForallTy [] ty)
+--     = pretty ty
+--   pretty (ForallTy typarams ty)
+--     = myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
 
-instance PrettyNames p => Pretty (Type p) where
+instance PrettyNames p => Pretty (Type c p) where
   prettyPrec _ (PredTy (VarPat var) ty mb_prop)
     = braces $ mySep ([pretty var, char ':', pretty ty] ++ pp_prop)
     where pp_prop = case mb_prop of
@@ -1056,6 +1081,8 @@ instance PrettyNames p => Pretty (Type p) where
   prettyPrec _ (ConTyIn tycon) = pretty tycon
   prettyPrec _ (ParenTy ty) = pretty ty
   prettyPrec _ (MetaTy mtv) = pretty mtv
+  prettyPrec _ (ForallTy typarams ty)
+    = myFsep [text "forall", mySep $ map pretty typarams, char '.', pretty ty]
 
 instance PrettyNames p => Pretty (Dom p) where
   prettyPrec p (Dom Nothing ty Nothing) = prettyPrec p ty
@@ -1126,7 +1153,7 @@ data TyCon p
   | SynTyCon {
       tyConName   :: TyName p
     , tyConParams :: [TyVar]
-    , synTyConRhs :: Type p
+    , synTyConRhs :: Tau p
     }
 
 instance Eq (TyName p) => Eq (TyCon p) where
@@ -1165,7 +1192,7 @@ natTyCon  = SynTyCon {
             , tyConParams = []
             , synTyConRhs = predTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
             }
-  where n = V n_nm (monoTy intTy)
+  where n = V n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
         n_uniq = -4001
 
@@ -1182,7 +1209,7 @@ data MetaTyVar = MetaTyV {
                     -- better pretty-printing.
                    mtvName :: !Name
                  , mtvKind :: !Kind
-                 , mtvRef  :: IORef (Maybe (Type Tc))
+                 , mtvRef  :: IORef (Maybe (Tau Tc))
                  }
 
 instance Eq MetaTyVar where
@@ -1200,7 +1227,7 @@ instance Sorted MetaTyVar Kind where
 instance Pretty MetaTyVar where
   pretty (MetaTyV name _ _) = char '?' <> pretty name
 
-instTyVar :: (MonadUnique m, MonadIO m) => TyVar -> m (Type Tc)
+instTyVar :: (MonadUnique m, MonadIO m) => TyVar -> m (Type c Tc)
 instTyVar (TyV name kind False) = do
   name' <- newNameFrom name
   ref <- liftIO $ newIORef Nothing
@@ -1213,52 +1240,52 @@ newMetaTyVar str kind = do
   ref <- liftIO $ newIORef Nothing
   return $ MetaTyV name kind ref
 
-newMetaTy :: (MonadUnique m, MonadIO m) => String -> Kind -> m (Type Tc)
+newMetaTy :: (MonadUnique m, MonadIO m) => String -> Kind -> m (Tau Tc)
 newMetaTy str kind = liftM MetaTy $ newMetaTyVar str kind
 
 -- ** Constructors
 
 infixr \-->, -->, ++>
 
-appTyIn :: (Lt p Tc, TyCON p ~ TyName p) => TyName p -> [Type p] -> Type p
-appTyIn tc args = foldl AppTyIn (ConTyIn tc) args
+appTyIn :: (Lt p Tc, TyCON p ~ TyName p) => TyName p -> [Tau p] -> Type c p
+appTyIn tc args = unsafeCoerce $ foldl AppTyIn (ConTyIn tc) args
 
-(\-->) :: Dom p -> Range p -> Type p
+(\-->) :: Dom p -> Range p -> Type c p
 (\-->) = FunTy
 
-(-->) :: Type p -> Type p -> Type p
+(-->) :: Tau p -> Tau p -> Type c p
 dom --> ran = Dom Nothing dom Nothing \--> ran
 
-funTy :: [Dom p] -> Range p -> Type p
-funTy doms rang =  foldr (\-->) rang doms
+funTy :: [Dom p] -> Range p -> Type c p
+funTy doms rang = unsafeCoerce $ foldr (\-->) rang doms
 
-type2dom :: Type p -> Dom p
+type2dom :: Tau p -> Dom p
 type2dom ty = Dom Nothing ty Nothing
 
-dom :: Pat p -> Type p -> Prop p -> Dom p
+dom :: Pat p -> Tau p -> Prop p -> Dom p
 dom pat ty prop = Dom (Just pat) ty (Just prop)
 
 
-varDom :: VAR p -> Type p -> Prop p -> Dom p
+varDom :: VAR p -> Tau p -> Prop p -> Dom p
 varDom x ty prop = Dom (Just (VarPat x)) ty (Just prop)
 
-patternDom :: Pat p -> Type p -> Dom p
+patternDom :: Pat p -> Tau p -> Dom p
 patternDom (WildPat _) ty = Dom Nothing ty Nothing
 patternDom pat     ty = Dom (Just pat) ty Nothing
 
-vpatDom :: VAR p -> Type p -> Dom p
+vpatDom :: VAR p -> Tau p -> Dom p
 vpatDom x = patternDom (VarPat x)
 
-patternTy :: Pat p -> Type p -> Type p
-patternTy (WildPat _)    ty = ty
-patternTy (VarPat _) ty = ty
-patternTy pat        ty = PredTy pat ty Nothing
+patternTy :: Pat p -> Tau p -> Type c p
+patternTy (WildPat _) ty = unsafeCoerce ty
+patternTy (VarPat _)  ty = unsafeCoerce ty
+patternTy pat         ty = PredTy pat ty Nothing
 
-predTy :: Pat p -> Type p -> Maybe (Prop p) -> Type p
+predTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p
 predTy pat ty Nothing = patternTy pat ty
 predTy pat ty prop    = PredTy pat ty prop
 
-unitTy, boolTy, intTy, natTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type p
+unitTy, boolTy, intTy, natTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type c p
 unitTy = ConTy unitTyCon []
 boolTy = ConTy boolTyCon []
 intTy  = ConTy intTyCon []

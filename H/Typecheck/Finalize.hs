@@ -150,7 +150,7 @@ finBind _other _cont = undefined -- impossible
 
 finTypeSig :: TypeSig Tc -> TiM (TypeSig Ti)
 finTypeSig NoTypeSig = return NoTypeSig
-finTypeSig (TypeSig loc pty) = liftM (TypeSig loc) $ finPolyType pty
+finTypeSig (TypeSig loc pty) = liftM (TypeSig loc) $ finType pty
 
 finMatches :: [Match Tc] -> TiM [Match Ti]
 finMatches = mapM finMatch
@@ -211,7 +211,7 @@ finExp (EnumFromThenTo e1 e2 eN)
   = liftM3 EnumFromThenTo (finExp e1) (finExp e2) (finExp eN)
 finExp (Coerc loc expr pty)
   = inCoercExprCtxt loc $
-      liftM2 (Coerc loc) (finExp expr) (finPolyType pty)
+      liftM2 (Coerc loc) (finExp expr) (finType pty)
 finExp (QP qt pats prop)
   = inQPExprCtxt qt pats $
       finPats pats $ \pats' ->
@@ -253,7 +253,7 @@ finBndr (V name (ForallTy [] (MetaTy _))) _cont
   = throwError $ text "Cannot infer the type of" <+> pretty name
 finBndr x@(V name pty) cont = do
   x' <- inContext (text "In variable" <+> ppQuot name <+> text "type") $
-          liftM (V name) $ finPolyType pty
+          liftM (V name) $ finType pty
   extendVarEnv [(x,x')] $ cont x'
 
 finPats :: [Pat Tc] -> ([Pat Ti] -> TiM a) -> TiM a
@@ -293,16 +293,10 @@ finPat (SigPat pat ty) cont = do
   finPat pat $ cont . flip SigPat ty'
 finPat _other _cont = undefined -- impossible
 
-finPolyType :: PolyType Tc -> TiM (PolyType Ti)
-finPolyType tcpty@(ForallTy tvs ty)
-  = inForallTypeCtxt tcpty $
-      liftM (ForallTy tvs) $ finType ty
-
-
-finTypes :: [Type Tc] -> TiM [Type Ti]
+finTypes :: [Type c Tc] -> TiM [Type c Ti]
 finTypes = mapM finType
 
-finType :: Type Tc -> TiM (Type Ti)
+finType :: Type c Tc -> TiM (Type c Ti)
 finType (VarTy a) = return (VarTy a)
 finType (ConTy tc tys) = liftM2 ConTy (lookupTyCon tc) (finTypes tys)
 finType (PredTy pat ty mb_prop) = do
@@ -315,6 +309,9 @@ finType (ListTy ty) = liftM ListTy $ finType ty
 finType (TupleTy ds) = liftM TupleTy $ finDoms ds
 finType (MetaTy mtv)
   = throwError $ text "Unresolved meta-type:" <+> pretty mtv
+finType tcpty@(ForallTy tvs ty)
+  = inTypeCtxt tcpty $
+      liftM (ForallTy tvs) $ finType ty
 finType _other = undefined -- impossible
 
 finDoms :: [Dom Tc] -> TiM [Dom Ti]

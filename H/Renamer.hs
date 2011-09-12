@@ -291,17 +291,7 @@ instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (SigPat p t) f = do t' <- rename t
                                  renameBndr p $ f . (flip SigPat t')
 
-instance Rename PolyType where
-    -- special case for error messages
-  rename (ForallTy [] ty)
-    = liftM (ForallTy []) $ rename ty
-  rename prpty@(ForallTy typarams ty)
-    = inForallTypeCtxt prpty $ do
-        checkDupTyParams typarams
-        renameBndr typarams $ \typarams' ->
-          liftM (ForallTy typarams') $ rename ty
-
-instance Rename Type where
+instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
   rename (ConTyIn tycon) = liftM ConTyIn $ rename tycon
   rename (AppTyIn s t) = liftM2 AppTyIn (rename s) (rename t)
@@ -314,7 +304,12 @@ instance Rename Type where
       liftM (FunTy a') $ rename b
   rename (ListTy a) = liftM ListTy $ rename a
   rename (TupleTy ts) = renameBndr ts $ return . TupleTy
-  rename (ParenTy a) = rename a
+  rename (ParenTy a) = rename $ tau2type a
+  rename prpty@(ForallTy typarams ty)
+    = inTypeCtxt prpty $ do
+        checkDupTyParams typarams
+        renameBndr typarams $ \typarams' ->
+          liftM (ForallTy typarams') $ rename ty
 
 instance RenameBndr (Dom Pr) (Dom Rn) where
   renameBndr (Dom Nothing ty Nothing) f = do

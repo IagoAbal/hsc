@@ -21,7 +21,7 @@ mtvBind (PatBind _loc pat rhs) = mtvPat pat `Set.union` mtvRhs rhs
 
 mtvTypeSig :: TypeSig Tc -> Set MetaTyVar
 mtvTypeSig NoTypeSig             = Set.empty
-mtvTypeSig (TypeSig _loc polyty) = mtvPolyType polyty
+mtvTypeSig (TypeSig _loc polyty) = mtvType polyty
 
 mtvMatches :: [Match Tc] -> Set MetaTyVar
 mtvMatches = Set.unions . map mtvMatch
@@ -30,7 +30,7 @@ mtvMatch :: Match Tc -> Set MetaTyVar
 mtvMatch (Match _loc pats rhs) = mtvPats pats `Set.union` mtvRhs rhs
 
 mtvVar :: Var Tc -> Set MetaTyVar
-mtvVar = mtvPolyType . varType
+mtvVar = mtvType . varType
 
 mtvCon :: Con Tc -> Set MetaTyVar
 mtvCon (UserCon ucon) = mtvVar ucon
@@ -66,7 +66,7 @@ mtvExp (LeftSection e _op) = mtvExp e
 mtvExp (RightSection _op e) = mtvExp e
 mtvExp (EnumFromTo e1 e2) = mtvExps [e1,e2]
 mtvExp (EnumFromThenTo e1 e2 e3) = mtvExps [e1,e2,e3]
-mtvExp (Coerc _loc e polyty) = mtvExp e `Set.union` mtvPolyType polyty
+mtvExp (Coerc _loc e polyty) = mtvExp e `Set.union` mtvType polyty
 mtvExp (QP qt pats body) = mtvPats pats `Set.union` mtvExp body
 
 
@@ -109,13 +109,10 @@ mtvElse :: Else Tc -> Set MetaTyVar
 mtvElse NoElse        = Set.empty
 mtvElse (Else _loc e) = mtvExp e
 
-mtvPolyType :: PolyType Tc -> Set MetaTyVar
-mtvPolyType (ForallTy _tvs ty) = mtvType ty
-
-mtvTypes :: [Type Tc] -> Set MetaTyVar
+mtvTypes :: [Type c Tc] -> Set MetaTyVar
 mtvTypes = Set.unions . map mtvType
 
-mtvType :: Type Tc -> Set MetaTyVar
+mtvType :: Type c Tc -> Set MetaTyVar
 mtvType (VarTy _) = Set.empty
 mtvType (ConTy _ args) = mtvTypes args
 mtvType (PredTy pat ty mb_prop)
@@ -125,6 +122,7 @@ mtvType (FunTy dom rang)
 mtvType (ListTy ty) = mtvType ty
 mtvType (TupleTy ds) = mtvDoms ds
 mtvType (MetaTy mtv) = Set.singleton mtv
+mtvType (ForallTy _tvs ty) = mtvType ty
 
 mtvDoms :: [Dom Tc] -> Set MetaTyVar
 mtvDoms = Set.unions . map mtvDom

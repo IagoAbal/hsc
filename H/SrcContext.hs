@@ -82,8 +82,5 @@ inIfExprCtxt = inContext (text "In expression:" <+> text "if" <+> text "| ...")
 inCaseExprCtxt :: (MonadContext m, PrettyNames p) => Prop p -> m a -> m a
 inCaseExprCtxt scrut = inContext (text "In expression:" <+> text "case" <+> pretty scrut <+> text "of ...")
 
-inForallTypeCtxt :: (MonadContext m, PrettyNames p) => PolyType p -> m a -> m a
-inForallTypeCtxt pty = inContext (text "In type:" <+> pretty pty)
-
-inTypeCtxt :: (MonadContext m, PrettyNames p) => Type p -> m a -> m a
+inTypeCtxt :: (MonadContext m, PrettyNames p) => Type c p -> m a -> m a
 inTypeCtxt ty = inContext (text "In type:" <+> pretty ty)

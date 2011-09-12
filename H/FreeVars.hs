@@ -28,7 +28,7 @@ bsBind (PatBind _loc pat rhs)           = bsPat pat
 
 fvTypeSig :: Ord (VAR p) => TypeSig p -> Set (VAR p)
 fvTypeSig NoTypeSig             = Set.empty
-fvTypeSig (TypeSig _loc polyty) = fvPolyType polyty
+fvTypeSig (TypeSig _loc polyty) = fvType polyty
 
 fvMatches :: Ord (VAR p) => [Match p] -> Set (VAR p)
 fvMatches = Set.unions . map fvMatch
@@ -67,7 +67,7 @@ fvExp (LeftSection e _op) = fvExp e
 fvExp (RightSection _op e) = fvExp e
 fvExp (EnumFromTo e1 e2) = fvExps [e1,e2]
 fvExp (EnumFromThenTo e1 e2 e3) = fvExps [e1,e2,e3]
-fvExp (Coerc _loc e polyty) = fvExp e `Set.union` fvPolyType polyty
+fvExp (Coerc _loc e polyty) = fvExp e `Set.union` fvType polyty
 fvExp (QP qt pats body) = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
 
 
@@ -129,13 +129,11 @@ fvElse :: Ord (VAR p) => Else p -> Set (VAR p)
 fvElse NoElse        = Set.empty
 fvElse (Else _loc e) = fvExp e
 
-fvPolyType :: Ord (VAR p) => PolyType p -> Set (VAR p)
-fvPolyType (ForallTy tvs ty) = fvType ty
 
-fvTypes :: Ord (VAR p) => [Type p] -> Set (VAR p)
+fvTypes :: Ord (VAR p) => [Type c p] -> Set (VAR p)
 fvTypes = Set.unions . map fvType
 
-fvType :: Ord (VAR p) => Type p -> Set (VAR p)
+fvType :: Ord (VAR p) => Type c p -> Set (VAR p)
 fvType (VarTy _) = Set.empty
 fvType (ConTyIn _) = Set.empty
 fvType (AppTyIn a b) = fvTypes [a,b]
@@ -149,6 +147,7 @@ fvType (TupleTy ds) = fvDoms ds
 fvType (ParenTy ty) = fvType ty
   -- this case may be tricky ...
 fvType (MetaTy _) = Set.empty
+fvType (ForallTy tvs ty) = fvType ty
 
 fvDoms :: Ord (VAR p) => [Dom p] -> Set (VAR p)
 fvDoms []     = Set.empty
@@ -183,16 +182,10 @@ patFTV (WildPat ptcty)     = foldMap typeFTV ptcty
 patFTV (AsPat _x p)  = patFTV p
 patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
 
-polyTypesFTV :: Ord (TyVAR p) => [PolyType p] -> Set (TyVAR p)
-polyTypesFTV = Set.unions . map polyTypeFTV
-
-polyTypeFTV :: Ord (TyVAR p) => PolyType p -> Set (TyVAR p)
-polyTypeFTV (ForallTy tvs ty) = typeFTV ty Set.\\ (Set.fromList tvs)
-
-typesFTV :: Ord (TyVAR p) => [Type p] -> Set (TyVAR p)
+typesFTV :: Ord (TyVAR p) => [Type c p] -> Set (TyVAR p)
 typesFTV = Set.unions . map typeFTV
 
-typeFTV :: Ord (TyVAR p) => Type p -> Set (TyVAR p)
+typeFTV :: Ord (TyVAR p) => Type c p -> Set (TyVAR p)
 typeFTV (VarTy tv) = Set.singleton tv
 typeFTV (ConTyIn _) = Set.empty           -- go into TyCON ?
 typeFTV (AppTyIn t a) = typesFTV [t,a]
@@ -203,6 +196,7 @@ typeFTV (ListTy ty) = typeFTV ty
 typeFTV (TupleTy ds) = domsFTV ds
 typeFTV (ParenTy ty) = typeFTV ty
 typeFTV (MetaTy _)   = Set.empty
+typeFTV (ForallTy tvs ty) = typeFTV ty Set.\\ (Set.fromList tvs)
 
 domsFTV :: Ord (TyVAR p) => [Dom p] -> Set (TyVAR p)
 domsFTV = Set.unions . map domFTV

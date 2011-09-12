@@ -23,13 +23,13 @@ import Data.Function ( on )
 
 -- | A kappa type contains no reference to local variables.
 -- Importance: A meta-variable can only be instantiated with a kappa type.
-kappaType :: Type Tc -> TcM (Type Tc)
+kappaType :: Tau Tc -> TcM (Tau Tc)
 kappaType ty = do
   gbl_vars <- asks tcGblVars
   return $ go gbl_vars ty
   where
       go :: Set (Var Tc)  -- valid variables
-            -> Type Tc -> Type Tc
+            -> Tau Tc -> Tau Tc
       go _vv ty@(VarTy _)    = ty
       go  vv (ConTy tc args) = ConTy tc $ map (go vv) args
       go  vv (PredTy pat ty Nothing) = patternTy pat (go vv ty)
@@ -73,20 +73,20 @@ kappaType ty = do
 -- unifyKind k1 k2 = error "Cannot unifyKappa kinds"
 
 
-(~>) :: Type Tc -> Type Tc -> TcM ()
+(~>) :: Tau Tc -> Tau Tc -> TcM ()
 (~>) = unify
 
     -- !! no expression is needed because we don't generate TCCs now
-unify :: Type Tc      -- ^ actual type
-          -> Type Tc  -- ^ expected type
+unify :: Tau Tc      -- ^ actual type
+          -> Tau Tc  -- ^ expected type
           -> TcM ()
 unify ty1 ty2 = do
   ty1' <- kappaType ty1
   ty2' <- kappaType  ty2
   unifyKappa ty1' ty2'
 
-unifyKappa :: Type Tc      -- ^ actual type
-          -> Type Tc  -- ^ expected type
+unifyKappa :: Tau Tc      -- ^ actual type
+          -> Tau Tc  -- ^ expected type
           -> TcM ()
   -- fix, VarTy could be a skolem tyvar as well...
 -- unifyKappa ty1@(VarTy _) ty2@(VarTy _) = error "Panic! Bound type variables found during unification"
@@ -157,7 +157,7 @@ flipByDirection :: Direction -> (a -> a -> b) -> (a -> a -> b)
 flipByDirection LeftToRight = id
 flipByDirection RightToLeft = flip
 
-unifyVar :: Direction -> MetaTyVar -> Type Tc -> TcM ()
+unifyVar :: Direction -> MetaTyVar -> Tau Tc -> TcM ()
 unifyVar dir mtv ty = traceDoc (text "unifyVar mtv=" <+> pretty mtv <+> text "ty=" <+> pretty ty) $ do
   mb_ty1 <- readMetaTyVar mtv
   case mb_ty1 of
@@ -167,7 +167,7 @@ unifyVar dir mtv ty = traceDoc (text "unifyVar mtv=" <+> pretty mtv <+> text "ty
         unifyUnboundVar dir mtv ty (mtvType ty)
       Just ty1 -> traceDoc (text "unifyVar by unifyKappa ty1=" <+> pretty ty1) $ flipByDirection dir unifyKappa ty1 ty
 
-unifyUnboundVar :: Direction -> MetaTyVar -> Type Tc -> Set MetaTyVar -> TcM ()
+unifyUnboundVar :: Direction -> MetaTyVar -> Tau Tc -> Set MetaTyVar -> TcM ()
 unifyUnboundVar dir mtv1 ty@(MetaTy mtv2) ty_mtvs = traceDoc (text "unifyUnboundVar mtv1=" <+> pretty mtv1 <+> text "mtv2=" <+> pretty mtv2) $ do
   mb_ty2 <- readMetaTyVar mtv2
   case mb_ty2 of
@@ -180,7 +180,7 @@ unifyUnboundVar dir mtv ty ty_mtvs
   | otherwise                = writeMetaTyVar mtv ty
 
 
-unifyFun :: Type Tc -> TcM (Dom Tc,Range Tc)
+unifyFun :: Tau Tc -> TcM (Dom Tc,Range Tc)
 unifyFun ty = do
   ty_hz <- headZonkType ty
   case ty_hz of
@@ -195,7 +195,7 @@ unifyFun ty = do
       return (dom,rang)
     other           -> error "not a function type" -- fix
 
-unifyFuns :: Int -> Type Tc -> TcM ([Dom Tc],Range Tc)
+unifyFuns :: Int -> Tau Tc -> TcM ([Dom Tc],Range Tc)
 unifyFuns 0 ty = return ([],ty)
 unifyFuns n ty = do
   (d,r) <- unifyFun ty

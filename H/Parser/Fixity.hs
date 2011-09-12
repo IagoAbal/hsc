@@ -190,11 +190,7 @@ instance AppFixity a => AppFixity (Maybe a) where
   applyFixities fixs Nothing = return Nothing
   applyFixities fixs (Just a) = liftM Just $ applyFixities fixs a
 
-instance AppFixity (PolyType Pr) where
-  applyFixities fixs (ForallTy typarams ty)
-    = liftM (ForallTy typarams) (applyFixities fixs ty)
-
-instance AppFixity (Type Pr) where
+instance AppFixity (Type c Pr) where
   applyFixities fixs ty = case ty of
       VarTy _ -> return ty
       ConTyIn _ -> return ty
@@ -204,6 +200,7 @@ instance AppFixity (Type Pr) where
       ListTy a -> liftM ListTy (fix a)
       TupleTy l -> liftM TupleTy $ mapM fix l
       ParenTy a -> liftM ParenTy (fix a)
+      ForallTy typarams ty -> liftM (ForallTy typarams) (fix ty)
     where fix :: (Monad m, AppFixity ast) => ast -> m ast
           fix x = applyFixities fixs x
 

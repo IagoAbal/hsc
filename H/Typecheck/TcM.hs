@@ -106,21 +106,21 @@ getVarScope = liftM (Set.fromList . Map.elems) $ asks tcVarEnv
 getTyVarScope :: TcM (Set TyVar)
 getTyVarScope = liftM (Set.fromList . Map.elems) $ asks tcTyVarEnv
 
-substExp :: [(Var Tc,Exp Tc)] -> [(TyVar,Type Tc)] -> Exp Tc -> TcM (Exp Tc)
+substExp :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Exp Tc -> TcM (Exp Tc)
 substExp var_env tyvar_env exp = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
   let subst1 = Subst1.mkSubst1 var_env tyvar_env var_scope tyvar_scope
   Subst1.substExp subst1 exp
 
-substMatches :: [(Var Tc,Exp Tc)] -> [(TyVar,Type Tc)] -> [Match Tc] -> TcM [Match Tc]
+substMatches :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> [Match Tc] -> TcM [Match Tc]
 substMatches var_env tyvar_env matches = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
   let subst1 = Subst1.mkSubst1 var_env tyvar_env var_scope tyvar_scope
   Subst1.substMatches subst1 matches
 
-substType :: [(Var Tc,Exp Tc)] -> [(TyVar,Type Tc)] -> Type Tc -> TcM (Type Tc)
+substType :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Type c Tc -> TcM (Type c Tc)
 substType var_env tyvar_env ty = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
@@ -128,7 +128,7 @@ substType var_env tyvar_env ty = do
   Subst1.substType subst1 ty
 
 
-getEnvTypes :: TcM [PolyType Tc]
+getEnvTypes :: TcM [Sigma Tc]
 getEnvTypes = liftM (map varType . Set.toList) getVarScope
 
 -- instantiate :: Exp Tc -> PolyType Tc -> TcM (Exp Tc,Type Tc)
@@ -140,31 +140,31 @@ getEnvTypes = liftM (map varType . Set.toList) getVarScope
 --   ty' <- substType [] (zip tvs mtys) ty
 --   return (e',ty')
 
-instantiate :: PolyType Tc -> TcM (Type Tc,[Type Tc])
+instantiate :: Sigma Tc -> TcM (Tau Tc,[Tau Tc])
   -- short-cut for mono-types
-instantiate (ForallTy []  ty) = return (ty,[])
 instantiate (ForallTy tvs ty) = do
   mtys <- mapM instTyVar tvs
   ty' <- substType [] (zip tvs mtys) ty
   return (ty',mtys)
+instantiate ty = return (sigma2tau ty,[])
 
-instantiateExp :: Exp Tc -> PolyType Tc -> TcM (Exp Tc,Type Tc)
+instantiateExp :: Exp Tc -> Sigma Tc -> TcM (Exp Tc,Tau Tc)
 instantiateExp exp ty = do
   (ty',tyargs) <- instantiate ty
   return (tyApp exp tyargs,ty')
 
-skolemise :: PolyType Tc -> TcM ([TyVar], Type Tc)
-skolemise (ForallTy []  ty) = return ([],ty)
+skolemise :: Sigma Tc -> TcM ([TyVar], Tau Tc)
 skolemise (ForallTy tvs ty) = do
   tvs_sk <- mapM skoTyVar tvs
   let tys_sk = map VarTy tvs_sk
   ty' <- substType [] (zip tvs tys_sk) ty
   return (tvs_sk,ty')
+skolemise ty = return ([],sigma2tau ty)
 
-readMetaTyVar :: MetaTyVar -> TcM (Maybe (Type Tc))
+readMetaTyVar :: MetaTyVar -> TcM (Maybe (Tau Tc))
 readMetaTyVar = liftIO . readIORef . mtvRef
 
-writeMetaTyVar :: MetaTyVar -> Type Tc -> TcM ()
+writeMetaTyVar :: MetaTyVar -> Tau Tc -> TcM ()
 -- writeMetaTyVar MetaTyV{mtvRef} = liftIO . writeIORef mtvRef . Just
   -- for debugging
 writeMetaTyVar mtv@MetaTyV{mtvRef} ty =

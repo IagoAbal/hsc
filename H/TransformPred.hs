@@ -12,10 +12,10 @@ import Control.Monad
 import qualified Data.Traversable as T
 
 
-tpType :: forall p m. (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Type p -> m (Type p)
+tpType :: forall c p m. (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Type c p -> m (Type c p)
 tpType f = go
   where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
-        go :: Type p -> m (Type p)
+        go :: forall c. Type c p -> m (Type c p)
         go ty@(VarTy _)     = return ty
         go (ConTy tc tys)   = liftM (ConTy tc) $ mapM go tys
         go (PredTy pat ty mb_prop) = do
@@ -31,6 +31,7 @@ tpType f = go
         go (ListTy t)       = liftM ListTy (go t)
         go (TupleTy ds)     = liftM TupleTy $ tpDoms f ds
         go ty@(MetaTy _)    = return ty
+        go (ForallTy tvs ty) = liftM (ForallTy tvs) $ go ty
         go _other           = undefined -- impossible
 
 tpDoms :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> [Dom p] -> m [Dom p]
@@ -53,12 +54,10 @@ tpDom f (Dom (Just pat) ty mb_prop) = do
   where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
 tpDom _f _other = undefined -- impossible
 
-tpPolyType :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> PolyType p -> m (PolyType p)
-tpPolyType f (ForallTy tvs ty) = liftM (ForallTy tvs) $ tpType f ty
 
 tpBndr :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Var p -> m (Var p, [(Var p,Exp p)])
 tpBndr f x@V{varType} = do
-  varType' <- tpPolyType f varType
+  varType' <- tpType f varType
   let x' = x{varType = varType'}
   return (x',[(x,Var x')])
 

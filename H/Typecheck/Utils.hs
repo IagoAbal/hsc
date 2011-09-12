@@ -26,26 +26,26 @@ import qualified Data.Foldable as F
 import qualified Data.Traversable as T
 
 
-getFreeTyVars :: [PolyType Tc] -> TcM (Set TyVar)
+getFreeTyVars :: [Type c Tc] -> TcM (Set TyVar)
 -- This function takes account of zonking, and returns a set
 -- (no duplicates) of free type variables
 getFreeTyVars ptys = do
-  ptys' <- mapM zonkPolyType ptys
-  return (polyTypesFTV ptys')
+  ptys' <- mapM zonkType ptys
+  return (typesFTV ptys')
 
 
-getMetaTyVars :: [PolyType Tc] -> TcM (Set MetaTyVar)
+getMetaTyVars :: [Type c Tc] -> TcM (Set MetaTyVar)
 -- This function takes account of zonking, and returns a set
 -- (no duplicates) of unbound meta-type variables
 getMetaTyVars ptys = traceDoc (text "getMetaTyVars no=" <+> int (length ptys)) $ do
   traceDoc (text "getMetaTyVars pre-zonkPolyType") $ do
-  ptys' <- mapM zonkPolyType ptys
+  ptys' <- mapM zonkType ptys
   traceDoc (text "getMetaTyVars post-zonkPolyType") $ do
-  return (polyTypesMTV ptys')
+  return (typesMTV ptys')
 
 
-quantify :: [MetaTyVar] -> Type Tc -> TcM ([TyVar],PolyType Tc)
-quantify [] ty = return ([],monoTy ty)
+quantify :: [MetaTyVar] -> Tau Tc -> TcM ([TyVar],Sigma Tc)
+quantify [] ty = return ([],tau2sigma ty)
   -- Quantify over the specified type variables (all flexible)
 quantify mtvs ty = do
   forall_tvs <- mapM (flip newTyVar typeKi) tvs_names
@@ -58,7 +58,7 @@ quantify mtvs ty = do
         -- 'bind' is just a cunning way of doing the substitution
         bind (mtv,tv) = writeMetaTyVar mtv (VarTy tv)
 
-quantifyExp :: Exp Tc -> [MetaTyVar] -> Type Tc -> TcM (Exp Tc,PolyType Tc)
+quantifyExp :: Exp Tc -> [MetaTyVar] -> Tau Tc -> TcM (Exp Tc,Sigma Tc)
 quantifyExp exp mtvs ty = do
   (forall_tvs,pty) <- quantify mtvs ty
   return (tyLam forall_tvs exp,pty)
@@ -81,7 +81,7 @@ patsMTV = Set.unions . map patMTV
 patMTV :: Pat Tc -> Set MetaTyVar
   -- I think we don't need to get MTVs from x type for the typeMTV case, but
   -- it does not hurt, and I think we really need this for the propMTV case.
-patMTV (VarPat x) = polyTypeMTV $ varType x
+patMTV (VarPat x) = typeMTV $ varType x
 patMTV (LitPat _) = Set.empty
 patMTV (InfixPat p1 _op ptctys p2) = patsMTV [p1,p2] `Set.union` (F.foldMap typesMTV ptctys)
 patMTV (ConPat _con ptctys ps) = patsMTV ps  `Set.union` (F.foldMap typesMTV ptctys)
@@ -92,16 +92,10 @@ patMTV (WildPat ptcty)     = F.foldMap typeMTV ptcty
 patMTV (AsPat _x p)  = patMTV p
 patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
 
-polyTypesMTV :: [PolyType Tc] -> Set MetaTyVar
-polyTypesMTV = Set.unions . map polyTypeMTV
-
-polyTypeMTV :: PolyType Tc -> Set MetaTyVar
-polyTypeMTV (ForallTy _tvs ty) = typeMTV ty
-
-typesMTV :: [Type Tc] -> Set MetaTyVar
+typesMTV :: [Type c Tc] -> Set MetaTyVar
 typesMTV = Set.unions . map typeMTV
 
-typeMTV :: Type Tc -> Set MetaTyVar
+typeMTV :: Type c Tc -> Set MetaTyVar
 typeMTV (VarTy _) = Set.empty
 typeMTV (ConTy _ args) = typesMTV args
 typeMTV (PredTy pat ty _)  = patMTV pat `Set.union` typeMTV ty
@@ -109,6 +103,7 @@ typeMTV (FunTy dom rang) = domMTV dom `Set.union` typeMTV rang
 typeMTV (ListTy ty) = typeMTV ty
 typeMTV (TupleTy ds) = domsMTV ds
 typeMTV (MetaTy mtv) = Set.singleton mtv
+typeMTV (ForallTy _tvs ty) = typeMTV ty
 
 domsMTV :: [Dom Tc] -> Set MetaTyVar
 domsMTV = Set.unions . map domMTV
@@ -173,9 +168,9 @@ pat2exp (AsPat _ p)  = pat2exp p
 pat2exp (SigPat p ty) = pat2exp p
 
 
-expandSyn :: (IsPostTc p, MonadUnique m) => Type p -> m (Maybe (Type p))
+expandSyn :: (IsPostTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
 expandSyn (ConTy (SynTyCon _ ps rhs) args)
-  = liftM Just $ subst_type [] (zip ps args) rhs
+  = liftM (Just . tau2type) $ subst_type [] (zip ps args) rhs
 expandSyn _other = return  Nothing
 
 
@@ -330,7 +325,7 @@ it is an identifier starting with an underscore.
 -}
 
 -- This could be more fine tuned but it is OK
-letType :: [Bind Tc] -> Type Tc -> TcM (Type Tc)
+letType :: [Bind Tc] -> Type c Tc -> TcM (Type c Tc)
 letType binds ty
   | [] <- binds' = return ty
   | otherwise    = tpType f ty
@@ -348,7 +343,7 @@ letType binds ty
                | otherwise = Just $ Let binds' prop
 
 instPredTyProp :: (IsPostTc p, MonadUnique m) =>
-                    Exp p -> Pat p -> Type p -> Maybe (Prop p) -> m (Maybe (Prop p))
+                    Exp p -> Pat p -> Tau p -> Maybe (Prop p) -> m (Maybe (Prop p))
 instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
 instPredTyProp  e pat  ty mb_prop
  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop

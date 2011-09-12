@@ -36,12 +36,12 @@ import Data.List ( nub )
 
 
 
-mkFunTy :: Type Pr -> Type Pr -> Type Pr
+mkFunTy :: Tau Pr -> Tau Pr -> Type c Pr
 mkFunTy (PredTy pat a mbProp) b = dom \--> b
   where dom = Dom (Just pat) a mbProp
 mkFunTy a b = a --> b
 
-funWithSig :: (SrcLoc,NAME Pr,PolyType Pr) -> Bind Pr -> P (Bind Pr)
+funWithSig :: (SrcLoc,NAME Pr,Sigma Pr) -> Bind Pr -> P (Bind Pr)
 funWithSig (sigloc,sigfun,sigtype) (FunBind rec fun NoTypeSig NoPostTc ms)
   | sigfun == fun = return $ FunBind rec fun sig NoPostTc ms
   | otherwise     = fail ("Type signature for `" ++ prettyPrint sigfun ++ "' lacks an accompanying binding")

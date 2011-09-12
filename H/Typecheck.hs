@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, NamedFieldPuns #-}
+{-# LANGUAGE GADTs, ScopedTypeVariables, NamedFieldPuns #-}
 
 -- I still need to check linearity
 module H.Typecheck where
@@ -34,19 +34,7 @@ tcModule us (Module loc modname decls)
   where decls_tc = tcDecls decls >>= zonkDecls
 
 
-  -- poly-types must have kind *
-kcPolyType :: PolyType Rn -> TcM (PolyType Tc)
-kcPolyType rnpty@(ForallTy ns ty)
-  = inForallTypeCtxt rnpty $ do
-  tvs_sk <- mapM skoTyVar tvs
-  ty'_sk <- extendTyVarEnv (zip ns tvs_sk) $
-              checkKind ty typeKi
-  ty' <- substType [] (zip tvs_sk vtys) ty'_sk
-  return $ ForallTy tvs ty'
-  where tvs = map (flip mkTyVar typeKi) ns
-        vtys = map VarTy tvs
-
-kcType :: Type Rn -> TcM (Type Tc,Kind)
+kcType :: Type c Rn -> TcM (Type c Tc,Kind)
 kcType (VarTy n) = do
   tv <- lookupTyVar n
   return (VarTy tv, tyVarKind tv)
@@ -85,8 +73,17 @@ kcType (ListTy ty) = do
 kcType (TupleTy ds) = do
   ds' <- kcDoms ds
   return (TupleTy ds',typeKi)
+kcType rnpty@(ForallTy ns ty)
+  = inTypeCtxt rnpty $ do
+  tvs_sk <- mapM skoTyVar tvs
+  ty'_sk <- extendTyVarEnv (zip ns tvs_sk) $
+              checkKind ty typeKi
+  ty' <- substType [] (zip tvs_sk vtys) ty'_sk
+  return (ForallTy tvs ty',typeKi)
+  where tvs = map (flip mkTyVar typeKi) ns
+        vtys = map VarTy tvs
 
-checkKind :: Type Rn -> Kind -> TcM (Type Tc)
+checkKind :: Type c Rn -> Kind -> TcM (Type c Tc)
 checkKind ty exp_ki = do
   (ty',ty_ki) <- kcType ty
   if ty_ki == exp_ki
@@ -152,7 +149,7 @@ tcDecls (goaldecl@(GoalDecl _ _ _ _ _):decls) = do
 kcTypeDecl ::	Decl Rn -> TcM (Decl Tc, [(TyName Rn,TyCon Tc)])
 kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
   = inTypeDeclCtxt loc (ppQuot ty_name) $ do
-      ForallTy tvs ty_rhs' <- kcPolyType $ forallTy ty_params ty_rhs
+      (ForallTy tvs ty_rhs',_) <- kcType $ forallTy ty_params ty_rhs
       let ty_var = mkTyVar ty_name tc_kind
           tycon = SynTyCon {
                     tyConName = UserTyCon ty_var
@@ -180,7 +177,7 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))
         tc_constr ty_tvs (ConDecl loc con_name doms)
           = inConDeclCtxt loc (ppQuot con_name) $ do
-          con_ty@(ForallTy con_tvs con_tau) <- kcPolyType (forallTy typarams $ funTy doms con_res_ty)
+          (con_ty@(ForallTy con_tvs con_tau),_) <- kcType (forallTy typarams $ funTy doms con_res_ty)
           let con = V con_name con_ty
           con_tau' <- substType [] (zip con_tvs (map VarTy ty_tvs)) con_tau
           let (doms',_) = splitFunTy con_tau
@@ -225,9 +222,9 @@ tc_bind prev_binds (PatBind (Just loc) pat rhs)
 tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "FunBind-NonRec-TypeSig" <+> pretty fun <+> text "==============") $ do
-  pty' <- kcPolyType pty
+  (pty',_) <- kcType pty
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "type_sig=" <+> pretty pty') $ do
-  let poly_tvs = polyTyVars pty'
+  let poly_tvs = quantifiedTyVars pty'
   (skol_tvs,sk_ty) <- skolemise pty'
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "sk_ty=" <+> pretty sk_ty) $ do
   matches' <- tcMatches matches (Check sk_ty)
@@ -247,8 +244,8 @@ tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
   return (FunBind NonRec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
-  pty' <- kcPolyType pty
-  let poly_tvs = polyTyVars pty'
+  (pty',_) <- kcType pty
+  let poly_tvs = quantifiedTyVars pty'
       fun' = V fun pty'
   (skol_tvs,skol_ty) <- skolemise pty'
   matches' <- extendVarEnv [(fun,fun')] $
@@ -260,7 +257,7 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   (pats',pats_tys,_) <- inferPats pats
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (zipWith patternDom pats' pats_tys) res_ty
-      fun_rec    = V fun (monoTy tau_fun_ty)
+      fun_rec    = V fun (tau2sigma tau_fun_ty)
   matches' <- extendVarEnv [(fun,fun_rec)] $
                 tcMatches matches (Check tau_fun_ty)
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
@@ -273,7 +270,7 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred pats_ty =" <+> (sep $ map pretty pats_tys)) $ do
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (map type2dom pats_tys) res_ty
-      fun_rec    = V fun (monoTy tau_fun_ty)
+      fun_rec    = V fun (tau2sigma tau_fun_ty)
   matches' <- extendVarEnv [(fun,fun_rec)] $
                 tcMatches matches (Check tau_fun_ty)
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred tau_fun_ty =" <+> pretty tau_fun_ty) $ do
@@ -283,14 +280,14 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_
   return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 
 
-inferMatches :: [Match Rn] -> TcM ([Match Tc],Type Tc)
+inferMatches :: [Match Rn] -> TcM ([Match Tc],Tau Tc)
 inferMatches matches = do
   ref <- liftIO $ newIORef (error "inferMatches: empty result")
   matches' <- tcMatches matches (Infer ref)
   ty <- liftIO $ readIORef ref
   return (matches',ty)
 
-tcMatches :: [Match Rn] -> Expected (Type Tc) -> TcM [Match Tc]
+tcMatches :: [Match Rn] -> Expected (Tau Tc) -> TcM [Match Tc]
 tcMatches matches (Check exp_ty)
   = mapM (flip checkMatch exp_ty) matches
   -- when we infer the type for one single match then we can
@@ -309,10 +306,10 @@ tcMatches (m:ms) (Infer ref) = do
   liftIO $ writeIORef ref m_ty
   return (m':ms')
 
-checkMatch :: Match Rn -> Type Tc -> TcM (Match Tc)
+checkMatch :: Match Rn -> Tau Tc -> TcM (Match Tc)
 checkMatch match ty = tcMatch match (Check ty)
 
-inferMatch :: Match Rn -> TcM (Match Tc,Type Tc)
+inferMatch :: Match Rn -> TcM (Match Tc,Tau Tc)
 inferMatch match = do
   ref <- liftIO $ newIORef (error "inferMatch: empty result")
   match' <- tcMatch match (Infer ref)
@@ -320,7 +317,7 @@ inferMatch match = do
   return (match',ty)
 
 -- Match SrcLoc [Pat p] (Rhs p)
-tcMatch :: Match Rn -> Expected (Type Tc) -> TcM (Match Tc)
+tcMatch :: Match Rn -> Expected (Tau Tc) -> TcM (Match Tc)
 tcMatch (Match (Just loc) pats rhs) (Check exp_ty)
   = inFunMatchCtxt loc $ do
   traceDoc (text "tcMatch-Check pats=" <+> (sep $ map pretty pats)) $ do
@@ -339,22 +336,22 @@ tcMatch (Match (Just loc) pats rhs) (Infer ref)
   return (Match (Just loc) pats' rhs')
 
 
-checkExpType :: Exp Rn -> Type Tc -> TcM (Exp Tc)
+checkExpType :: Exp Rn -> Tau Tc -> TcM (Exp Tc)
 checkExpType exp ty = tcExp exp (Check ty)
 
-inferExpType :: Exp Rn -> TcM (Exp Tc,Type Tc)
+inferExpType :: Exp Rn -> TcM (Exp Tc,Tau Tc)
 inferExpType exp = do
   ref <- liftIO $ newIORef (error "inferType: empty result")
   exp' <- tcExp exp (Infer ref)
   ty <- liftIO $ readIORef ref
   return (exp',ty)
 
-checkMaybeExpType :: Maybe (Exp Rn) -> Type Tc -> TcM (Maybe (Exp Tc))
+checkMaybeExpType :: Maybe (Exp Rn) -> Tau Tc -> TcM (Maybe (Exp Tc))
 checkMaybeExpType Nothing    _ty = return Nothing
 checkMaybeExpType (Just exp)  ty = liftM Just $ checkExpType exp ty
 
 
-tcExp :: Exp Rn -> Expected (Type Tc) -> TcM (Exp Tc)
+tcExp :: Exp Rn -> Expected (Tau Tc) -> TcM (Exp Tc)
 tcExp (Var n) exp_ty = do
   v <- lookupVar n
   instSigma (Var v) (varType v) exp_ty
@@ -363,7 +360,7 @@ tcExp (Con con) exp_ty = do
   instSigma (Con con') (sortOf con') exp_ty
 tcExp (Op op) exp_ty = do
   instSigma (Op op) (sortOf op) exp_ty
-tcExp (Lit lit) exp_ty = instSigma (Lit lit) (monoTy intTy) exp_ty
+tcExp (Lit lit) exp_ty = instSigma (Lit lit) intTy exp_ty
 --   PrefixApp :: Op -> Exp p -> Exp p
 tcExp (PrefixApp op arg) exp_ty = do
   (op',[arg']) <- tcApp op [arg] exp_ty
@@ -473,7 +470,7 @@ tcExp (EnumFromThenTo e1 e2 e3) exp_ty = do
 --   Coerc :: SrcLoc -> Exp p -> PolyType p -> Exp p
 tcExp (Coerc loc exp pty) exp_ty
   = inCoercExprCtxt loc $ do
-  pty' <- kcPolyType pty
+  (pty',_) <- kcType pty
   traceDoc (text "Coerc pty'=" <+> pretty pty') $ do
   exp' <- checkSigma exp pty'
   let e' = Coerc loc exp' pty'
@@ -489,14 +486,14 @@ tcExp (QP qt pats prop) exp_ty
   return (QP qt pats' prop')
 
 
-tcApp :: Exp Rn -> [Exp Rn] -> Expected (Type Tc) -> TcM (Exp Tc,[Exp Tc])
+tcApp :: Exp Rn -> [Exp Rn] -> Expected (Tau Tc) -> TcM (Exp Tc,[Exp Tc])
 tcApp fun args exp_res_ty = do
   (fun',fun_ty) <- inferExpType fun
   (args',res_ty) <- tcArgs args fun_ty
   res_ty ~>? exp_res_ty
   return (fun',args')
 
-tcArgs :: [Exp Rn] -> Type Tc -> TcM ([Exp Tc],Range Tc)
+tcArgs :: [Exp Rn] -> Tau Tc -> TcM ([Exp Tc],Range Tc)
 tcArgs []         res_ty = return ([],res_ty)
 tcArgs (arg:args) fun_ty = do
   split_fun_ty@(dom,_) <- unifyFun fun_ty
@@ -507,7 +504,7 @@ tcArgs (arg:args) fun_ty = do
   (args',res_ty) <- tcArgs args rang'
   return (arg':args',res_ty)
 
-tcAlts :: [Alt Rn] -> Type Tc -> Expected (Type Tc) -> TcM ([Alt Tc],Type Tc)
+tcAlts :: [Alt Rn] -> Tau Tc -> Expected (Tau Tc) -> TcM ([Alt Tc],Tau Tc)
 tcAlts alts scrut_ty (Check exp_ty) = do
   alts' <- mapM (\alt -> checkAlt alt scrut_ty exp_ty) alts
   return (alts',exp_ty)
@@ -517,18 +514,18 @@ tcAlts (alt:alts) scrut_ty (Infer ref) = do
   liftIO $ writeIORef ref rhs_ty
   return (alt':alts',rhs_ty)
 
-inferAlt :: Alt Rn -> Type Tc -> TcM (Alt Tc,Type Tc)
+inferAlt :: Alt Rn -> Tau Tc -> TcM (Alt Tc,Tau Tc)
 inferAlt alt scrut_ty = do
   ref <- liftIO $ newIORef (error "inferAlt: empty result")
   alt' <- tcAlt alt scrut_ty (Infer ref)
   ty <- liftIO $ readIORef ref
   return (alt',ty)
 
-checkAlt :: Alt Rn -> Type Tc -> Type Tc -> TcM (Alt Tc)
+checkAlt :: Alt Rn -> Tau Tc -> Tau Tc -> TcM (Alt Tc)
 checkAlt alt scrut_ty ty = tcAlt alt scrut_ty (Check ty)
 
 -- data Alt p = Alt SrcLoc (Pat p) (Rhs p)
-tcAlt :: Alt Rn -> Type Tc -> Expected (Type Tc) -> TcM (Alt Tc)
+tcAlt :: Alt Rn -> Tau Tc -> Expected (Tau Tc) -> TcM (Alt Tc)
 tcAlt (Alt (Just loc) pat rhs) scrut_ty exp_ty
   = inCaseAltCtxt loc pat $ do
   (pat',pat_env) <- checkPat pat scrut_ty
@@ -537,18 +534,18 @@ tcAlt (Alt (Just loc) pat rhs) scrut_ty exp_ty
   return (Alt (Just loc) pat' rhs')
   
 
-inferRhs :: Rhs Rn -> TcM (Rhs Tc,Type Tc)
+inferRhs :: Rhs Rn -> TcM (Rhs Tc,Tau Tc)
 inferRhs rhs = do
   ref <- liftIO $ newIORef (error "inferRhs: empty result")
   rhs' <- tcRhs rhs (Infer ref)
   ty <- liftIO $ readIORef ref
   return (rhs',ty)
 
-checkRhs :: Rhs Rn -> Type Tc -> TcM (Rhs Tc)
+checkRhs :: Rhs Rn -> Tau Tc -> TcM (Rhs Tc)
 checkRhs rhs ty = tcRhs rhs (Check ty)
 
 -- data Rhs p = Rhs (GRhs p) (WhereBinds p)
-tcRhs :: Rhs Rn -> Expected (Type Tc) -> TcM (Rhs Tc)
+tcRhs :: Rhs Rn -> Expected (Tau Tc) -> TcM (Rhs Tc)
 tcRhs (Rhs grhs binds) (Check exp_ty) = do
   (binds',binds_env) <- tcBinds binds
   grhs' <- extendVarEnv binds_env $
@@ -562,25 +559,25 @@ tcRhs (Rhs grhs binds) (Infer ref) = do
   liftIO $ writeIORef ref grhs_ty'
   return (Rhs grhs' binds')
 
-inferGRhs :: GRhs Rn -> TcM (GRhs Tc,Type Tc)
+inferGRhs :: GRhs Rn -> TcM (GRhs Tc,Tau Tc)
 inferGRhs grhs = do
   ref <- liftIO $ newIORef (error "inferGRhs: empty result")
   grhs' <- tcGRhs grhs (Infer ref)
   ty <- liftIO $ readIORef ref
   return (grhs',ty)
 
-checkGRhs :: GRhs Rn -> Type Tc -> TcM (GRhs Tc)
+checkGRhs :: GRhs Rn -> Tau Tc -> TcM (GRhs Tc)
 checkGRhs grhs ty = tcGRhs grhs (Check ty)
 
 -- data GRhs p
 -- 	 = UnGuarded (Exp p)
 -- 	 | Guarded (GuardedRhss p)
-tcGRhs :: GRhs Rn -> Expected (Type Tc) -> TcM (GRhs Tc)
+tcGRhs :: GRhs Rn -> Expected (Tau Tc) -> TcM (GRhs Tc)
 tcGRhs (UnGuarded e) exp_ty = liftM UnGuarded $ tcExp e exp_ty
 tcGRhs (Guarded grhss) exp_ty = liftM Guarded $ tcGuardedRhss grhss exp_ty
 
 --   GuardedRhss :: Ge p Rn => [GuardedRhs p] -> Else p -> GuardedRhss p
-tcGuardedRhss :: GuardedRhss Rn -> Expected (Type Tc) -> TcM (GuardedRhss Tc)
+tcGuardedRhss :: GuardedRhss Rn -> Expected (Tau Tc) -> TcM (GuardedRhss Tc)
 tcGuardedRhss (GuardedRhss grhss else_rhs) (Check exp_ty) = do
   grhss' <- mapM (flip checkGuardedRhs exp_ty) grhss
   else_rhs' <- tcElse else_rhs exp_ty
@@ -597,24 +594,24 @@ tcGuardedRhss (GuardedRhss (r:rs) else_rhs) (Infer ref) = do
   return (GuardedRhss (r':rs') else_rhs')
 
 
-inferGuardedRhs :: GuardedRhs Rn -> TcM (GuardedRhs Tc,Type Tc)
+inferGuardedRhs :: GuardedRhs Rn -> TcM (GuardedRhs Tc,Tau Tc)
 inferGuardedRhs grhs = do
   ref <- liftIO $ newIORef (error "inferGuardedRhs: empty result")
   grhs' <- tcGuardedRhs grhs (Infer ref)
   ty <- liftIO $ readIORef ref
   return (grhs',ty)
 
-checkGuardedRhs :: GuardedRhs Rn -> Type Tc -> TcM (GuardedRhs Tc)
+checkGuardedRhs :: GuardedRhs Rn -> Tau Tc -> TcM (GuardedRhs Tc)
 checkGuardedRhs grhs ty = tcGuardedRhs grhs (Check ty)
 
-tcGuardedRhs :: GuardedRhs Rn -> Expected (Type Tc) -> TcM (GuardedRhs Tc)
+tcGuardedRhs :: GuardedRhs Rn -> Expected (Tau Tc) -> TcM (GuardedRhs Tc)
 tcGuardedRhs (GuardedRhs loc g e) exp_ty
   = inGuardedRhsCtxt loc $ do
   g' <- checkExpType g boolTy
   e' <- tcExp e exp_ty
   return (GuardedRhs loc g' e')
 
-tcElse :: Else Rn -> Type Tc -> TcM (Else Tc)
+tcElse :: Else Rn -> Tau Tc -> TcM (Else Tc)
 tcElse NoElse       _exp_ty = return NoElse
 tcElse (Else loc e) exp_ty  = liftM (Else loc) $ checkExpType e exp_ty
 
@@ -622,27 +619,27 @@ tcElse (Else loc e) exp_ty  = liftM (Else loc) $ checkExpType e exp_ty
 -- mkDomPatType pats_rn pats_tys res_ty = do
 --   pats_rn
 
-tcBndr :: Name -> Expected (Type Tc) -> TcM (Var Tc,[(Name,Var Tc)])
+tcBndr :: Name -> Expected (Tau Tc) -> TcM (Var Tc,[(Name,Var Tc)])
 tcBndr n (Check ty) = return (v,[(n,v)])
-  where v = V n (monoTy ty)
+  where v = V n (tau2sigma ty)
 tcBndr n (Infer ref) = do
   mty <- newMetaTy "a" typeKi
   liftIO $ writeIORef ref mty
-  let v = V n (monoTy mty)
+  let v = V n (tau2sigma mty)
   return (v,[(n,v)])
 
-checkPat :: Pat Rn -> Type Tc -> TcM (Pat Tc,[(Name,Var Tc)])
+checkPat :: Pat Rn -> Tau Tc -> TcM (Pat Tc,[(Name,Var Tc)])
 checkPat pat ty = tcPat pat (Check ty)
 
 
-inferPat :: Pat Rn -> TcM (Pat Tc,Type Tc,[(Name,Var Tc)])
+inferPat :: Pat Rn -> TcM (Pat Tc,Tau Tc,[(Name,Var Tc)])
 inferPat pat = do
   ref <- liftIO $ newIORef (error "inferPat: empty result")
   (pat',pat_env) <- tcPat pat (Infer ref)
   pat_ty <- liftIO $ readIORef ref
   return (pat',pat_ty,pat_env)
 
-inferPats :: [Pat Rn] -> TcM ([Pat Tc],[Type Tc],[(Name,Var Tc)])
+inferPats :: [Pat Rn] -> TcM ([Pat Tc],[Tau Tc],[(Name,Var Tc)])
 inferPats []   = return ([],[],[])
 inferPats (pat:pats) = do
   (pat',pat_ty,pat_env) <- inferPat pat
@@ -651,7 +648,7 @@ inferPats (pat:pats) = do
   return (pat':pats',pat_ty:pats_tys,pat_env++pats_env)
 
 
-tcPat :: Pat Rn -> Expected (Type Tc) -> TcM (Pat Tc,[(Name,Var Tc)])
+tcPat :: Pat Rn -> Expected (Tau Tc) -> TcM (Pat Tc,[(Name,Var Tc)])
 tcPat (VarPat n) exp_ty = do
   (v,n_env) <- tcBndr n exp_ty
   return (VarPat v,n_env)
@@ -709,7 +706,7 @@ tcPat (SigPat p ty) exp_ty = do
 
 
 --  check "equation"
-checkEq :: [Pat Rn] -> Type Tc -> TcM ([Pat Tc],[(Name,Var Tc)],Type Tc)
+checkEq :: [Pat Rn] -> Tau Tc -> TcM ([Pat Tc],[(Name,Var Tc)],Tau Tc)
 checkEq [] exp_ty = return ([],[],exp_ty)
 checkEq (pat:pats) exp_ty  = do
   fun_ty@(dom,_) <- unifyFun exp_ty
@@ -733,19 +730,19 @@ checkEq (pat:pats) exp_ty  = do
 --         (e'',e_sigmaty) <- quantify forall_tvs e' exp_ty
 --         return (e'',e_sigmaty)
 
-generalise :: Type Tc -> TcM ([TyVar],PolyType Tc)
+generalise :: Tau Tc -> TcM ([TyVar],Sigma Tc)
 generalise ty = do
   traceDoc (text "generalise ty=" <> pretty ty) $ do
   env_tys <- getEnvTypes
   env_mtvs <- getMetaTyVars env_tys
   traceDoc (text "generalise ty=" <> pretty ty <+> text "env_mtvs=" <+> (sep $ map pretty $ Set.toList env_mtvs)) $ do
-  ty_mtvs <- getMetaTyVars [monoTy ty]
+  ty_mtvs <- getMetaTyVars [ty]
   traceDoc (text "generalise ty=" <> pretty ty <+> text "ty_mtvs=" <+> (sep $ map pretty $ Set.toList ty_mtvs)) $ do
   let poly_mtvs = ty_mtvs Set.\\ env_mtvs
   traceDoc (text "generalise ty=" <> pretty ty <+> text "poly_mtvs=" <+> sep (map pretty $ Set.toList poly_mtvs)) $ do
   quantify (Set.toAscList poly_mtvs) ty
 
-checkSigma :: Exp Rn -> PolyType Tc -> TcM (Exp Tc)
+checkSigma :: Exp Rn -> Sigma Tc -> TcM (Exp Tc)
 checkSigma exp polyty = do
   (skol_tvs,ty) <- skolemise polyty
 --   traceDoc (text "checkSigma ty=" <+> pretty ty <+> text "skol_tvs=" <+> sep (map pretty skol_tvs)) $ do
@@ -758,14 +755,14 @@ checkSigma exp polyty = do
     error "Type not polymorphic enough"
     -- reconstruction
   exp'_z <- zonkExp exp'
-  let polyty_tvs = polyTyVars polyty
+  let polyty_tvs = quantifiedTyVars polyty
   exp'' <- substExp [] (zip skol_tvs $ map VarTy polyty_tvs) exp'_z
   return (tyLam polyty_tvs exp'')
 
 
 -- * Subsumption checking
 
-instSigma :: Exp Tc -> PolyType Tc -> Expected (Type Tc) -> TcM (Exp Tc)
+instSigma :: Exp Tc -> Sigma Tc -> Expected (Tau Tc) -> TcM (Exp Tc)
 instSigma exp s1 (Check t2) = do
   (exp',t1) <- instantiateExp exp s1
   t1 ~> t2
@@ -776,6 +773,6 @@ instSigma exp s1 (Infer ref)  = do
   return exp'
 
 
-(~>?) :: Type Tc -> Expected (Type Tc) -> TcM ()
+(~>?) :: Tau Tc -> Expected (Tau Tc) -> TcM ()
 t1 ~>? (Check t2)  = t1 ~> t2
 t1 ~>? (Infer ref) = liftIO $ writeIORef ref t1

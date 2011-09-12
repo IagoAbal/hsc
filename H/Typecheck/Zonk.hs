@@ -46,7 +46,7 @@ zonkBind (PatBind loc pat rhs)
 zonkTypeSig :: TypeSig Tc -> TcM (TypeSig Tc)
 zonkTypeSig NoTypeSig = return NoTypeSig
 zonkTypeSig (TypeSig loc polyty)
-  = liftM (TypeSig loc) $ zonkPolyType polyty
+  = liftM (TypeSig loc) $ zonkType polyty
 
 zonkMatches :: [Match Tc] -> TcM [Match Tc]
 zonkMatches = mapM zonkMatch
@@ -57,7 +57,7 @@ zonkMatch (Match loc pats rhs)
 
 zonkVar :: Var Tc -> TcM (Var Tc)
 zonkVar x@V{varType} = do
-  varType' <- zonkPolyType varType
+  varType' <- zonkType varType
   return x{varType = varType'}
 
 zonkCon :: Con Tc -> TcM (Con Tc)
@@ -93,7 +93,7 @@ zonkExp (EnumFromTo e1 en) = liftM2 EnumFromTo (zonkExp e1) (zonkExp en)
 zonkExp (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (zonkExp e1) (zonkExp e2) (zonkExp en)
 zonkExp (Coerc loc exp polyty)
-  = liftM2 (Coerc loc) (zonkExp exp) (zonkPolyType polyty)
+  = liftM2 (Coerc loc) (zonkExp exp) (zonkType polyty)
 zonkExp (QP qt pats prop) = liftM2 (QP qt) (zonkPats pats) (zonkExp prop)
 
 zonkPats :: [Pat Tc] -> TcM [Pat Tc]
@@ -138,13 +138,10 @@ zonkElse NoElse = return NoElse
 zonkElse (Else loc exp) = liftM (Else loc) $ zonkExp exp
 
 
-zonkTypes :: [Type Tc] -> TcM [Type Tc]
+zonkTypes :: [Type c Tc] -> TcM [Type c Tc]
 zonkTypes = mapM zonkType
 
-zonkPolyType :: PolyType Tc -> TcM (PolyType Tc)
-zonkPolyType (ForallTy tvs ty) = liftM (ForallTy tvs) $ zonkType ty
-
-zonkType :: Type Tc -> TcM (Type Tc)
+zonkType :: Type c Tc -> TcM (Type c Tc)
 zonkType ty@(VarTy _) = return ty
   -- ?? there is no need to go into the type constructor ...
 zonkType (ConTy tc args) = liftM (ConTy tc) $ zonkTypes args
@@ -160,7 +157,8 @@ zonkType mty@(MetaTy mtv) = do -- traceDoc (text "zonkType-MetaTy mty=" <+> pret
       Just ty -> do
         ty' <- zonkType ty
         writeMetaTyVar mtv ty'   -- "Short out" multiple hops
-        return ty'
+        return $ tau2type ty'
+zonkType (ForallTy tvs ty) = liftM (ForallTy tvs) $ zonkType ty
 
 zonkDoms :: [Dom Tc] -> TcM [Dom Tc]
 zonkDoms = mapM zonkDom
@@ -178,7 +176,7 @@ zonkDom (Dom (Just pat) ty mb_prop) = do
 
 ---
 
-headZonkType :: Type Tc -> TcM (Type Tc)
+headZonkType :: Type c Tc -> TcM (Type c Tc)
 headZonkType mty@(MetaTy mtv) = do
   mb_ty <- readMetaTyVar mtv
   case mb_ty of
@@ -186,5 +184,5 @@ headZonkType mty@(MetaTy mtv) = do
       Just ty -> do
         ty' <- headZonkType ty
         writeMetaTyVar mtv ty'   -- "Short out" multiple hops
-        return ty'
+        return $ tau2type ty'
 headZonkType ty = return ty
