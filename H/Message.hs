@@ -6,11 +6,7 @@ import H.Pretty
 import H.SrcLoc ( SrcLoc )
 import H.SrcContext ( CtxtDescr, SrcContext(..) )
 
-import Control.Monad.Reader.Class
 import Control.Monad.Error.Class( Error(..) )
-
-
-import Control.Monad.Error.Class ( Error(..) )
 
 
 -- * Message
