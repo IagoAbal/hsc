@@ -282,7 +282,9 @@ instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (TuplePat ps NoPostTc) f = renameBndr ps $ f . (flip TuplePat NoPostTc)
   renameBndr (ListPat ps NoPostTc) f = renameBndr ps $ f . (flip ListPat NoPostTc)
   renameBndr (ParenPat p) f = renameBndr p $ f . ParenPat
-  renameBndr (WildPat NoPostTc) f = f (WildPat NoPostTc)
+  renameBndr WildPatIn f = do
+    uniq <- getUniq
+    f (WildPat uniq NoPostTc)
   renameBndr (SigPat p t) f = do t' <- rename t
                                  renameBndr p $ f . (flip SigPat t')
   renameBndr (AsPat x p) f

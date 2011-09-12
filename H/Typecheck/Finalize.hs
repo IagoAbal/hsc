@@ -281,11 +281,11 @@ finPat (ListPat ps (PostTc ty)) cont = do
   ty' <- finType ty
   finPats ps $ cont . flip ListPat (PostTc ty')
 finPat (ParenPat p) cont = finPat p $ cont . ParenPat
-finPat (WildPat (PostTc (MetaTy _))) _cont
+finPat (WildPat _ (PostTc (MetaTy _))) _cont
   = throwError $ text "Cannot infer the type of `_' pattern"
-finPat (WildPat (PostTc ty)) cont = do
+finPat (WildPat uniq (PostTc ty)) cont = do
   ty' <- finType ty
-  cont (WildPat (PostTc ty'))
+  cont (WildPat uniq (PostTc ty'))
 finPat (AsPat x pat) cont
   = finBndr x $ \x' -> finPat pat $ \pat' -> cont (AsPat x' pat')
 finPat (SigPat pat ty) cont = do

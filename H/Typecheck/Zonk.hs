@@ -109,7 +109,7 @@ zonkPat (ConPat con ptctys pats) = liftM3 ConPat (zonkCon con) (T.mapM zonkTypes
 zonkPat (TuplePat ps ptcty) = liftM2 TuplePat (zonkPats ps) (T.mapM zonkType ptcty)
 zonkPat (ListPat ps ptcty) = liftM2 ListPat (zonkPats ps) (T.mapM zonkType ptcty)
 zonkPat (ParenPat p) = liftM ParenPat $ zonkPat p
-zonkPat (WildPat ptcty) = liftM WildPat (T.mapM zonkType ptcty)
+zonkPat (WildPat uniq ptcty) = liftM (WildPat uniq) (T.mapM zonkType ptcty)
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
 zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
 

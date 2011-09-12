@@ -85,7 +85,8 @@ fvPat (ConPat _con _ ps) = fvPats ps
 fvPat (TuplePat ps _) = fvPats ps
 fvPat (ListPat ps _) = fvPats ps
 fvPat (ParenPat p) = fvPat p
-fvPat (WildPat _)     = Set.empty
+fvPat WildPatIn     = Set.empty
+fvPat (WildPat _ _)     = Set.empty
 fvPat (AsPat _x p)  = fvPat p
 fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
 
@@ -100,7 +101,8 @@ bsPat (ConPat _con _ ps) = bsPats ps
 bsPat (TuplePat ps _) = bsPats ps
 bsPat (ListPat ps _) = bsPats ps
 bsPat (ParenPat p) = bsPat p
-bsPat (WildPat _)      = Set.empty
+bsPat WildPatIn      = Set.empty
+bsPat (WildPat _ _)      = Set.empty
 bsPat (AsPat x p)  = Set.insert x $ bsPat p
 bsPat (SigPat p _ty) = bsPat p
 
@@ -178,7 +180,8 @@ patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys
 patFTV (TuplePat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ListPat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ParenPat p) = patFTV p
-patFTV (WildPat ptcty)     = foldMap typeFTV ptcty
+patFTV WildPatIn     = Set.empty
+patFTV (WildPat _ ptcty)     = foldMap typeFTV ptcty
 patFTV (AsPat _x p)  = patFTV p
 patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
 

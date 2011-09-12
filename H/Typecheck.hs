@@ -689,11 +689,11 @@ tcPat (ListPat ps NoPostTc) exp_ty = do
 tcPat (ParenPat p) exp_ty = do
   (p',p_env) <- tcPat p exp_ty
   return (ParenPat p',p_env)
-tcPat (WildPat NoPostTc) (Check ty) = return (WildPat (PostTc ty),[])
-tcPat (WildPat NoPostTc) (Infer ref) = do
+tcPat (WildPat uniq NoPostTc) (Check ty) = return (WildPat uniq (PostTc ty),[])
+tcPat (WildPat uniq NoPostTc) (Infer ref) = do
   mty <- newMetaTy "a" typeKi
   liftIO $ writeIORef ref mty
-  return (WildPat (PostTc mty),[])
+  return (WildPat uniq (PostTc mty),[])
 tcPat (AsPat n p) exp_ty = do
   (v,n_env) <- tcBndr n exp_ty
   (p',p_env) <- tcPat p exp_ty

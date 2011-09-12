@@ -87,9 +87,9 @@ tpPat f (ListPat ps ptcty) = do
 tpPat f (ParenPat p) = do
   (p',p_s) <- tpPat f p
   return (ParenPat p',p_s)
-tpPat f (WildPat ptcty) = do
+tpPat f (WildPat uniq ptcty) = do
   ptcty' <- T.mapM (tpType f) ptcty
-  return (WildPat ptcty',[])
+  return (WildPat uniq ptcty',[])
 tpPat f (AsPat x p) = do
   (x',x_s) <- tpBndr f x
   (p',p_s) <- tpPat f p

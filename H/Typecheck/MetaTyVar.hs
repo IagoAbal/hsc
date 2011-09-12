@@ -81,7 +81,7 @@ mtvPat (ConPat con ptctys ps) = mtvCon con `Set.union` mtvPats ps `Set.union` (F
 mtvPat (TuplePat ps ptcty) = mtvPats ps `Set.union` (F.foldMap mtvType ptcty)
 mtvPat (ListPat ps ptcty) = mtvPats ps `Set.union` (F.foldMap mtvType ptcty)
 mtvPat (ParenPat p) = mtvPat p
-mtvPat (WildPat ptcty)     = F.foldMap mtvType ptcty
+mtvPat (WildPat uniq ptcty)     = F.foldMap mtvType ptcty
 mtvPat (AsPat x p)  = mtvVar x `Set.union` mtvPat p
 mtvPat (SigPat p ty) = mtvPat p `Set.union` mtvType ty
 

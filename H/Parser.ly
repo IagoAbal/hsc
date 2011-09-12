@@ -424,7 +424,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | '(' pat ')'     { ParenPat $2 }
 > | '(' tpats ')'     { TuplePat $2 NoPostTc }
 > | '[' lpats ']'     { ListPat $2 NoPostTc }
-> | '_'             { WildPat NoPostTc }
+> | '_'             { WildPatIn }
 
 > tpats :: { [Pat Pr] }
 > : tpats ',' pat     { $1 ++ [$3] }

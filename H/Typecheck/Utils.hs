@@ -88,7 +88,7 @@ patMTV (ConPat _con ptctys ps) = patsMTV ps  `Set.union` (F.foldMap typesMTV ptc
 patMTV (TuplePat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ListPat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ParenPat p) = patMTV p
-patMTV (WildPat ptcty)     = F.foldMap typeMTV ptcty
+patMTV (WildPat _ ptcty)     = F.foldMap typeMTV ptcty
 patMTV (AsPat _x p)  = patMTV p
 patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
 
@@ -151,19 +151,20 @@ propMTV (QP qt pats body) = patsMTV pats `Set.union` propMTV body
 
 -- | Converts a pattern to an expression.
 -- NB: Such a conversion is not possible in case of wild-card patterns.
-pat2exp :: IsPostTc p => Pat p -> Maybe (Exp p)
-pat2exp (LitPat lit) = pure $ Lit lit
-pat2exp (VarPat x)   = pure $ Var x
+pat2exp :: IsPostTc p => Pat p -> Exp p
+pat2exp (LitPat lit) = Lit lit
+pat2exp (VarPat x)   = Var x
 pat2exp (InfixPat p1 bcon (PostTc typs) p2)
-  = (flip InfixApp conE) <$> pat2exp p1 <*> pat2exp p2
+  = InfixApp (pat2exp p1) conE (pat2exp p2)
   where conE = tyApp (Op $ ConOp bcon) typs
 pat2exp (ConPat con (PostTc typs) ps)
-  = (conE `app`) <$> mapM pat2exp ps
+  = conE `app` map pat2exp ps
   where conE = tyApp (Con con) typs
-pat2exp (TuplePat ps tup_ty) = Tuple tup_ty <$> mapM pat2exp ps
-pat2exp (ListPat ps list_ty) = List list_ty <$> mapM pat2exp ps
-pat2exp (ParenPat p) = Paren <$> pat2exp p
-pat2exp (WildPat _)     = Nothing
+pat2exp (TuplePat ps tup_ty) = Tuple tup_ty $ map pat2exp ps
+pat2exp (ListPat ps list_ty) = List list_ty $ map pat2exp ps
+pat2exp (ParenPat p) = Paren $ pat2exp p
+pat2exp (WildPat uniq (PostTc ty))
+  = Var $ instWildPat uniq ty
 pat2exp (AsPat _ p)  = pat2exp p
 pat2exp (SigPat p ty) = pat2exp p
 
@@ -198,7 +199,7 @@ patExpSubst :: forall p. IsPostTc p =>
               -> Maybe [(Var p,Exp p)]    -- ^ substitution for range  
 patExpSubst e pat_dom target_fv = get_subst e pat_dom
   where get_subst :: Exp p -> Pat p -> Maybe [(Var p,Exp p)]
-        get_subst _ (WildPat _) = Just []
+        get_subst _ (WildPat _ _) = Just []
         get_subst e (VarPat x) | not (x `Set.member` target_fv) = Just []
                                | otherwise = Just [(x,e)]
         get_subst e (ConPat con' _ ps)
@@ -246,7 +247,12 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
         get_subst (s,bs) _lpat dpat  | Set.null (bsPat dpat) = return (s,bs)
           -- no variable bound by dpat is free in rang
         get_subst (s,bs) _lpat dpat  | bsPat dpat `Set.disjointWith` fvs = return (s,bs)
-        get_subst (s,bs) lpat  (VarPat x) | Just e <- pat2exp lpat = return ((x,e):s,bs)
+        get_subst (s,bs) lpat  (VarPat x) = return ((x,e):s,bs)
+          where e = pat2exp lpat
+        get_subst (s,bs) (WildPat uniq (PostTc tau)) dpat = do
+          tau' <- substType s [] tau
+          let v = instWildPat uniq tau'
+          return (s,bs++[(dpat,Var v)])
         get_subst (s,bs) (VarPat y) dpat = do
           yexp' <- substExp s [] (Var y)
           return (s,bs++[(dpat,yexp')])
@@ -271,7 +277,8 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
           | not (Set.member x fvs) = get_subst (s,bs) q p
         get_subst (s,bs) (AsPat y q) (AsPat x p) = get_subst ((x,Var y):s,bs) q p
         get_subst (s,bs) q           (AsPat x p)
-          | Just e <- pat2exp q =  get_subst ((x,e):s,bs) q p
+          =  get_subst ((x,e):s,bs) q p
+          where e = pat2exp q
         get_subst acc (AsPat y q) p           = get_subst acc q p
         get_subst acc (SigPat q _) p            = get_subst acc q p
         get_subst acc q            (SigPat p _) = get_subst acc q p
@@ -284,10 +291,11 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
           -- being used in rang but such (sub-)expression is ignored by
           -- 'pat_lam'.
           -- See [Instantiating domains]
-        get_subst _acc lpat dpat
-          = throwError $ text "Illegal pattern for the given pattern-type: variable(s)"
-                        <+> (sep $ punctuate comma $ map ppQuot $ Set.toList $ bsPat dpat)
-                        <+> text "cannot be bound by pattern" <+> ppQuot lpat
+  -- THIS WAS FIXED INTRODUCING SKOLEM VARS
+--         get_subst _acc lpat dpat
+--           = throwError $ text "Illegal pattern for the given pattern-type: variable(s)"
+--                         <+> (sep $ punctuate comma $ map ppQuot $ Set.toList $ bsPat dpat)
+--                         <+> text "cannot be bound by pattern" <+> ppQuot lpat
           -- error $ "illegal dependent type, variables X are not being matched ... " ++ prettyPrint lpat ++ " .. " ++ prettyPrint dpat
         fold_get_subst (s,bs) qs ps = foldM (\(s1,bs1) (q,p) -> get_subst (s1,bs1) q p) (s,bs) $ zip qs ps
 
@@ -347,10 +355,12 @@ instPredTyProp :: (IsPostTc p, MonadUnique m) =>
 instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
 instPredTyProp  e pat  ty mb_prop
  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop
- | otherwise = return $ Just $ Case e (PostTc boolTy)
-                                [Alt Nothing pat (rhsExp prop)
-                                ,Alt Nothing (WildPat (PostTc ty)) (rhsExp _False_)
-                                ]
+ | otherwise = do
+    uniq  <- getUniq
+    return $ Just $ Case e (PostTc boolTy)
+                      [Alt Nothing pat (rhsExp prop)
+                      ,Alt Nothing (WildPat uniq (PostTc ty)) (rhsExp _False_)
+                      ]
  where prop = maybe _True_ id mb_prop
 
 
