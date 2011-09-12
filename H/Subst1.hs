@@ -307,7 +307,7 @@ substType s (ConTy tc args) = liftM (ConTy tc) $ mapM (substType s) args
 substType s (PredTy pat ty mbProp)
   = do ty' <- substType s ty
        (pat',s') <- substPat s pat
-       liftM (PredTy pat' ty') $ substMaybeExp s mbProp
+       liftM (PredTy pat' ty') $ substMaybeExp s' mbProp
 substType s (FunTy dom rang) = do (dom',s') <- substDom s dom
                                   liftM (FunTy dom') $ substType s' rang
 substType s (ListTy ty) = liftM ListTy $ substType s ty
