@@ -34,9 +34,16 @@ import Unsafe.Coerce ( unsafeCoerce )
 
   -- | A typed 'Name'
 data Var p = V {
-               varName :: !Name
-             , varType :: Sigma p
+               varName   :: !Name
+             , varType   :: Sigma p
+             , skolemVar :: !Bool
              }
+
+mkVar :: Name -> Sigma p -> Var p
+mkVar name sig = V name sig False
+
+mkSkVar :: Name -> Sigma p -> Var p
+mkSkVar name sig = V name sig True
 
 instance Eq (Var p) where
   (==) = (==) `on` varName
@@ -95,11 +102,12 @@ instance PrettyBndr TyVar where
 
 newVar :: MonadUnique m => String -> Sigma p -> m (Var p)
 newVar str ty = do name <- newName VarNS str
-                   return $ V name ty
+                   return $ V name ty False
 
 newVarFrom :: MonadUnique m => Var p -> m (Var p)
-newVarFrom (V name ty) = do name' <- newNameFrom name
-                            return $ V name' ty
+newVarFrom (V name ty isSk) = do
+  name' <- newNameFrom name
+  return $ V name' ty isSk
 
 newTyVar :: MonadUnique m => String -> Kind -> m TyVar
 newTyVar str ki = do name <- newName TyVarNS str
@@ -857,13 +865,13 @@ instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (Sigma p) w
   sortOf DivI = intTy
                             --> (varDom m intTy (Var m ./=. lit_0)
                             \--> intTy)
-    where m = V m_nm intTy
+    where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3002
   sortOf ModI = intTy
                             --> (varDom m intTy (Var m ./=. lit_0)
                             \--> intTy)
-    where m = V m_nm intTy
+    where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3102
   sortOf ExpI = intTy --> intTy --> intTy
@@ -1192,7 +1200,7 @@ natTyCon  = SynTyCon {
             , tyConParams = []
             , synTyConRhs = predTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
             }
-  where n = V n_nm intTy
+  where n = mkVar n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
         n_uniq = -4001
 

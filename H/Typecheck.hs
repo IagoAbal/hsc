@@ -178,7 +178,7 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
         tc_constr ty_tvs (ConDecl loc con_name doms)
           = inConDeclCtxt loc (ppQuot con_name) $ do
           (con_ty@(ForallTy con_tvs con_tau),_) <- kcType (forallTy typarams $ funTy doms con_res_ty)
-          let con = V con_name con_ty
+          let con = mkVar con_name con_ty
           con_tau' <- substType [] (zip con_tvs (map VarTy ty_tvs)) con_tau
           let (doms',_) = splitFunTy con_tau
           return (ConDecl loc con doms',(UserCon con_name,UserCon con))
@@ -230,7 +230,7 @@ tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches)
   matches' <- tcMatches matches (Check sk_ty)
   matches'_z <- zonkMatches matches'
   matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'_z
-  let fun' = V fun pty'
+  let fun' = mkVar fun pty'
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "matches''=" <+> sep (map (ppMatch fun') matches'')) $ do
   return (FunBind NonRec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
 tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
@@ -240,13 +240,13 @@ tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
   traceDoc (text "FunBind" <+> pretty fun <+> text "tau_fun_ty=" <+> pretty tau_fun_ty) $ do
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
 --   traceDoc (text "FunBind" <+> pretty fun <+> text "fun_ty=" <+> pretty fun_ty) $ do
-  let fun' = V fun fun_ty
+  let fun' = mkVar fun fun_ty
   return (FunBind NonRec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
   (pty',_) <- kcType pty
   let poly_tvs = quantifiedTyVars pty'
-      fun' = V fun pty'
+      fun' = mkVar fun pty'
   (skol_tvs,skol_ty) <- skolemise pty'
   matches' <- extendVarEnv [(fun,fun')] $
                 tcMatches matches (Check skol_ty)
@@ -257,11 +257,11 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   (pats',pats_tys,_) <- inferPats pats
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (zipWith patternDom pats' pats_tys) res_ty
-      fun_rec    = V fun (tau2sigma tau_fun_ty)
+      fun_rec    = mkVar fun (tau2sigma tau_fun_ty)
   matches' <- extendVarEnv [(fun,fun_rec)] $
                 tcMatches matches (Check tau_fun_ty)
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
-  let fun' = V fun fun_ty
+  let fun' = mkVar fun fun_ty
   return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_))
   = inFunBindCtxt (ppQuot fun) $ do
@@ -270,13 +270,13 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred pats_ty =" <+> (sep $ map pretty pats_tys)) $ do
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (map type2dom pats_tys) res_ty
-      fun_rec    = V fun (tau2sigma tau_fun_ty)
+      fun_rec    = mkVar fun (tau2sigma tau_fun_ty)
   matches' <- extendVarEnv [(fun,fun_rec)] $
                 tcMatches matches (Check tau_fun_ty)
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred tau_fun_ty =" <+> pretty tau_fun_ty) $ do
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred fun_ty =" <+> pretty fun_ty) $ do
-  let fun' = V fun fun_ty
+  let fun' = mkVar fun fun_ty
   return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 
 
@@ -621,11 +621,11 @@ tcElse (Else loc e) exp_ty  = liftM (Else loc) $ checkExpType e exp_ty
 
 tcBndr :: Name -> Expected (Tau Tc) -> TcM (Var Tc,[(Name,Var Tc)])
 tcBndr n (Check ty) = return (v,[(n,v)])
-  where v = V n (tau2sigma ty)
+  where v = mkVar n (tau2sigma ty)
 tcBndr n (Infer ref) = do
   mty <- newMetaTy "a" typeKi
   liftIO $ writeIORef ref mty
-  let v = V n (tau2sigma mty)
+  let v = mkVar n (tau2sigma mty)
   return (v,[(n,v)])
 
 checkPat :: Pat Rn -> Tau Tc -> TcM (Pat Tc,[(Name,Var Tc)])

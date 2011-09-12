@@ -249,11 +249,11 @@ finElse NoElse          = return NoElse
 finElse (Else loc expr) = liftM (Else loc) $ finExp expr
 
 finBndr :: Var Tc -> (Var Ti -> TiM a) -> TiM a
-finBndr (V name (ForallTy [] (MetaTy _))) _cont
+finBndr (V name (ForallTy [] (MetaTy _)) _) _cont
   = throwError $ text "Cannot infer the type of" <+> pretty name
-finBndr x@(V name pty) cont = do
+finBndr x@(V name pty isSk) cont = do
   x' <- inContext (text "In variable" <+> ppQuot name <+> text "type") $
-          liftM (V name) $ finType pty
+          liftM (\pty' -> V name pty' isSk) $ finType pty
   extendVarEnv [(x,x')] $ cont x'
 
 finPats :: [Pat Tc] -> ([Pat Ti] -> TiM a) -> TiM a

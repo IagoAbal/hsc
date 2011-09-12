@@ -83,12 +83,12 @@ substBndr s@Subst1{substVarEnv,substVarScope} var@V{varName,varType} = do
   if var `Set.member` substVarScope
         -- @var@ may capture some variable 
      then do varName' <- newNameFrom varName
-             let var'   = V varName' varType'
+             let var'   = mkVar varName' varType'
                  env'   = Map.insert var (Var var') substVarEnv
                  scope' = Set.insert var' substVarScope
              return (var',s{substVarEnv = env', substVarScope = scope'})
         -- @var@ will not capture any variable
-     else do let var'   = V varName varType'
+     else do let var'   = mkVar varName varType'
                  env'   = Map.delete var substVarEnv   -- restrict domain
                  env''  = Map.insert var (Var var') env'
                  scope' = Set.insert var substVarScope -- update scope
