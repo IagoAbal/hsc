@@ -24,7 +24,6 @@ import Unique( Uniq, Uniquable(..), MonadUnique(..) )
 
 import Data.IORef( IORef, newIORef )
 import Data.Function ( on )
-import Control.Applicative ( pure, (<$>), (<*>), (<|>) )
 import Control.Monad ( liftM )
 import Control.Monad.IO.Class ( MonadIO(..) )
 
@@ -194,7 +193,7 @@ newtype ModuleName = ModName String
 
 
 instance PrettyNames p => Pretty (Module p) where
-  pretty (Module pos modName decls) =
+  pretty (Module _pos modName decls) =
     topLevel (ppModuleHeader modName)
        (map pretty decls)
 
@@ -265,12 +264,12 @@ data GoalType = TheoremGoal
 
 
 instance PrettyNames p => Pretty (Decl p) where
-  pretty (TypeDecl loc name nameList htype) =
+  pretty (TypeDecl _loc name nameList htype) =
     blankline $
     mySep ( [text "type", pretty name]
       ++ map prettyBndr nameList
       ++ [equals, pretty htype])
-  pretty (DataDecl loc name nameList constrList) =
+  pretty (DataDecl _loc name nameList constrList) =
     blankline $
     mySep ( [text "data", pretty name]
       ++ map prettyBndr nameList)
@@ -280,7 +279,7 @@ instance PrettyNames p => Pretty (Decl p) where
 --     = blankline $
 --       mySep [pretty name, text ":", pretty polyType]
   pretty (ValDecl bind) = blankline $ pretty bind
-  pretty (GoalDecl pos goaltype gname _ptctys prop)
+  pretty (GoalDecl _pos goaltype gname _ptctys prop)
     = blankline $
         myFsep [pretty goaltype, pretty gname, equals, pretty prop]
 
@@ -292,7 +291,7 @@ instance PrettyNames p => Pretty (Bind p) where
   pretty (FunBind _rec fun sig _ matches) =
          ppTypeSig fun sig
       $$ ppBindings (map (ppMatch fun) matches)
-  pretty (PatBind pos pat (Rhs grhs whereDecls)) =
+  pretty (PatBind _pos pat (Rhs grhs whereDecls)) =
     myFsep [pretty pat, ppGRhs ValDef grhs]
         $$$ ppWhere whereDecls
 
@@ -301,7 +300,7 @@ ppTypeSig _fun NoTypeSig = empty
 ppTypeSig  fun (TypeSig _loc polyty) = mySep [pretty fun, text ":", pretty polyty]
 
 ppMatch :: PrettyNames p => NAME p -> Match p -> Doc
-ppMatch fun (Match pos ps (Rhs grhs whereDecls)) =
+ppMatch fun (Match _pos ps (Rhs grhs whereDecls)) =
     myFsep (lhs ++ [ppGRhs ValDef grhs])
     $$$ ppWhere whereDecls
       where
@@ -390,12 +389,12 @@ splitApp = go []
         go args f         = (f,args)
 
 tyApp :: (Ge p Tc) => Exp p -> [Tau p] -> Exp p
-tyApp exp []  = exp
-tyApp exp tys = TyApp exp tys
+tyApp expr []  = expr
+tyApp expr tys = TyApp expr tys
 
 tyLam :: (Ge p Tc, TyVAR p ~ TyVar) => [TyVar] -> Exp p -> Exp p
-tyLam [] exp  = exp
-tyLam tvs exp = TyLam tvs exp
+tyLam [] expr  = expr
+tyLam tvs expr = TyLam tvs expr
 
 isAtomicExp :: Exp p -> Bool
 isAtomicExp (Var _)   = True
@@ -421,6 +420,7 @@ instance PrettyNames p => Pretty (Exp p) where
   pretty ElseGuard = text "else"
     -- no other possibility for prefix ops
   pretty (PrefixApp (Op op) a) = myFsep [pretty op, pretty a]
+  pretty (PrefixApp _other  _) = undefined -- impossible
   pretty (InfixApp a opE b)
     = case opE of
           Op op  -> myFsep [pretty a, pretty op, pretty b]
@@ -534,9 +534,9 @@ ppGuardedRhs ctx (GuardedRhs _pos guard body) =
     myFsep [char '|', pretty guard, rhsSepSym ctx, pretty body]
 
 ppElse :: PrettyNames p => RhsContext -> Else p -> Doc
-ppElse ctx (Else _pos body)
+ppElse  ctx (Else _pos body)
   = myFsep [char '|', text "else", rhsSepSym ctx, pretty body]
-ppElse ctx  NoElse   = empty
+ppElse _ctx  NoElse   = empty
 
 -- ** Patterns
 
@@ -570,8 +570,8 @@ data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
-patBndrs (InfixPat p1 op _ p2) = patBndrs p1 ++ patBndrs p2
-patBndrs (ConPat con _ ps) = patsBndrs ps
+patBndrs (InfixPat p1 _op _ p2) = patBndrs p1 ++ patBndrs p2
+patBndrs (ConPat _con _ ps) = patsBndrs ps
 patBndrs (TuplePat ps _) = patsBndrs ps
 patBndrs (ListPat ps _) = patsBndrs ps
 patBndrs (ParenPat p) = patBndrs p
@@ -610,16 +610,16 @@ matchableWith e             p
     -- 'con' is a data constructor with no arguments, but 'InfixPat'
     -- implies a binary data constructor, here we detect that '[]'
     -- does not match _::_.
-  | Just (con,[]) <- splitConApp e
+  | Just (_con,[]) <- splitConApp e
   , InfixPat _ _ _ _ <- p = False
   where get_con (Con con)     = Just con
-        get_con (TyApp e _)   = get_con e
-        get_con (Paren e)     = get_con e
-        get_con (Coerc _ e _) = get_con e
+        get_con (TyApp e1 _)   = get_con e1
+        get_con (Paren e1)     = get_con e1
+        get_con (Coerc _ e1 _) = get_con e1
         get_con _other        = Nothing
-        splitConApp e | Just con <- get_con f = Just (con,args)
-                      | otherwise             = Nothing
-          where (f,args) = splitApp e
+        splitConApp e1 | Just con <- get_con f = Just (con,args)
+                       | otherwise             = Nothing
+          where (f,args) = splitApp e1
 -- 'InfixApp'/'InfixPat' case is beign ignored for now because it is not
 -- very interesting since only '::' can be used in a 'InfixPat'.
 matchableWith (List _ [])   (InfixPat _ _ _ _) = False
@@ -686,7 +686,7 @@ instance PrettyNames p => Pretty (Pat p) where
   prettyPrec _ (LitPat lit) = pretty lit
   prettyPrec p (InfixPat a cop _ b) = parensIf (p > 0) $
     myFsep [pretty a, pretty cop, pretty b]
-  prettyPrec p (ConPat con _ []) = pretty con
+  prettyPrec _ (ConPat con _ []) = pretty con
   prettyPrec p (ConPat con _ ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
   prettyPrec _ (TuplePat ps _) = parenList . map pretty $ ps
