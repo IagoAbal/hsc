@@ -6,7 +6,6 @@ import H.Typecheck.TcM
 
 import H.Syntax
 import H.Phase
-import H.Pretty
 
 import Control.Monad
 import qualified Data.Traversable as T
@@ -33,6 +32,7 @@ zonkConDecls = mapM zonkConDecl
 zonkConDecl :: ConDecl Tc -> TcM (ConDecl Tc)
 zonkConDecl (ConDecl loc name doms)
   = liftM (ConDecl loc name) $ zonkDoms doms
+zonkConDecl _other = undefined -- impossible
 
 zonkBinds :: [Bind Tc] -> TcM [Bind Tc]
 zonkBinds = mapM zonkBind
@@ -71,19 +71,19 @@ zonkExp :: Exp Tc -> TcM (Exp Tc)
 zonkExp (Var x) = liftM Var $ zonkVar x
 zonkExp (Con con) = liftM Con $ zonkCon con
 zonkExp op@(Op _) = return op
-zonkExp exp@(Lit _) = return exp
+zonkExp e@(Lit _) = return e
 zonkExp (PrefixApp op e) = liftM2 PrefixApp (zonkExp op) (zonkExp e)
 zonkExp (InfixApp e1 op e2) = liftM3 InfixApp (zonkExp e1) (zonkExp op) (zonkExp e2)
 zonkExp (App f a) = liftM2 App (zonkExp f) (zonkExp a)
-zonkExp (TyApp exp tys) = liftM2 TyApp (zonkExp exp) (zonkTypes tys)
+zonkExp (TyApp expr tys) = liftM2 TyApp (zonkExp expr) (zonkTypes tys)
 zonkExp (Lam loc pats body)
   = liftM2 (Lam loc) (zonkPats pats) (zonkExp body)
-zonkExp (Let binds exp) = liftM2 Let (zonkBinds binds) (zonkExp exp)
-zonkExp (TyLam tvs exp) = liftM (TyLam tvs) $ zonkExp exp
+zonkExp (Let binds body) = liftM2 Let (zonkBinds binds) (zonkExp body)
+zonkExp (TyLam tvs expr) = liftM (TyLam tvs) $ zonkExp expr
 zonkExp (Ite g t e) = liftM3 Ite (zonkExp g) (zonkExp t) (zonkExp e)
 zonkExp (If grhss) = liftM If $ zonkGuardedRhss grhss
-zonkExp (Case exp ptcty alts)
-  = liftM3 Case (zonkExp exp) (T.mapM zonkType ptcty) (zonkAlts alts)
+zonkExp (Case scrut ptcty alts)
+  = liftM3 Case (zonkExp scrut) (T.mapM zonkType ptcty) (zonkAlts alts)
 zonkExp (Tuple ptcty es) = liftM2 Tuple (T.mapM zonkType ptcty) (zonkExps es)
 zonkExp (List ptcty es) = liftM2 List (T.mapM zonkType ptcty) (zonkExps es)
 zonkExp (Paren e) = liftM Paren $ zonkExp e
@@ -92,9 +92,10 @@ zonkExp (RightSection op e2) = liftM2 RightSection (zonkExp op) (zonkExp e2)
 zonkExp (EnumFromTo e1 en) = liftM2 EnumFromTo (zonkExp e1) (zonkExp en)
 zonkExp (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (zonkExp e1) (zonkExp e2) (zonkExp en)
-zonkExp (Coerc loc exp polyty)
-  = liftM2 (Coerc loc) (zonkExp exp) (zonkType polyty)
+zonkExp (Coerc loc expr polyty)
+  = liftM2 (Coerc loc) (zonkExp expr) (zonkType polyty)
 zonkExp (QP qt pats prop) = liftM2 (QP qt) (zonkPats pats) (zonkExp prop)
+zonkExp _other = undefined -- impossible
 
 zonkPats :: [Pat Tc] -> TcM [Pat Tc]
 zonkPats = mapM zonkPat
@@ -122,20 +123,21 @@ zonkRhs :: Rhs Tc -> TcM (Rhs Tc)
 zonkRhs (Rhs grhs whr) = liftM2 Rhs (zonkGRhs grhs) (zonkBinds whr)
 
 zonkGRhs :: GRhs Tc -> TcM (GRhs Tc)
-zonkGRhs (UnGuarded exp) = liftM UnGuarded $ zonkExp exp
+zonkGRhs (UnGuarded expr) = liftM UnGuarded $ zonkExp expr
 zonkGRhs (Guarded grhss) = liftM Guarded $ zonkGuardedRhss grhss
 
 zonkGuardedRhss :: GuardedRhss Tc -> TcM (GuardedRhss Tc)
 zonkGuardedRhss (GuardedRhss grhss elserhs)
   = liftM2 GuardedRhss (mapM zonkGuardedRhs grhss) (zonkElse elserhs)
+zonkGuardedRhss _other = undefined -- impossible
 
 zonkGuardedRhs :: GuardedRhs Tc -> TcM (GuardedRhs Tc)
 zonkGuardedRhs (GuardedRhs loc g e)
   = liftM2 (GuardedRhs loc) (zonkExp g) (zonkExp e)
 
 zonkElse :: Else Tc -> TcM (Else Tc)
-zonkElse NoElse = return NoElse
-zonkElse (Else loc exp) = liftM (Else loc) $ zonkExp exp
+zonkElse NoElse          = return NoElse
+zonkElse (Else loc expr) = liftM (Else loc) $ zonkExp expr
 
 
 zonkTypes :: [Type c Tc] -> TcM [Type c Tc]
@@ -159,6 +161,7 @@ zonkType mty@(MetaTy mtv) = do -- traceDoc (text "zonkType-MetaTy mty=" <+> pret
         writeMetaTyVar mtv ty'   -- "Short out" multiple hops
         return $ tau2type ty'
 zonkType (ForallTy tvs ty) = liftM (ForallTy tvs) $ zonkType ty
+zonkType _other = undefined -- impossible
 
 zonkDoms :: [Dom Tc] -> TcM [Dom Tc]
 zonkDoms = mapM zonkDom
@@ -172,7 +175,7 @@ zonkDom (Dom (Just pat) ty mb_prop) = do
   ty' <- zonkType ty
   mb_prop' <- T.mapM zonkExp mb_prop
   return (Dom (Just pat') ty' mb_prop')
-
+zonkDom _other = undefined -- impossible
 
 ---
 
