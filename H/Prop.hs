@@ -3,8 +3,6 @@ module H.Prop where
 
 import H.Syntax
 
-import Unique
-
 
 _True_ :: Prop p
 _True_ = Con (BuiltinCon TrueCon)
@@ -50,5 +48,5 @@ mkConj ps = Just $ foldr1 (.&&.) ps
 
 
 filterProp :: (Prop p -> Bool) -> Prop p -> Maybe (Prop p)
-filterProp pred = mkConj . filter pred . splitConj
+filterProp p = mkConj . filter p . splitConj
 
