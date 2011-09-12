@@ -14,11 +14,18 @@ _False_ = Con (BuiltinCon FalseCon)
 
 infixr .==>.
 
+notP :: Prop p -> Prop p
+notP (PrefixApp (Op (BoolOp NotB)) p) = p
+notP p                                = PrefixApp (Op notOp) p
+
 (.&&.), (.||.), (.==>.), (.<=>.) :: Prop p -> Prop p -> Prop p
 p .&&. q = InfixApp p (Op andOp) q
 p .||. q = InfixApp p (Op orOp) q
 p .==>. q = InfixApp p (Op impOp) q
 p .<=>. q = InfixApp p (Op iffOp) q
+
+forallP :: [Pat p] -> Prop p -> Prop p
+forallP = QP ForallQ
 
 hypo :: Prop p -> Prop p -> Prop p
 hypo p = (p .==>.)
