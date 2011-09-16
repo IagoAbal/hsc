@@ -78,7 +78,8 @@ kcType rnpty@(ForallTy ns ty)
   tvs_sk <- mapM skoTyVar tvs
   ty'_sk <- extendTyVarEnv (zip ns tvs_sk) $
               checkKind ty typeKi
-  ty' <- substType [] (zip tvs_sk vtys) ty'_sk
+  ty'_sk_zo <- zonkType ty'_sk
+  ty' <- substType [] (zip tvs_sk vtys) ty'_sk_zo
   return (ForallTy tvs ty',typeKi)
   where tvs = map (flip mkTyVar typeKi) ns
         vtys = map VarTy tvs
