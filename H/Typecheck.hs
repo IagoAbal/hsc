@@ -121,6 +121,10 @@ kcDom _other = undefined
 data Expected a = Infer (IORef a)
                 | Check a
 
+getExpected :: Expected a -> TcM a
+getExpected (Check x) = return x
+getExpected (Infer ref) = liftIO $ readIORef ref
+
 
 tcDecls :: [Decl Rn] -> TcM [Decl Tc]
 tcDecls [] = return []
