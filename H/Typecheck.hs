@@ -701,7 +701,8 @@ tcPat (WildPat uniq NoPostTc) (Infer ref) = do
   return (WildPat uniq (PostTc mty),[])
 tcPat (AsPat n p) exp_ty = do
   (v,n_env) <- tcBndr n exp_ty
-  (p',p_env) <- tcPat p exp_ty
+  v_ty <- getExpected exp_ty
+  (p',p_env) <- checkPat p v_ty
   return (AsPat v p',n_env ++ p_env)
 tcPat (SigPat p ty) exp_ty = do
   ty' <- checkKind ty typeKi
