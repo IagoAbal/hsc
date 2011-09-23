@@ -134,8 +134,8 @@ propMTV (Lam _loc _pats body)
 propMTV (Let _bs body)
   = propMTV body
 propMTV (TyLam tvs body) = propMTV body
-propMTV (Ite g t e) = Set.empty
-propMTV (If grhss) = Set.empty
+propMTV (Ite _ g t e) = Set.empty
+propMTV (If _ grhss) = Set.empty
 propMTV (Case e _ptcty alts) = propMTV e
 propMTV (Tuple _ es) = propsMTV es
 propMTV (List _ es) = propsMTV es

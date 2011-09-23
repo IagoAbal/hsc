@@ -195,8 +195,10 @@ substExp s (TyLam tvs e) = do
 substExp s (Let binds body) = do
   (binds',s') <- substBinds s binds
   liftM (Let binds') $ substExp s' body
-substExp s (Ite g t e) = liftM3 Ite (substExp s g) (substExp s t) (substExp s e)
-substExp s (If grhss) = liftM If $ substGuardedRhss s grhss
+substExp s (Ite ite_ty g t e)
+  = liftM4 Ite (substPostTcType s ite_ty) (substExp s g) (substExp s t) (substExp s e)
+substExp s (If if_ty grhss)
+  = liftM2 If (substPostTcType s if_ty) (substGuardedRhss s grhss)
 substExp s (Case e casety alts)
   = liftM3 Case (substExp s e) (substPostTcType s casety) (substAlts s alts)
 substExp s (Tuple ptcty es) = liftM2 Tuple (T.mapM (substType s) ptcty) (substExps s es)

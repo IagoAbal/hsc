@@ -220,8 +220,8 @@ leafFix fixs e = case e of
     App e1 e2               -> liftM2 App (fix e1) (fix e2)
     Lam loc pats e       -> liftM2 (Lam loc) (mapM fix pats) $ fix e
     Let bs e                -> liftM2 Let (mapM fix bs) $ fix e
-    Ite e a b                -> liftM3 Ite (fix e) (fix a) (fix b)
-    If grhss                 -> liftM If $ fix grhss
+    Ite NoPostTc e a b       -> liftM3 (Ite NoPostTc) (fix e) (fix a) (fix b)
+    If NoPostTc grhss                 -> liftM (If NoPostTc) $ fix grhss
     Case e ptcty alts             -> liftM2 (flip Case ptcty) (fix e) $ mapM fix alts
     Tuple NoPostTc exps              -> liftM (Tuple NoPostTc) $ mapM fix exps
     List NoPostTc exps               -> liftM (List NoPostTc) $ mapM fix  exps

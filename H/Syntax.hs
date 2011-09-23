@@ -358,9 +358,9 @@ data Exp p where
   -- | type lambda
   TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
   -- | @if@ /exp/ @then@ /exp/ @else@ /exp/
-  Ite :: Prop p -> Exp p -> Exp p -> Exp p
+  Ite :: PostTcType p -> Prop p -> Exp p -> Exp p -> Exp p
   -- | Generalized @if@ expressions
-  If :: GuardedRhss p -> Exp p
+  If :: PostTcType p -> GuardedRhss p -> Exp p
   -- | @case@ /exp/ @of@ /alts/
   Case :: Exp p
         -> PostTcType p
@@ -445,11 +445,11 @@ instance PrettyNames p => Pretty (Exp p) where
   pretty (Let expList letBody) =
     myFsep [text "let" <+> ppBody letIndent (map pretty expList),
       text "in", pretty letBody]
-  pretty (Ite cond thenexp elsexp) =
+  pretty (Ite _ cond thenexp elsexp) =
     myFsep [text "if", pretty cond,
       text "then", pretty thenexp,
       text "else", pretty elsexp]
-  pretty (If grhss) = myFsep [text "if", ppGuardedRhss IfExp grhss]
+  pretty (If _ grhss) = myFsep [text "if", ppGuardedRhss IfExp grhss]
   pretty (Case cond _ptcty altList) =
     myFsep [text "case", pretty cond, text "of"]
     $$$ ppBody caseIndent (map pretty altList)

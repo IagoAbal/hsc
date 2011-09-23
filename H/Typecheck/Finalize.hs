@@ -189,10 +189,14 @@ finExp (Lam mb_loc pats body)
                             Just loc -> inLambdaAbsCtxt loc pats
 finExp (Let bs body) = finBinds bs $ \bs' -> liftM (Let bs') $ finExp body
 finExp (TyLam tvs expr) = liftM (TyLam tvs) $ finExp expr
-finExp (Ite g t e) = inIteExprCtxt g $
-  liftM3 Ite (finExp g) (finExp t) (finExp e)
-finExp (If grhss) = inIfExprCtxt $
-  liftM If $ finGuardedRhss grhss
+finExp (Ite (PostTc ite_ty) g t e)
+  = inIteExprCtxt g $ do
+  ite_ty' <- finType ite_ty
+  liftM3 (Ite (PostTc ite_ty')) (finExp g) (finExp t) (finExp e)
+finExp (If (PostTc if_ty) grhss)
+  = inIfExprCtxt $ do
+  if_ty' <- finType if_ty
+  liftM (If (PostTc if_ty')) $ finGuardedRhss grhss
 finExp (Case scrut (PostTc case_ty) alts) = do
   scrut' <- finExp scrut
   case_ty' <- finType case_ty

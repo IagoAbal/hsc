@@ -55,8 +55,8 @@ mtvExp (Lam _loc pats body)
 mtvExp (Let bs body)
   = mtvBinds bs `Set.union` mtvExp body
 mtvExp (TyLam tvs body) = mtvExp body
-mtvExp (Ite g t e) = mtvExps [g,t,e]
-mtvExp (If grhss) = mtvGuardedRhss grhss
+mtvExp (Ite ptcty g t e) = mtvExps [g,t,e] `Set.union` (F.foldMap mtvType ptcty)
+mtvExp (If ptcty grhss) = mtvGuardedRhss grhss `Set.union` (F.foldMap mtvType ptcty)
 mtvExp (Case exp (PostTc casety) alts)
   = Set.unions [mtvExp exp, mtvType casety, mtvAlts alts]
 mtvExp (Tuple ptcty es) = mtvExps es `Set.union` (F.foldMap mtvType ptcty)

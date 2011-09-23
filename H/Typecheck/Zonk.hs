@@ -81,8 +81,8 @@ zonkExp (Lam loc pats body)
   = liftM2 (Lam loc) (zonkPats pats) (zonkExp body)
 zonkExp (Let binds body) = liftM2 Let (zonkBinds binds) (zonkExp body)
 zonkExp (TyLam tvs expr) = liftM (TyLam tvs) $ zonkExp expr
-zonkExp (Ite g t e) = liftM3 Ite (zonkExp g) (zonkExp t) (zonkExp e)
-zonkExp (If grhss) = liftM If $ zonkGuardedRhss grhss
+zonkExp (Ite ptcty g t e) = liftM4 Ite (T.mapM zonkType ptcty) (zonkExp g) (zonkExp t) (zonkExp e)
+zonkExp (If ptcty grhss) = liftM2 If (T.mapM zonkType ptcty) (zonkGuardedRhss grhss)
 zonkExp (Case scrut ptcty alts)
   = liftM3 Case (zonkExp scrut) (T.mapM zonkType ptcty) (zonkAlts alts)
 zonkExp (Tuple ptcty es) = liftM2 Tuple (T.mapM zonkType ptcty) (zonkExps es)

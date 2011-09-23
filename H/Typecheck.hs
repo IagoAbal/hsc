@@ -409,17 +409,20 @@ tcExp (Let binds body) (Infer ref) = do
   liftIO $ writeIORef ref body_ty'
   return (Let binds' body')
 --   Ite :: Prop p -> Exp p -> Exp p -> Exp p
-tcExp (Ite g t e) exp_ty
+tcExp (Ite NoPostTc g t e) exp_ty
   = inIteExprCtxt g $ do
   g' <- checkExpType g boolTy
   mty <- newMetaTy "a" typeKi
   t' <- checkExpType t mty
   e' <- checkExpType e mty
   mty ~>? exp_ty
-  return (Ite g' t' e')
+  return (Ite (PostTc mty) g' t' e')
 --   If :: GuardedRhss p -> Exp p
-tcExp (If grhss) exp_ty
-  = inIfExprCtxt $ liftM If $ tcGuardedRhss grhss exp_ty
+tcExp (If NoPostTc grhss) exp_ty
+  = inIfExprCtxt $ do
+      grhss' <- tcGuardedRhss grhss exp_ty
+      if_ty <- getExpected exp_ty
+      return (If (PostTc if_ty) grhss')
 --   Case :: Exp p -> PostTcType p -> [Alt p] -> Exp p
 tcExp (Case scrut NoPostTc alts) exp_ty
   = inCaseExprCtxt scrut $ do

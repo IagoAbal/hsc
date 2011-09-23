@@ -194,12 +194,12 @@ instance Rename Exp where
         renameBndr pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
-  rename (Ite g t e)
+  rename (Ite NoPostTc g t e)
     = inIteExprCtxt g $
-        liftM3 Ite (rename g) (rename t) (rename e)
-  rename (If grhss)
+        liftM3 (Ite NoPostTc) (rename g) (rename t) (rename e)
+  rename (If NoPostTc grhss)
     = inIfExprCtxt $
-        liftM If $ rename grhss
+        liftM (If NoPostTc) $ rename grhss
   rename (Case e NoPostTc alts)
     = inCaseExprCtxt e $
         liftM2 (flip Case NoPostTc) (rename e) (rnList alts)

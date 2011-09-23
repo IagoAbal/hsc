@@ -57,8 +57,8 @@ fvExp (Lam _loc pats body)
 fvExp (Let bs body)
   = fvBinds bs `Set.union` (fvExp body Set.\\ bsBinds bs)
 fvExp (TyLam tvs body) = fvExp body
-fvExp (Ite g t e) = fvExps [g,t,e]
-fvExp (If grhss) = fvGuardedRhss grhss
+fvExp (Ite _ptcty g t e) = fvExps [g,t,e]
+fvExp (If _ptcty grhss) = fvGuardedRhss grhss
 fvExp (Case e _ptcty alts) = fvExp e `Set.union` fvAlts alts
 fvExp (Tuple _ es) = fvExps es
 fvExp (List _ es) = fvExps es
