@@ -8,13 +8,14 @@ import H.Syntax
 import H.Phase
 
 import Control.Monad
+import Control.Monad.IO.Class
 import qualified Data.Traversable as T
 
 
-zonkDecls :: [Decl Tc] -> TcM [Decl Tc]
+zonkDecls :: MonadIO m => [Decl Tc] -> m [Decl Tc]
 zonkDecls = mapM zonkDecl
 
-zonkDecl :: Decl Tc -> TcM (Decl Tc)
+zonkDecl :: MonadIO m => Decl Tc -> m (Decl Tc)
 -- TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Type p -> Decl p
 zonkDecl (TypeDecl loc ty_name ty_params ty_rhs)
   = liftM (TypeDecl loc ty_name ty_params) $ zonkType ty_rhs
@@ -26,48 +27,48 @@ zonkDecl (ValDecl bind) = liftM ValDecl $ zonkBind bind
 zonkDecl (GoalDecl loc gtype gname pctyps prop)
   = liftM (GoalDecl loc gtype gname pctyps) $ zonkExp prop
 
-zonkConDecls :: [ConDecl Tc] -> TcM [ConDecl Tc]
+zonkConDecls :: MonadIO m => [ConDecl Tc] -> m [ConDecl Tc]
 zonkConDecls = mapM zonkConDecl
 
-zonkConDecl :: ConDecl Tc -> TcM (ConDecl Tc)
+zonkConDecl :: MonadIO m => ConDecl Tc -> m (ConDecl Tc)
 zonkConDecl (ConDecl loc name doms)
   = liftM (ConDecl loc name) $ zonkDoms doms
 zonkConDecl _other = undefined -- impossible
 
-zonkBinds :: [Bind Tc] -> TcM [Bind Tc]
+zonkBinds :: MonadIO m => [Bind Tc] -> m [Bind Tc]
 zonkBinds = mapM zonkBind
 
-zonkBind :: Bind Tc -> TcM (Bind Tc)
+zonkBind :: MonadIO m => Bind Tc -> m (Bind Tc)
 zonkBind (FunBind rec fun sig ptctyps matches)
   = liftM4 (FunBind rec) (zonkVar fun) (zonkTypeSig sig) (return ptctyps) (zonkMatches matches)
 zonkBind (PatBind loc pat rhs)
   = liftM2 (PatBind loc) (zonkPat pat) (zonkRhs rhs)
 
-zonkTypeSig :: TypeSig Tc -> TcM (TypeSig Tc)
+zonkTypeSig :: MonadIO m => TypeSig Tc -> m (TypeSig Tc)
 zonkTypeSig NoTypeSig = return NoTypeSig
 zonkTypeSig (TypeSig loc polyty)
   = liftM (TypeSig loc) $ zonkType polyty
 
-zonkMatches :: [Match Tc] -> TcM [Match Tc]
+zonkMatches :: MonadIO m => [Match Tc] -> m [Match Tc]
 zonkMatches = mapM zonkMatch
 
-zonkMatch :: Match Tc -> TcM (Match Tc)
+zonkMatch :: MonadIO m => Match Tc -> m (Match Tc)
 zonkMatch (Match loc pats rhs)
   = liftM2 (Match loc) (zonkPats pats) (zonkRhs rhs)
 
-zonkVar :: Var Tc -> TcM (Var Tc)
+zonkVar :: MonadIO m => Var Tc -> m (Var Tc)
 zonkVar x@V{varType} = do
   varType' <- zonkType varType
   return x{varType = varType'}
 
-zonkCon :: Con Tc -> TcM (Con Tc)
+zonkCon :: MonadIO m => Con Tc -> m (Con Tc)
 zonkCon (UserCon ucon)      = liftM UserCon $ zonkVar ucon
 zonkCon bcon@(BuiltinCon _) = return bcon
 
-zonkExps :: [Exp Tc] -> TcM [Exp Tc]
+zonkExps :: MonadIO m => [Exp Tc] -> m [Exp Tc]
 zonkExps = mapM zonkExp
 
-zonkExp :: Exp Tc -> TcM (Exp Tc)
+zonkExp :: MonadIO m => Exp Tc -> m (Exp Tc)
 zonkExp (Var x) = liftM Var $ zonkVar x
 zonkExp (Con con) = liftM Con $ zonkCon con
 zonkExp op@(Op _) = return op
@@ -97,10 +98,10 @@ zonkExp (Coerc loc expr polyty)
 zonkExp (QP qt pats prop) = liftM2 (QP qt) (zonkPats pats) (zonkExp prop)
 zonkExp _other = undefined -- impossible
 
-zonkPats :: [Pat Tc] -> TcM [Pat Tc]
+zonkPats :: MonadIO m => [Pat Tc] -> m [Pat Tc]
 zonkPats = mapM zonkPat
 
-zonkPat :: Pat Tc -> TcM (Pat Tc)
+zonkPat :: MonadIO m => Pat Tc -> m (Pat Tc)
 zonkPat (VarPat x) = liftM VarPat $ zonkVar x
 zonkPat pat@(LitPat _) = return pat
 zonkPat (InfixPat p1 bcon ptctys p2)
@@ -113,37 +114,37 @@ zonkPat (WildPat uniq ptcty) = liftM (WildPat uniq) (T.mapM zonkType ptcty)
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
 zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
 
-zonkAlts :: [Alt Tc] -> TcM [Alt Tc]
+zonkAlts :: MonadIO m => [Alt Tc] -> m [Alt Tc]
 zonkAlts = mapM zonkAlt
 
-zonkAlt :: Alt Tc -> TcM (Alt Tc)
+zonkAlt :: MonadIO m => Alt Tc -> m (Alt Tc)
 zonkAlt (Alt loc pat rhs) = liftM2 (Alt loc) (zonkPat pat) (zonkRhs rhs)
 
-zonkRhs :: Rhs Tc -> TcM (Rhs Tc)
+zonkRhs :: MonadIO m => Rhs Tc -> m (Rhs Tc)
 zonkRhs (Rhs grhs whr) = liftM2 Rhs (zonkGRhs grhs) (zonkBinds whr)
 
-zonkGRhs :: GRhs Tc -> TcM (GRhs Tc)
+zonkGRhs :: MonadIO m => GRhs Tc -> m (GRhs Tc)
 zonkGRhs (UnGuarded expr) = liftM UnGuarded $ zonkExp expr
 zonkGRhs (Guarded grhss) = liftM Guarded $ zonkGuardedRhss grhss
 
-zonkGuardedRhss :: GuardedRhss Tc -> TcM (GuardedRhss Tc)
+zonkGuardedRhss :: MonadIO m => GuardedRhss Tc -> m (GuardedRhss Tc)
 zonkGuardedRhss (GuardedRhss grhss elserhs)
   = liftM2 GuardedRhss (mapM zonkGuardedRhs grhss) (zonkElse elserhs)
 zonkGuardedRhss _other = undefined -- impossible
 
-zonkGuardedRhs :: GuardedRhs Tc -> TcM (GuardedRhs Tc)
+zonkGuardedRhs :: MonadIO m => GuardedRhs Tc -> m (GuardedRhs Tc)
 zonkGuardedRhs (GuardedRhs loc g e)
   = liftM2 (GuardedRhs loc) (zonkExp g) (zonkExp e)
 
-zonkElse :: Else Tc -> TcM (Else Tc)
+zonkElse :: MonadIO m => Else Tc -> m (Else Tc)
 zonkElse NoElse          = return NoElse
 zonkElse (Else loc expr) = liftM (Else loc) $ zonkExp expr
 
 
-zonkTypes :: [Type c Tc] -> TcM [Type c Tc]
+zonkTypes :: MonadIO m => [Type c Tc] -> m [Type c Tc]
 zonkTypes = mapM zonkType
 
-zonkType :: Type c Tc -> TcM (Type c Tc)
+zonkType :: MonadIO m => Type c Tc -> m (Type c Tc)
 zonkType ty@(VarTy _) = return ty
   -- ?? there is no need to go into the type constructor ...
 zonkType (ConTy tc args) = liftM (ConTy tc) $ zonkTypes args
@@ -163,10 +164,10 @@ zonkType mty@(MetaTy mtv) = do -- traceDoc (text "zonkType-MetaTy mty=" <+> pret
 zonkType (ForallTy tvs ty) = liftM (ForallTy tvs) $ zonkType ty
 zonkType _other = undefined -- impossible
 
-zonkDoms :: [Dom Tc] -> TcM [Dom Tc]
+zonkDoms :: MonadIO m => [Dom Tc] -> m [Dom Tc]
 zonkDoms = mapM zonkDom
 
-zonkDom :: Dom Tc -> TcM (Dom Tc)
+zonkDom :: MonadIO m => Dom Tc -> m (Dom Tc)
 zonkDom (Dom Nothing ty Nothing) = do
   ty' <- zonkType ty
   return (Dom Nothing ty' Nothing)
@@ -179,7 +180,7 @@ zonkDom _other = undefined -- impossible
 
 ---
 
-headZonkType :: Type c Tc -> TcM (Type c Tc)
+headZonkType :: MonadIO m => Type c Tc -> m (Type c Tc)
 headZonkType mty@(MetaTy mtv) = do
   mb_ty <- readMetaTyVar mtv
   case mb_ty of
