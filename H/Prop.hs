@@ -36,7 +36,8 @@ splitConj (InfixApp p (Op (BoolOp AndB)) q)
 splitConj p = [p]
 
 conj :: [Prop p] -> Prop p
-conj = foldr (.&&.) _True_
+conj [] = _True_
+conj ps = foldr1 (.&&.) ps
 
 hypos :: [Prop p] -> Prop p -> Prop p
 hypos [] p = p
