@@ -39,6 +39,10 @@ conj :: [Prop p] -> Prop p
 conj [] = _True_
 conj ps = foldr1 (.&&.) ps
 
+disj :: [Prop p] -> Prop p
+disj [] = _False_
+disj ps = foldr1 (.||.) ps
+
 hypos :: [Prop p] -> Prop p -> Prop p
 hypos [] p = p
 hypos hs p = hypo (conj hs) p
