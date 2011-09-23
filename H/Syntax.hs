@@ -288,9 +288,12 @@ instance PrettyNames p => Pretty (Decl p) where
 --     = blankline $
 --       mySep [pretty name, text ":", pretty polyType]
   pretty (ValDecl bind) = blankline $ pretty bind
-  pretty (GoalDecl _pos goaltype gname _ptctys prop)
+  pretty (GoalDecl _pos goaltype gname ptctyps prop)
     = blankline $
-        myFsep [pretty goaltype, pretty gname, equals, pretty prop]
+        myFsep $ [pretty goaltype, pretty gname] ++ pp_typs ++ [equals, pretty prop]
+    where pp_typs = case ptctyps of
+                        NoPostTc    -> []
+                        PostTc typs -> map (\tv -> char '@' <> pretty tv) typs
 
 instance Pretty GoalType where
   pretty TheoremGoal = text "theorem"
