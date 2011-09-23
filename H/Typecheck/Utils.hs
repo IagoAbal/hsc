@@ -225,7 +225,7 @@ patExpSubst e pat_dom target_fv = get_subst e pat_dom
         get_subst e (ParenPat p) = get_subst e p
         get_subst _ _ = Nothing
 
-instFunTyWithPat :: (Dom Tc,Range Tc) -> Pat Tc -> TcM (Range Tc)
+instFunTyWithPat :: (MonadUnique m, MonadError Doc m, IsPostTc p) => (Dom p,Range p) -> Pat p -> m (Range p)
   -- non-dependent arrow
 instFunTyWithPat (Dom Nothing _ Nothing,rang) _lpat = return rang
   -- dependent arrow
@@ -233,7 +233,7 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
   when (not $ matchablePats lpat dpat) $
     throwError (text "Pattern" <+> pretty lpat <+> text "is not compatible with the expected pattern" <+> pretty dpat)
   (s,bs) <- patPatSubst lpat dpat (fvType rang)
-  rang' <- substType s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
+  rang' <- subst_type s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
 
 patPatSubst :: forall m p. (MonadUnique m, IsPostTc p) =>
