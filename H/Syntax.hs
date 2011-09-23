@@ -61,7 +61,8 @@ instance Sorted (Var p) (Sigma p) where
   sortOf = varType
 
 instance Pretty (Var p) where
-  pretty = pretty . varName
+  pretty v@(V _ _ False) = pretty $ varName v
+  pretty v@(V _ _ True) = char '!' <> pretty (varName v)
 
 instance PrettyNames p => PrettyBndr (Var p) where
   prettyBndr x = parens $ pretty x <> colon <> pretty (varType x)
@@ -93,7 +94,8 @@ instance Sorted TyVar Kind where
   sortOf = tyVarKind
 
 instance Pretty TyVar where
-  pretty = pretty . tyVarName
+  pretty tv@(TyV _ _ False) = pretty $ tyVarName tv
+  pretty tv@(TyV _ _ True) = char '\'' <> pretty (tyVarName tv)
 
 instance PrettyBndr TyVar where
   prettyBndr tv = parens $ pretty tv <> colon <> pretty (tyVarKind tv)
