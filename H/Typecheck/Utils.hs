@@ -232,17 +232,18 @@ instFunTyWithPat (Dom Nothing _ Nothing,rang) _lpat = return rang
 instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
   when (not $ matchablePats lpat dpat) $
     throwError (text "Pattern" <+> pretty lpat <+> text "is not compatible with the expected pattern" <+> pretty dpat)
-  (s,bs) <- patRangeSubst lpat dpat rang
+  (s,bs) <- patPatSubst lpat dpat (fvType rang)
   rang' <- substType s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
 
-patRangeSubst :: Pat Tc   -- ^ argument pattern
-              -> Pat Tc   -- ^ domain pattern
-              -> Range Tc
-              -> TcM ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)])    -- ^ substitution for range, let-bindings
-patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty pat_lam <+> pretty pat_dom) $ get_subst ([],[]) pat_lam pat_dom
-  where fvs = fvType rang `Set.union` fvPat pat_dom
-        get_subst :: ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)]) -> Pat Tc -> Pat Tc -> TcM ([(Var Tc,Exp Tc)],[(Pat Tc,Exp Tc)])
+patPatSubst :: forall m p. (MonadUnique m, IsPostTc p) =>
+                 Pat p   -- ^ argument pattern
+              -> Pat p   -- ^ domain pattern
+              -> Set (Var p)
+              -> m ([(Var p,Exp p)],[(Pat p,Exp p)])    -- ^ substitution for range, let-bindings
+patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty pat_lam <+> pretty pat_dom) $ get_subst ([],[]) pat_lam pat_dom
+  where fvs = target_fv `Set.union` fvPat pat_dom
+        get_subst :: ([(Var p,Exp p)],[(Pat p,Exp p)]) -> Pat p -> Pat p -> m ([(Var p,Exp p)],[(Pat p,Exp p)])
           -- dpat bounds no variable
         get_subst (s,bs) _lpat dpat  | Set.null (bsPat dpat) = return (s,bs)
           -- no variable bound by dpat is free in rang
@@ -250,11 +251,11 @@ patRangeSubst pat_lam pat_dom rang = traceDoc (text "patRangeSubst" <+> pretty p
         get_subst (s,bs) lpat  (VarPat x) = return ((x,e):s,bs)
           where e = pat2exp lpat
         get_subst (s,bs) (WildPat uniq (PostTc tau)) dpat = do
-          tau' <- substType s [] tau
+          tau' <- subst_type s [] tau
           let v = instWildPat uniq tau'
           return (s,bs++[(dpat,Var v)])
         get_subst (s,bs) (VarPat y) dpat = do
-          yexp' <- substExp s [] (Var y)
+          yexp' <- subst_exp s [] (Var y)
           return (s,bs++[(dpat,yexp')])
         get_subst (s,bs) (InfixPat q1 bcon _ q2) (InfixPat p1 bcon' _ p2)
           | bcon == bcon' = do (s',bs') <- get_subst (s,bs) q1 p1
