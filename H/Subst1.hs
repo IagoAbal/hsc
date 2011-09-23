@@ -20,6 +20,8 @@ import H.Syntax
 import H.Phase
 import H.FreeVars
 
+import Util.Monad ( mapAccumM )
+
 import Name
 import Unique( MonadUnique )
 
@@ -66,13 +68,6 @@ subst_type var_env tyvar_env = substType (mkSubst1_FV var_env tyvar_env)
 
 subst_doms :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> [Dom p] -> m [Dom p]
 subst_doms var_env tyvar_env = liftM fst . substDoms (mkSubst1_FV var_env tyvar_env)
-
-
-mapAccumM :: Monad m => (acc -> x -> m (y,acc)) -> acc -> [x] -> m ([y], acc)
-mapAccumM _ acc []     = return ([],acc)
-mapAccumM f acc (x:xs) = do (y,acc') <- f acc x
-                            (ys,acc'') <- mapAccumM f acc' xs
-                            return (y:ys,acc'')
 
 substBndrs :: (MonadUnique m, IsPostTc p) => Subst1 p -> [Var p] -> m ([Var p],Subst1 p)
 substBndrs = mapAccumM substBndr
