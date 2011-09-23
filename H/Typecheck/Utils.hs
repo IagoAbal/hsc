@@ -334,7 +334,7 @@ it is an identifier starting with an underscore.
 -}
 
 -- This could be more fine tuned but it is OK
-letType :: [Bind Tc] -> Type c Tc -> TcM (Type c Tc)
+letType :: (MonadUnique m, IsPostTc p) => [Bind p] -> Type c p -> m (Type c p)
 letType binds ty
   | [] <- binds' = return ty
   | otherwise    = tpType f ty
