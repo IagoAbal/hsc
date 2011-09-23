@@ -161,10 +161,10 @@ skolemise (ForallTy tvs ty) = do
   return (tvs_sk,ty')
 skolemise ty = return ([],sigma2tau ty)
 
-readMetaTyVar :: MetaTyVar -> TcM (Maybe (Tau Tc))
+readMetaTyVar :: MonadIO m => MetaTyVar -> m (Maybe (Tau Tc))
 readMetaTyVar = liftIO . readIORef . mtvRef
 
-writeMetaTyVar :: MetaTyVar -> Tau Tc -> TcM ()
+writeMetaTyVar :: MonadIO m => MetaTyVar -> Tau Tc -> m ()
 -- writeMetaTyVar MetaTyV{mtvRef} = liftIO . writeIORef mtvRef . Just
   -- for debugging
 writeMetaTyVar mtv@MetaTyV{mtvRef} ty =
