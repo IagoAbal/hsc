@@ -86,7 +86,7 @@ fvPat (TuplePat ps _) = fvPats ps
 fvPat (ListPat ps _) = fvPats ps
 fvPat (ParenPat p) = fvPat p
 fvPat WildPatIn     = Set.empty
-fvPat (WildPat _ _)     = Set.empty
+fvPat (WildPat _)     = Set.empty
 fvPat (AsPat _x p)  = fvPat p
 fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
 
@@ -102,7 +102,7 @@ bsPat (TuplePat ps _) = bsPats ps
 bsPat (ListPat ps _) = bsPats ps
 bsPat (ParenPat p) = bsPat p
 bsPat WildPatIn      = Set.empty
-bsPat (WildPat _ _)      = Set.empty
+bsPat (WildPat wild_var)      = Set.singleton wild_var
 bsPat (AsPat x p)  = Set.insert x $ bsPat p
 bsPat (SigPat p _ty) = bsPat p
 
@@ -173,7 +173,11 @@ patsFTV :: Ord (TyVAR p) => [Pat p] -> Set (TyVAR p)
 patsFTV = Set.unions . map patFTV
 
 patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
-patFTV (VarPat x) = Set.empty     -- same than for fvPat
+  -- same than for fvPat-VarPat
+  -- but I think here that could be easier, because fvPat is used by the renamer,
+  -- but patFTV is only used after renaming... so make these functions specific to
+  -- VAR p ~ Var p could be OK.
+patFTV (VarPat x) = Set.empty
 patFTV (LitPat _) = Set.empty
 patFTV (InfixPat p1 _op _ p2) = patsFTV [p1,p2]
 patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys)
@@ -181,7 +185,7 @@ patFTV (TuplePat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ListPat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ParenPat p) = patFTV p
 patFTV WildPatIn     = Set.empty
-patFTV (WildPat _ ptcty)     = foldMap typeFTV ptcty
+patFTV (WildPat _)   = Set.empty    -- same than for VarPat
 patFTV (AsPat _x p)  = patFTV p
 patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
 

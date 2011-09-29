@@ -285,11 +285,14 @@ finPat (ListPat ps (PostTc ty)) cont = do
   ty' <- finType ty
   finPats ps $ cont . flip ListPat (PostTc ty')
 finPat (ParenPat p) cont = finPat p $ cont . ParenPat
-finPat (WildPat _ (PostTc (MetaTy _))) _cont
+finPat (WildPat (V _ (MetaTy _) _)) _cont
   = throwError $ text "Cannot infer the type of `_' pattern"
-finPat (WildPat uniq (PostTc ty)) cont = do
-  ty' <- finType ty
-  cont (WildPat uniq (PostTc ty'))
+  -- Should we remove wildcard-patterns here ? After all, we may have
+  -- introduced uses of such variable for typing purposes...
+finPat (WildPat wild_var@(V name pty isSk)) cont = do
+  wild_var' <- inContext (text "In `_' pattern type") $
+          liftM (\pty' -> V name pty' isSk) $ finType pty
+  extendVarEnv [(wild_var,wild_var')] $ cont (WildPat wild_var')
 finPat (AsPat x pat) cont
   = finBndr x $ \x' -> finPat pat $ \pat' -> cont (AsPat x' pat')
 finPat (SigPat pat ty) cont = do

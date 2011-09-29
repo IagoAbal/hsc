@@ -284,7 +284,8 @@ instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (ParenPat p) f = renameBndr p $ f . ParenPat
   renameBndr WildPatIn f = do
     uniq <- getUniq
-    f (WildPat uniq NoPostTc)
+    let wild_var = mkSysName (mkOccName VarNS "_x") uniq
+    f (WildPat wild_var)
   renameBndr (SigPat p t) f = do t' <- rename t
                                  renameBndr p $ f . (flip SigPat t')
   renameBndr (AsPat x p) f

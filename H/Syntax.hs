@@ -572,7 +572,7 @@ data Pat p where
   ParenPat :: Pat p -> Pat p
   -- | wildcard pattern (@_@)
   WildPatIn :: Pat Pr
-  WildPat :: Ge p Rn => Uniq -> PostTcType p -> Pat p
+  WildPat :: Ge p Rn => VAR p -> Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
   -- ^ pattern signature
@@ -591,7 +591,7 @@ patBndrs (TuplePat ps _) = patsBndrs ps
 patBndrs (ListPat ps _) = patsBndrs ps
 patBndrs (ParenPat p) = patBndrs p
 patBndrs WildPatIn    = []
-patBndrs (WildPat _ _)  = []
+patBndrs (WildPat var)  = [var]
 patBndrs (AsPat v p)  = v : patBndrs p
 patBndrs (SigPat p _t) = patBndrs p
 
@@ -611,7 +611,7 @@ instWildPat uniq tau
 -- e.g. @tail [x] `matchableWith (y::ys) == True@
 matchableWith :: IsPostTc p => Exp p -> Pat p -> Bool
 matchableWith _e            (VarPat _)    = True
-matchableWith _e            (WildPat _ _)   = True
+matchableWith _e            (WildPat _)   = True
 matchableWith (Lit lit)     (LitPat lit') = lit == lit'
   -- 'p' is not a 'VarPar' nor a 'LitPat' so matching is not possible
 matchableWith (Lit _)       _p            = False
@@ -666,9 +666,9 @@ matchableWith _e            _p           = True
 -- for instance @matchablePats (x1::x2::xs) (y::(ys:{[]:[Int]})) == True@.
 matchablePats :: IsPostTc p => Pat p -> Pat p -> Bool
 matchablePats (VarPat _)  _           = True
-matchablePats (WildPat _ _)    _           = True
+matchablePats (WildPat _)    _           = True
 matchablePats _           (VarPat _)  = True
-matchablePats _           (WildPat _ _)     = True
+matchablePats _           (WildPat _)     = True
 matchablePats (LitPat l1) (LitPat l2) = l1 == l2
 matchablePats (InfixPat p1 bcon _ p2) (InfixPat p1' bcon' _ p2')
   = bcon == bcon' && matchablePats p1 p1' && matchablePats p2 p2'
@@ -716,7 +716,7 @@ instance PrettyNames p => Pretty (Pat p) where
   prettyPrec _ (AsPat var pat) =
     hcat [prettyBndr var, char '@', pretty pat]
   prettyPrec _ WildPatIn     = char '_'
-  prettyPrec _ (WildPat _ _) = char '_'
+  prettyPrec _ (WildPat var) = pretty var
   prettyPrec _ (SigPat pat ty) =
     parens $ myFsep [pretty pat, text ":", pretty ty]
 
@@ -1297,7 +1297,7 @@ varDom x ty prop = Dom (Just (VarPat x)) ty (Just prop)
 
 patternDom :: Pat p -> Tau p -> Dom p
 patternDom WildPatIn     ty = Dom Nothing ty Nothing
-patternDom (WildPat _ _) ty = Dom Nothing ty Nothing
+patternDom (WildPat _)   ty = Dom Nothing ty Nothing
 patternDom pat           ty = Dom (Just pat) ty Nothing
 
 vpatDom :: VAR p -> Tau p -> Dom p
@@ -1305,7 +1305,7 @@ vpatDom x = patternDom (VarPat x)
 
 patternTy :: Pat p -> Tau p -> Type c p
 patternTy WildPatIn     ty = unsafeCoerce ty
-patternTy (WildPat _ _) ty = unsafeCoerce ty
+patternTy (WildPat _)   ty = unsafeCoerce ty
 patternTy (VarPat _)    ty = unsafeCoerce ty
 patternTy pat           ty = PredTy pat ty Nothing
 

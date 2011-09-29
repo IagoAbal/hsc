@@ -261,9 +261,9 @@ substPat s (ListPat ps ptcty) = do
   return (ListPat ps' ptcty',s')
 substPat s (ParenPat p) = do (p',s') <- substPat s p
                              return (ParenPat p',s')
-substPat s (WildPat uniq ptcty) = do
-  ptcty' <- T.mapM (substType s) ptcty
-  return (WildPat uniq ptcty',s)
+substPat s (WildPat wild_var) = do
+  (wild_var',s') <- substBndr s wild_var
+  return (WildPat wild_var',s')
   -- See [SubstBndr.AsPat]
 substPat s (AsPat v p) = do (p',s') <- substPat s p
                             (v',s'') <- substBndr s' v

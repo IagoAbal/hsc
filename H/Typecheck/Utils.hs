@@ -88,7 +88,7 @@ patMTV (ConPat _con ptctys ps) = patsMTV ps  `Set.union` (F.foldMap typesMTV ptc
 patMTV (TuplePat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ListPat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ParenPat p) = patMTV p
-patMTV (WildPat _ ptcty)     = F.foldMap typeMTV ptcty
+patMTV (WildPat wild_var) = typeMTV $ varType wild_var
 patMTV (AsPat _x p)  = patMTV p
 patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
 
@@ -163,8 +163,8 @@ pat2exp (ConPat con (PostTc typs) ps)
 pat2exp (TuplePat ps tup_ty) = Tuple tup_ty $ map pat2exp ps
 pat2exp (ListPat ps list_ty) = List list_ty $ map pat2exp ps
 pat2exp (ParenPat p) = Paren $ pat2exp p
-pat2exp (WildPat uniq (PostTc ty))
-  = Var $ instWildPat uniq ty
+pat2exp (WildPat wild_var)
+  = Var wild_var
 pat2exp (AsPat _ p)  = pat2exp p
 pat2exp (SigPat p ty) = pat2exp p
 
@@ -199,7 +199,7 @@ patExpSubst :: forall p. IsPostTc p =>
               -> Maybe [(Var p,Exp p)]    -- ^ substitution for range  
 patExpSubst e pat_dom target_fv = get_subst e pat_dom
   where get_subst :: Exp p -> Pat p -> Maybe [(Var p,Exp p)]
-        get_subst _ (WildPat _ _) = Just []
+        get_subst _ (WildPat _) = Just []
         get_subst e (VarPat x) | not (x `Set.member` target_fv) = Just []
                                | otherwise = Just [(x,e)]
         get_subst e (ConPat con' _ ps)
@@ -250,10 +250,9 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
         get_subst (s,bs) _lpat dpat  | bsPat dpat `Set.disjointWith` fvs = return (s,bs)
         get_subst (s,bs) lpat  (VarPat x) = return ((x,e):s,bs)
           where e = pat2exp lpat
-        get_subst (s,bs) (WildPat uniq (PostTc tau)) dpat = do
-          tau' <- subst_type s [] tau
-          let v = instWildPat uniq tau'
-          return (s,bs++[(dpat,Var v)])
+        get_subst (s,bs) (WildPat wild_var) dpat = do
+          wildexp' <- subst_exp s [] (Var wild_var)
+          return (s,bs++[(dpat,wildexp')])
         get_subst (s,bs) (VarPat y) dpat = do
           yexp' <- subst_exp s [] (Var y)
           return (s,bs++[(dpat,yexp')])
@@ -351,18 +350,18 @@ letType binds ty
         f prop | bsBinds binds' `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let binds' prop
 
-instPredTyProp :: (IsPostTc p, MonadUnique m) =>
-                    Exp p -> Pat p -> Tau p -> Maybe (Prop p) -> m (Maybe (Prop p))
-instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
-instPredTyProp  e pat  ty mb_prop
- | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop
- | otherwise = do
-    uniq  <- getUniq
-    return $ Just $ Case e (PostTc boolTy)
-                      [Alt Nothing pat (rhsExp prop)
-                      ,Alt Nothing (WildPat uniq (PostTc ty)) (rhsExp _False_)
-                      ]
- where prop = maybe _True_ id mb_prop
+-- instPredTyProp :: (IsPostTc p, MonadUnique m) =>
+--                     Exp p -> Pat p -> Tau p -> Maybe (Prop p) -> m (Maybe (Prop p))
+-- instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
+-- instPredTyProp  e pat  ty mb_prop
+--  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop
+--  | otherwise = do
+--     uniq  <- getUniq
+--     return $ Just $ Case e (PostTc boolTy)
+--                       [Alt Nothing pat (rhsExp prop)
+--                       ,Alt Nothing (WildPat uniq (PostTc ty)) (rhsExp P._False_)
+--                       ]
+--  where prop = maybe P._True_ id mb_prop
 
 
 instDoms :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> Dom p -> [Dom p] -> m [Dom p]
