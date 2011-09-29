@@ -969,8 +969,13 @@ typeOf = sortOf
 -- | Rank-1 polymorphic types
 -- data PolyType p = ForallTy (TyParams p) (Type p)
 
--- forallTy :: TyParams p -> Type p -> PolyType p
-forallTy = ForallTy
+forallTy :: TyParams p -> Tau p -> Sigma p
+forallTy []  tau = tau2sigma tau
+forallTy tvs tau = ForallTy tvs tau
+
+splitSigma :: Sigma p -> (TyParams p,Tau p)
+splitSigma (ForallTy tvs tau) = (tvs,tau)
+splitSigma ty                 = ([],sigma2tau ty)
 
 -- monoTy :: Type p -> PolyType p
 -- monoTy = ForallTy []

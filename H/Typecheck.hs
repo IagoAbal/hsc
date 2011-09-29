@@ -154,8 +154,9 @@ tcDecls (goaldecl@(GoalDecl _ _ _ _ _):decls) = do
 kcTypeDecl ::	Decl Rn -> TcM (Decl Tc, [(TyName Rn,TyCon Tc)])
 kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
   = inTypeDeclCtxt loc (ppQuot ty_name) $ do
-      (ForallTy tvs ty_rhs',_) <- kcType $ forallTy ty_params ty_rhs
-      let ty_var = mkTyVar ty_name tc_kind
+      (sig,_) <- kcType $ forallTy ty_params ty_rhs
+      let (tvs,ty_rhs') = splitSigma sig
+          ty_var = mkTyVar ty_name tc_kind
           tycon = SynTyCon {
                     tyConName = UserTyCon ty_var
                   , tyConParams = tvs
@@ -182,8 +183,9 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))
         tc_constr ty_tvs (ConDecl loc con_name doms)
           = inConDeclCtxt loc (ppQuot con_name) $ do
-          (con_ty@(ForallTy con_tvs con_tau),_) <- kcType (forallTy typarams $ funTy doms con_res_ty)
-          let con = mkVar con_name con_ty
+          (con_ty,_) <- kcType (forallTy typarams $ funTy doms con_res_ty)
+          let (con_tvs,con_tau) = splitSigma con_ty
+              con = mkVar con_name con_ty
           con_tau' <- substType [] (zip con_tvs (map VarTy ty_tvs)) con_tau
           let (doms',_) = splitFunTy con_tau
           return (ConDecl loc con doms',(UserCon con_name,UserCon con))
