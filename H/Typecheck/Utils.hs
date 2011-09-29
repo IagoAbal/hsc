@@ -8,7 +8,6 @@ import H.Typecheck.Zonk
 import H.Syntax
 import H.Pretty
 import H.Phase
-import H.Prop
 import H.FreeVars
 import H.Subst1 ( subst_exp, subst_type, subst_doms )
 import H.TransformPred
@@ -17,13 +16,11 @@ import qualified Util.Set as Set
 
 import Unique
 
-import Control.Applicative ( pure, (<$>), (<*>) )
 import Control.Monad
 import Control.Monad.Error
 import Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Foldable as F
-import qualified Data.Traversable as T
 
 
 getFreeTyVars :: [Type c Tc] -> TcM (Set TyVar)
@@ -59,9 +56,9 @@ quantify mtvs ty = do
         bind (mtv,tv) = writeMetaTyVar mtv (VarTy tv)
 
 quantifyExp :: Exp Tc -> [MetaTyVar] -> Tau Tc -> TcM (Exp Tc,Sigma Tc)
-quantifyExp exp mtvs ty = do
+quantifyExp expr mtvs ty = do
   (forall_tvs,pty) <- quantify mtvs ty
-  return (tyLam forall_tvs exp,pty)
+  return (tyLam forall_tvs expr,pty)
 
 
 -- * Meta type variables
@@ -104,6 +101,7 @@ typeMTV (ListTy ty) = typeMTV ty
 typeMTV (TupleTy ds) = domsMTV ds
 typeMTV (MetaTy mtv) = Set.singleton mtv
 typeMTV (ForallTy _tvs ty) = typeMTV ty
+typeMTV _other = undefined -- impossible
 
 domsMTV :: [Dom Tc] -> Set MetaTyVar
 domsMTV = Set.unions . map domMTV
@@ -111,6 +109,7 @@ domsMTV = Set.unions . map domMTV
 domMTV :: Dom Tc -> Set MetaTyVar
 domMTV (Dom Nothing ty Nothing) = typeMTV ty
 domMTV (Dom (Just pat) ty _) = patMTV pat `Set.union` typeMTV ty
+domMTV _other = undefined -- impossible
 
 propsMTV :: [Prop Tc] -> Set MetaTyVar
 propsMTV = Set.unions . map propMTV
@@ -124,8 +123,8 @@ propMTV (Var _)   = Set.empty
 propMTV (Con _)   = Set.empty
 propMTV (Op _)    = Set.empty
 propMTV (Lit _)   = Set.empty
-propMTV (PrefixApp op e) = propMTV e
-propMTV (InfixApp e1 op e2) = propsMTV [e1,e2]
+propMTV (PrefixApp _op e) = propMTV e
+propMTV (InfixApp e1 _op e2) = propsMTV [e1,e2]
 propMTV (App e1 e2) = propsMTV [e1,e2]
 propMTV (TyApp e tys) = propMTV e
 propMTV (Lam _loc _pats body)
@@ -197,7 +196,7 @@ patExpSubst :: forall p. IsPostTc p =>
               -> Pat p   -- ^ domain pattern
               -> Set (Var p)
               -> Maybe [(Var p,Exp p)]    -- ^ substitution for range  
-patExpSubst e pat_dom target_fv = get_subst e pat_dom
+patExpSubst e1 pat_dom target_fv = get_subst e1 pat_dom
   where get_subst :: Exp p -> Pat p -> Maybe [(Var p,Exp p)]
         get_subst _ (WildPat _) = Just []
         get_subst e (VarPat x) | not (x `Set.member` target_fv) = Just []
@@ -235,6 +234,7 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
   (s,bs) <- patPatSubst lpat dpat (fvType rang)
   rang' <- subst_type s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
+instFunTyWithPat _other _lpat = undefined -- impossible
 
 patPatSubst :: forall m p. (MonadUnique m, IsPostTc p) =>
                  Pat p   -- ^ argument pattern
@@ -279,7 +279,7 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
         get_subst (s,bs) q           (AsPat x p)
           =  get_subst ((x,e):s,bs) q p
           where e = pat2exp q
-        get_subst acc (AsPat y q) p           = get_subst acc q p
+        get_subst acc (AsPat _y q) p           = get_subst acc q p
         get_subst acc (SigPat q _) p            = get_subst acc q p
         get_subst acc q            (SigPat p _) = get_subst acc q p
         get_subst acc (ParenPat q) p            = get_subst acc q p
@@ -338,10 +338,10 @@ letType binds ty
   | [] <- binds' = return ty
   | otherwise    = tpType f ty
   where binds' = map unLocBind $ reverse $ filter_binds $ reverse binds
-        unLocBind (PatBind mb_loc pat rhs) = PatBind Nothing pat rhs
+        unLocBind (PatBind _loc pat rhs) = PatBind Nothing pat rhs
         unLocBind (FunBind rec name sig ptctyps matches)
           = FunBind rec name sig ptctyps (map unLocMatch matches)
-        unLocMatch (Match mb_loc pats rhs) = Match Nothing pats rhs
+        unLocMatch (Match _loc pats rhs) = Match Nothing pats rhs
         ty_fv = fvType ty
         filter_binds []                   = []
         filter_binds rev_binds@(b:bs)
