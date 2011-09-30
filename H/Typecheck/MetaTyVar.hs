@@ -76,7 +76,7 @@ mtvPats = Set.unions . map mtvPat
 mtvPat :: Pat Tc -> Set MetaTyVar
 mtvPat (VarPat x) = mtvVar x
 mtvPat (LitPat _) = Set.empty
-mtvPat (InfixPat p1 _op ptctys p2) = mtvPats [p1,p2] `Set.union` (F.foldMap mtvTypes ptctys)
+mtvPat (InfixCONSPat ptcty p1 p2) = mtvPats [p1,p2] `Set.union` (F.foldMap mtvType ptcty)
 mtvPat (ConPat con ptctys ps) = mtvCon con `Set.union` mtvPats ps `Set.union` (F.foldMap mtvTypes ptctys)
 mtvPat (TuplePat ps ptcty) = mtvPats ps `Set.union` (F.foldMap mtvType ptcty)
 mtvPat (ListPat ps ptcty) = mtvPats ps `Set.union` (F.foldMap mtvType ptcty)

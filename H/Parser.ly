@@ -405,7 +405,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
   > : pat1 ':' type   { SigPat $1 $3 }
 
 > pat1 :: { Pat Pr }
-> : fpat '::' pat1    { InfixPat $1 ConsCon NoPostTc $3 }
+> : fpat '::' pat1    { InfixCONSPat NoPostTc $1 $3 }
 > | fpat      { $1 }
 
 > fpat :: { Pat Pr }
@@ -503,7 +503,7 @@ Constructors that may appear in a ConPat pattern
 > : varid     { $1 }
 
 > op  :: { Op }
-> : '::'      { ConOp ConsCon }
+> : '::'      { CONSOp }
 > | boolop    { $1 }
 > | intop     { $1 }
 

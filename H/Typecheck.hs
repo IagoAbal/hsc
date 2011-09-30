@@ -666,14 +666,12 @@ tcPat (LitPat lit) exp_ty = do
   intTy ~>? exp_ty
   return (LitPat lit,[])
   -- how this works when the type is dependent ?
-tcPat (InfixPat p1 bcon NoPostTc p2) exp_ty = do
-  (bcon_tau,typs) <- instantiate (sortOf bcon)
-  traceDoc (text "InfixPat bcon=" <+> pretty bcon <+> text "bcon_tau=" <+> pretty bcon_tau) $ do
-    when (funTyArity bcon_tau /= 2) $
-      error "constructor's number of arguments does not match the number of patterns..."
-    ([p1',p2'],ps_env,res_ty) <- checkEq [p1,p2] bcon_tau
-    res_ty ~>? exp_ty
-    return (InfixPat p1' bcon (PostTc typs) p2',ps_env)
+tcPat (InfixCONSPat NoPostTc p1 p2) exp_ty = do
+  (cons_tau,[typ]) <- instantiate (sortOf ConsCon)
+  traceDoc (text "InfixCONSPat" <+> text "cons_tau=" <+> pretty cons_tau) $ do
+  ([p1',p2'],ps_env,res_ty) <- checkEq [p1,p2] cons_tau
+  res_ty ~>? exp_ty
+  return (InfixCONSPat (PostTc typ) p1' p2',ps_env)
   -- how this works when the type is dependent ?
 tcPat (ConPat con NoPostTc ps) exp_ty = do
   con' <- lookupCon con

@@ -80,7 +80,7 @@ patMTV :: Pat Tc -> Set MetaTyVar
   -- it does not hurt, and I think we really need this for the propMTV case.
 patMTV (VarPat x) = typeMTV $ varType x
 patMTV (LitPat _) = Set.empty
-patMTV (InfixPat p1 _op ptctys p2) = patsMTV [p1,p2] `Set.union` (F.foldMap typesMTV ptctys)
+patMTV (InfixCONSPat ptcty p1 p2) = patsMTV [p1,p2] `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ConPat _con ptctys ps) = patsMTV ps  `Set.union` (F.foldMap typesMTV ptctys)
 patMTV (TuplePat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ListPat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
@@ -153,9 +153,9 @@ propMTV (QP qt pats body) = patsMTV pats `Set.union` propMTV body
 pat2exp :: IsPostTc p => Pat p -> Exp p
 pat2exp (LitPat lit) = Lit lit
 pat2exp (VarPat x)   = Var x
-pat2exp (InfixPat p1 bcon (PostTc typs) p2)
+pat2exp (InfixCONSPat (PostTc typ) p1 p2)
   = InfixApp (pat2exp p1) conE (pat2exp p2)
-  where conE = tyApp (Op $ ConOp bcon) typs
+  where conE = tyApp (Op CONSOp) [typ]
 pat2exp (ConPat con (PostTc typs) ps)
   = conE `app` map pat2exp ps
   where conE = tyApp (Con con) typs
@@ -210,10 +210,10 @@ patExpSubst e1 pat_dom target_fv = get_subst e1 pat_dom
                 get_con (Coerc _ e _) = get_con e
                 get_con (Paren e) = get_con e
                 get_con _other    = Nothing
-        get_subst (InfixApp e1 (Op (ConOp bcon)) e2) (InfixPat p1 bcon' _ p2)
-          | bcon == bcon' = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
-        get_subst (InfixApp e1 (TyApp (Op (ConOp bcon)) _) e2) (InfixPat p1 bcon' _ p2)
-          | bcon == bcon' = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
+        get_subst (InfixApp e1 (Op CONSOp) e2) (InfixCONSPat _ p1 p2)
+          = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
+        get_subst (InfixApp e1 (TyApp (Op CONSOp) _) e2) (InfixCONSPat _ p1 p2)
+          = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
         get_subst (Tuple _ es) (TuplePat ps _)
           | length es == length ps = liftM concat $ zipWithM get_subst es ps
         get_subst (List _ es) (ListPat ps _)
@@ -256,9 +256,9 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
         get_subst (s,bs) (VarPat y) dpat = do
           yexp' <- subst_exp s [] (Var y)
           return (s,bs++[(dpat,yexp')])
-        get_subst (s,bs) (InfixPat q1 bcon _ q2) (InfixPat p1 bcon' _ p2)
-          | bcon == bcon' = do (s',bs') <- get_subst (s,bs) q1 p1
-                               get_subst (s',bs') q2 p2
+        get_subst (s,bs) (InfixCONSPat _ q1 q2) (InfixCONSPat _ p1 p2)
+          = do (s',bs') <- get_subst (s,bs) q1 p1
+               get_subst (s',bs') q2 p2
         get_subst (s,bs) (ConPat con _ qs) (ConPat con' _ ps)
           | con == con' = fold_get_subst (s,bs) qs ps
         get_subst acc    (TuplePat qs _) (TuplePat ps _)
@@ -267,10 +267,10 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
           = fold_get_subst (s,bs) qs ps
         get_subst acc (ListPat [] _) (ConPat _ _ []) = return acc
         get_subst acc (ConPat _ _ []) (ListPat [] _) = return acc
-        get_subst acc (ListPat (q:qs) ptcty) (InfixPat p1 _ _ p2) = do
+        get_subst acc (ListPat (q:qs) ptcty) (InfixCONSPat _ p1 p2) = do
           acc' <- get_subst acc q p1
           get_subst acc' (ListPat qs ptcty) p2
-        get_subst acc (InfixPat q1 _ _ q2) (ListPat (p:ps) ptcty) = do
+        get_subst acc (InfixCONSPat _ q1 q2) (ListPat (p:ps) ptcty) = do
           acc' <- get_subst acc q1 p
           get_subst acc' q2 (ListPat ps ptcty)
         get_subst (s,bs) q           (AsPat x p)

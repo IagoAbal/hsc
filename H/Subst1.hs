@@ -243,10 +243,10 @@ substPat s (VarPat var) = do
   (var',s') <- substBndr s var
   return (VarPat var',s')
 substPat s p@(LitPat _) = return (p,s)
-substPat s (InfixPat p1 con ptctys p2)
+substPat s (InfixCONSPat ptcty p1 p2)
   = do ([p1',p2'],s') <- substPats s [p1,p2]
-       ptctys' <- T.mapM (substTypes s) ptctys
-       return (InfixPat p1' con ptctys' p2',s')
+       ptcty' <- T.mapM (substType s) ptcty
+       return (InfixCONSPat ptcty' p1' p2',s')
 substPat s (ConPat con ptctys ps) = do
   (ps',s') <- substPats s ps
   ptctys' <- T.mapM (substTypes s) ptctys

@@ -272,10 +272,10 @@ instance Rename Alt where
 instance RenameBndr (Pat Pr) (Pat Rn) where
   renameBndr (VarPat occ) f = renameBndr occ $ f . VarPat
   renameBndr (LitPat lit) f = f (LitPat lit)
-  renameBndr (InfixPat p1 op NoPostTc p2) f
+  renameBndr (InfixCONSPat NoPostTc p1 p2) f
     = renameBndr p1 $ \p1' ->
       renameBndr p2 $ \p2' ->
-        f (InfixPat p1' op NoPostTc p2')
+        f (InfixCONSPat NoPostTc p1' p2')
   renameBndr (ConPat con NoPostTc ps) f = do
     con' <- rename con
     renameBndr ps $ f . (ConPat con' NoPostTc)

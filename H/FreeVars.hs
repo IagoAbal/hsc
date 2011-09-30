@@ -79,7 +79,7 @@ fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
   -- other way would be to use type-classes... but it may have problems
 fvPat (VarPat _) = Set.empty
 fvPat (LitPat _) = Set.empty
-fvPat (InfixPat p1 _op _ p2) = fvPats [p1,p2]
+fvPat (InfixCONSPat _ p1 p2) = fvPats [p1,p2]
 fvPat (ConPat _con _ ps) = fvPats ps
 fvPat (TuplePat ps _) = fvPats ps
 fvPat (ListPat ps _) = fvPats ps
@@ -95,7 +95,7 @@ bsPats = Set.unions . map bsPat
 bsPat :: Ord (VAR p) => Pat p -> Set (VAR p)
 bsPat (VarPat x) = Set.singleton x
 bsPat (LitPat _) = Set.empty
-bsPat (InfixPat p1 _op _ p2) = bsPats [p1,p2]
+bsPat (InfixCONSPat _ p1 p2) = bsPats [p1,p2]
 bsPat (ConPat _con _ ps) = bsPats ps
 bsPat (TuplePat ps _) = bsPats ps
 bsPat (ListPat ps _) = bsPats ps
@@ -179,7 +179,7 @@ patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
   -- VAR p ~ Var p could be OK.
 patFTV (VarPat _) = Set.empty
 patFTV (LitPat _) = Set.empty
-patFTV (InfixPat p1 _op _ p2) = patsFTV [p1,p2]
+patFTV (InfixCONSPat _ p1 p2) = patsFTV [p1,p2]
 patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys)
 patFTV (TuplePat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
 patFTV (ListPat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)

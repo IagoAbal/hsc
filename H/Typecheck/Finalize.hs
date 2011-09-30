@@ -269,11 +269,11 @@ finPats (p:ps) cont = finPat p $ \p' ->
 finPat :: Pat Tc -> (Pat Ti -> TiM a) -> TiM a
 finPat (VarPat x) cont = finBndr x $ cont . VarPat
 finPat (LitPat lit) cont = cont (LitPat lit)
-finPat (InfixPat p1 bcon (PostTc tys) p2) cont = do
-  tys' <- finTypes tys
+finPat (InfixCONSPat (PostTc ty) p1 p2) cont = do
+  ty' <- finType ty
   finPat p1 $ \p1' ->
     finPat p2 $ \p2' ->
-      cont (InfixPat p1' bcon (PostTc tys') p2')
+      cont (InfixCONSPat (PostTc ty') p1' p2')
 finPat (ConPat con (PostTc tys) ps) cont = do
   con' <- lookupCon con
   tys' <- finTypes tys

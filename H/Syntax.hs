@@ -561,7 +561,7 @@ data Pat p where
   -- | literal constant
   LitPat :: Lit -> Pat p
   -- | pattern with infix data constructor
-  InfixPat :: Pat p -> BuiltinCon -> PostTcTypes p -> Pat p -> Pat p
+  InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
   -- | data constructor and argument
   ConPat :: Con p -> PostTcTypes p -> [Pat p] -> Pat p
   -- | tuple pattern
@@ -585,7 +585,7 @@ data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
-patBndrs (InfixPat p1 _op _ p2) = patBndrs p1 ++ patBndrs p2
+patBndrs (InfixCONSPat _ p1 p2) = patBndrs p1 ++ patBndrs p2
 patBndrs (ConPat _con _ ps) = patsBndrs ps
 patBndrs (TuplePat ps _) = patsBndrs ps
 patBndrs (ListPat ps _) = patsBndrs ps
@@ -630,7 +630,7 @@ matchableWith e             p
     -- implies a binary data constructor, here we detect that '[]'
     -- does not match _::_.
   | Just (_con,[]) <- splitConApp e
-  , InfixPat _ _ _ _ <- p = False
+  , InfixCONSPat _ _ _ <- p = False
   where get_con (Con con)     = Just con
         get_con (TyApp e1 _)   = get_con e1
         get_con (Paren e1)     = get_con e1
@@ -641,11 +641,11 @@ matchableWith e             p
           where (f,args) = splitApp e1
 -- 'InfixApp'/'InfixPat' case is beign ignored for now because it is not
 -- very interesting since only '::' can be used in a 'InfixPat'.
-matchableWith (List _ [])   (InfixPat _ _ _ _) = False
+matchableWith (List _ [])   (InfixCONSPat _ _ _) = False
   -- since 'e' and 'p' are type-compatible and 'p' arguments are null,
   -- then we know 'p' is a '[]' pattern.
 matchableWith (List _ (_:_)) (ConPat _ _ []) = False
-matchableWith (List a (e:es)) (InfixPat p _ _ ps)
+matchableWith (List a (e:es)) (InfixCONSPat _ p ps)
   = matchableWith e p && matchableWith (List a es) ps
 matchableWith e             (SigPat p _) = matchableWith e p
 matchableWith (Coerc _ e _) p            = matchableWith e p
@@ -670,17 +670,17 @@ matchablePats (WildPat _)    _           = True
 matchablePats _           (VarPat _)  = True
 matchablePats _           (WildPat _)     = True
 matchablePats (LitPat l1) (LitPat l2) = l1 == l2
-matchablePats (InfixPat p1 bcon _ p2) (InfixPat p1' bcon' _ p2')
-  = bcon == bcon' && matchablePats p1 p1' && matchablePats p2 p2'
+matchablePats (InfixCONSPat _ p1 p2) (InfixCONSPat _ p1' p2')
+  = matchablePats p1 p1' && matchablePats p2 p2'
 matchablePats (ConPat con _ ps) (ConPat con' _ ps')
   = con == con' && and (zipWith matchablePats ps ps')
 matchablePats (TuplePat ps _) (TuplePat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
 matchablePats (ListPat ps _) (ListPat ps' _)
   = length ps == length ps' && and (zipWith matchablePats ps ps')
-matchablePats (ListPat (p:ps) ptcty) (InfixPat p' _ _ q)
+matchablePats (ListPat (p:ps) ptcty) (InfixCONSPat _ p' q)
   = matchablePats p p' && matchablePats (ListPat ps ptcty) q
-matchablePats (InfixPat p _ _ q) (ListPat (p':ps') ptcty)
+matchablePats (InfixCONSPat _ p q) (ListPat (p':ps') ptcty)
   = matchablePats p p' && matchablePats (ListPat ps' ptcty) q
 matchablePats (ListPat [] _) (ConPat _ _ []) = True
 matchablePats (ConPat _ _ []) (ListPat [] _) = True
@@ -703,8 +703,8 @@ instance PrettyNames p => Pretty (Pat p) where
     parens $ myFsep [hcat [pretty var, char '@', pretty pat], text ":", pretty ty]
   prettyPrec _ (VarPat var) = prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
-  prettyPrec p (InfixPat a cop _ b) = parensIf (p > 0) $
-    myFsep [pretty a, pretty cop, pretty b]
+  prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
+    myFsep [pretty a, text "::", pretty b]
   prettyPrec _ (ConPat con _ []) = pretty con
   prettyPrec p (ConPat con _ ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
@@ -784,7 +784,7 @@ instance Pretty BuiltinCon where
   pretty FalseCon = text "False"
   pretty TrueCon  = text "True"
   pretty NilCon   = text "[]"
-  pretty ConsCon  = text "::"
+  pretty ConsCon  = text "(::)"
 
 unitCon, trueCon, falseCon, nilCon, consCon :: Con p
 unitCon  = BuiltinCon UnitCon
@@ -797,13 +797,13 @@ consCon  = BuiltinCon ConsCon
 
 data Op = BoolOp BoolOp
         | IntOp IntOp
-        | ConOp BuiltinCon
+        | CONSOp
     deriving(Eq,Ord)
 
 instance IsPostTc p => Sorted Op (Sigma p) where
   sortOf (BoolOp bop) = sortOf bop
   sortOf (IntOp iop)  = sortOf iop
-  sortOf (ConOp bcon) = sortOf bcon
+  sortOf CONSOp       = sortOf ConsCon
 
 -- | Operators for building boolean expressions
 data BoolOp = NotB
@@ -900,7 +900,7 @@ expOp = IntOp ExpI
 instance Pretty Op where
   pretty (BoolOp bop) = pretty bop
   pretty (IntOp iop)  = pretty iop
-  pretty (ConOp cop)  = pretty cop
+  pretty CONSOp       = text "::"
 
 ppPrefixOp :: Op -> Doc
 ppPrefixOp = parens . pretty

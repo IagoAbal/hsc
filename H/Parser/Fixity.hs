@@ -99,7 +99,7 @@ preludeFixities = concat
     [infixr_ 8 [expOp]
     ,infixl_ 7 [mulOp, divOp, modOp]
     ,infixl_ 6 [addOp, subOp]
-    ,infixr_ 5 [ConOp ConsCon]
+    ,infixr_ 5 [CONSOp]
     ,infix_  4 [eqOp, neqOp, ltOp, leOp, gtOp, geOp]
     ,infixr_ 3 [andOp]
     ,infixr_ 2 [orOp]
@@ -238,7 +238,7 @@ leafFix fixs e = case e of
     fix x = applyFixities fixs x
 
 leafFixP fixs p = case p of
-        InfixPat p1 con NoPostTc p2       -> liftM3 (flip InfixPat con) (fix p1) (return NoPostTc) (fix p2)
+        InfixCONSPat NoPostTc p1 p2       -> liftM2 (InfixCONSPat NoPostTc) (fix p1) (fix p2)
         ConPat n NoPostTc ps             -> liftM (ConPat n NoPostTc) $ mapM fix ps
         TuplePat ps NoPostTc             -> liftM (flip TuplePat NoPostTc) $ mapM fix ps
         ListPat ps NoPostTc              -> liftM (flip ListPat NoPostTc) $ mapM fix ps

@@ -104,8 +104,8 @@ zonkPats = mapM zonkPat
 zonkPat :: MonadIO m => Pat Tc -> m (Pat Tc)
 zonkPat (VarPat x) = liftM VarPat $ zonkVar x
 zonkPat pat@(LitPat _) = return pat
-zonkPat (InfixPat p1 bcon ptctys p2)
-  = liftM3 (flip InfixPat bcon) (zonkPat p1) (T.mapM zonkTypes ptctys) (zonkPat p2)
+zonkPat (InfixCONSPat ptcty p1 p2)
+  = liftM3 InfixCONSPat (T.mapM zonkType ptcty) (zonkPat p1) (zonkPat p2)
 zonkPat (ConPat con ptctys pats) = liftM3 ConPat (zonkCon con) (T.mapM zonkTypes ptctys) (zonkPats pats)
 zonkPat (TuplePat ps ptcty) = liftM2 TuplePat (zonkPats ps) (T.mapM zonkType ptcty)
 zonkPat (ListPat ps ptcty) = liftM2 ListPat (zonkPats ps) (T.mapM zonkType ptcty)

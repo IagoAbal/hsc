@@ -67,11 +67,11 @@ tpPat f (VarPat b) = do
   (b',b_s) <- tpBndr f b
   return (VarPat b',b_s)
 tpPat _f p@(LitPat _) = return (p,[])
-tpPat f (InfixPat p1 bcon ptctys p2) = do
+tpPat f (InfixCONSPat ptcty p1 p2) = do
   (p1',p1_s) <- tpPat f p1
-  ptctys' <- T.mapM (mapM (tpType f)) ptctys
+  ptcty' <- T.mapM (tpType f) ptcty
   (p2',p2_s) <- tpPat f p2
-  return (InfixPat p1' bcon ptctys' p2',p1_s++p2_s)
+  return (InfixCONSPat ptcty' p1' p2',p1_s++p2_s)
 tpPat f (ConPat con ptctys ps) = do
   (ps',ps_ss) <- liftM unzip $ mapM (tpPat f) ps
   ptctys' <- T.mapM (mapM (tpType f)) ptctys
