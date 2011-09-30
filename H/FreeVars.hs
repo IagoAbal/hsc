@@ -3,7 +3,6 @@
 module H.FreeVars where
 
 import H.Syntax
-import H.Phase
 
 import Data.Set ( Set )
 import qualified Data.Set as Set
@@ -24,7 +23,7 @@ bsBinds = Set.unions . map bsBind
 
 bsBind :: Ord (VAR p) => Bind p -> Set (VAR p)
 bsBind (FunBind _rec fun _sig _ptctyps _matches) = Set.singleton fun
-bsBind (PatBind _loc pat rhs)           = bsPat pat
+bsBind (PatBind _loc pat _rhs)                   = bsPat pat
 
 fvTypeSig :: Ord (VAR p) => TypeSig p -> Set (VAR p)
 fvTypeSig NoTypeSig             = Set.empty
@@ -48,15 +47,15 @@ fvExp (Con _)   = Set.empty          -- ?
 fvExp (Op _)    = Set.empty
 fvExp (Lit _)   = Set.empty
 fvExp ElseGuard = Set.empty
-fvExp (PrefixApp op e) = fvExp e
-fvExp (InfixApp e1 op e2) = fvExps [e1,e2]
+fvExp (PrefixApp _op e) = fvExp e
+fvExp (InfixApp e1 _op e2) = fvExps [e1,e2]
 fvExp (App e1 e2) = fvExps [e1,e2]
 fvExp (TyApp e tys) = fvExp e `Set.union` fvTypes tys
 fvExp (Lam _loc pats body)
   = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
 fvExp (Let bs body)
   = fvBinds bs `Set.union` (fvExp body Set.\\ bsBinds bs)
-fvExp (TyLam tvs body) = fvExp body
+fvExp (TyLam _tvs body) = fvExp body
 fvExp (Ite _ptcty g t e) = fvExps [g,t,e]
 fvExp (If _ptcty grhss) = fvGuardedRhss grhss
 fvExp (Case e _ptcty alts) = fvExp e `Set.union` fvAlts alts
@@ -68,7 +67,7 @@ fvExp (RightSection _op e) = fvExp e
 fvExp (EnumFromTo e1 e2) = fvExps [e1,e2]
 fvExp (EnumFromThenTo e1 e2 e3) = fvExps [e1,e2,e3]
 fvExp (Coerc _loc e polyty) = fvExp e `Set.union` fvType polyty
-fvExp (QP qt pats body) = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
+fvExp (QP _qt pats body) = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
 
 
 fvPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
@@ -78,7 +77,7 @@ fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
   -- I think it should be 'fvPolyType $ varType x' but that would require
   -- to fix the algorithm to work just with 'Var p'
   -- other way would be to use type-classes... but it may have problems
-fvPat (VarPat x) = Set.empty
+fvPat (VarPat _) = Set.empty
 fvPat (LitPat _) = Set.empty
 fvPat (InfixPat p1 _op _ p2) = fvPats [p1,p2]
 fvPat (ConPat _con _ ps) = fvPats ps
@@ -149,7 +148,7 @@ fvType (TupleTy ds) = fvDoms ds
 fvType (ParenTy ty) = fvType ty
   -- this case may be tricky ...
 fvType (MetaTy _) = Set.empty
-fvType (ForallTy tvs ty) = fvType ty
+fvType (ForallTy _tvs ty) = fvType ty
 
 fvDoms :: Ord (VAR p) => [Dom p] -> Set (VAR p)
 fvDoms []     = Set.empty
@@ -159,6 +158,7 @@ fvDom :: Ord (VAR p) => Dom p -> Set (VAR p)
 fvDom (Dom Nothing ty Nothing) = fvType ty
 fvDom (Dom (Just pat) ty mbprop)
   = fvType ty `Set.union` (fvMaybeExp mbprop Set.\\ bsPat pat)
+fvDom _other = undefined -- impossible
 
 
 bsDom :: Ord (VAR p) => Dom p -> Set (VAR p)
@@ -177,7 +177,7 @@ patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
   -- but I think here that could be easier, because fvPat is used by the renamer,
   -- but patFTV is only used after renaming... so make these functions specific to
   -- VAR p ~ Var p could be OK.
-patFTV (VarPat x) = Set.empty
+patFTV (VarPat _) = Set.empty
 patFTV (LitPat _) = Set.empty
 patFTV (InfixPat p1 _op _ p2) = patsFTV [p1,p2]
 patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys)
@@ -211,3 +211,4 @@ domsFTV = Set.unions . map domFTV
 domFTV :: Ord (TyVAR p) => Dom p -> Set (TyVAR p)
 domFTV (Dom Nothing ty Nothing) = typeFTV ty
 domFTV (Dom (Just pat) ty _) = patFTV pat `Set.union` typeFTV ty
+domFTV _other = undefined -- impossible
