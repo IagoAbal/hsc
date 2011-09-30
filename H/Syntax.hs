@@ -752,7 +752,7 @@ data BuiltinCon = UnitCon
                 | ConsCon
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BuiltinCon (Sigma p) where
+instance IsPostTc p => Sorted BuiltinCon (Sigma p) where
   sortOf UnitCon  = unitTy
   sortOf FalseCon = boolTy
   sortOf TrueCon  = boolTy
@@ -767,7 +767,7 @@ instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted 
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted (Con p) (Sigma p) where
+instance IsPostTc p => Sorted (Con p) (Sigma p) where
   sortOf (UserCon ucon)    = sortOf ucon
   sortOf (BuiltinCon bcon) = sortOf bcon
 
@@ -800,7 +800,7 @@ data Op = BoolOp BoolOp
         | ConOp BuiltinCon
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted Op (Sigma p) where
+instance IsPostTc p => Sorted Op (Sigma p) where
   sortOf (BoolOp bop) = sortOf bop
   sortOf (IntOp iop)  = sortOf iop
   sortOf (ConOp bcon) = sortOf bcon
@@ -819,7 +819,7 @@ data BoolOp = NotB
             | GeB
     deriving(Eq,Ord)
 
-instance (Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p) => Sorted BoolOp (Sigma p) where
+instance IsPostTc p => Sorted BoolOp (Sigma p) where
   sortOf NotB = boolTy --> boolTy
   sortOf OrB = boolTy --> boolTy --> boolTy
   sortOf AndB = boolTy --> boolTy --> boolTy
@@ -869,7 +869,7 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
   -- since the language does not allow you to do that.. we don't allow that as well.
   -- we may provide some assumed theorems, for instance
   -- theorem div_mod = forall n m, (n/m) * m + (n%m) == n
-instance (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Sorted IntOp (Sigma p) where
+instance IsPostTc p => Sorted IntOp (Sigma p) where
   sortOf NegI = intTy --> intTy
   sortOf AddI = intTy --> intTy --> intTy
   sortOf SubI = intTy --> intTy --> intTy
@@ -1200,7 +1200,7 @@ boolTyName = BuiltinTyCon BoolTyCon
 intTyName  = BuiltinTyCon IntTyCon
 natTyName  = BuiltinTyCon NatTyCon
 
-unitTyCon, boolTyCon, intTyCon, natTyCon :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => TyCon p
+unitTyCon, boolTyCon, intTyCon, natTyCon :: IsPostTc p => TyCon p
 unitTyCon = AlgTyCon {
               tyConName   = BuiltinTyCon UnitTyCon
 --             , tyConParams = []
@@ -1313,7 +1313,7 @@ predTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p
 predTy pat ty Nothing = patternTy pat ty
 predTy pat ty prop    = PredTy pat ty prop
 
-unitTy, boolTy, intTy, natTy :: (Ge p Tc, VAR p ~ Var p, TyCON p ~ TyCon p) => Type c p
+unitTy, boolTy, intTy, natTy :: IsPostTc p => Type c p
 unitTy = ConTy unitTyCon []
 boolTy = ConTy boolTyCon []
 intTy  = ConTy intTyCon []
