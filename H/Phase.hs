@@ -75,5 +75,5 @@ instance Foldable (PostTc p) where
   foldMap f (PostTc x) = f x
 
 instance Traversable (PostTc p) where
-  traverse f NoPostTc   = pure NoPostTc
-  traverse f (PostTc x) = PostTc <$> f x
+  traverse _f NoPostTc   = pure NoPostTc
+  traverse  f (PostTc x) = PostTc <$> f x
