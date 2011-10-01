@@ -135,7 +135,6 @@ type instance VAR Pr = OccName
 type instance VAR Rn = Name
 type instance VAR Tc = Var Tc
 type instance VAR Ti = Var Ti
-type instance VAR Vc = Var Vc
 
 type NAME phase = VAR phase
 
@@ -144,7 +143,6 @@ type instance TyVAR Pr = OccName
 type instance TyVAR Rn = Name
 type instance TyVAR Tc = TyVar
 type instance TyVAR Ti = TyVar
-type instance TyVAR Vc = TyVar
 
 type UTyNAME phase = TyVAR phase
 
@@ -159,7 +157,6 @@ type instance GoalNAME Pr = OccName
 type instance GoalNAME Rn = Name
 type instance GoalNAME Tc = Name
 type instance GoalNAME Ti = Name
-type instance GoalNAME Vc = Name
 
 
 class (Pretty (VAR p), PrettyBndr (VAR p), Pretty (TyVAR p), PrettyBndr (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
