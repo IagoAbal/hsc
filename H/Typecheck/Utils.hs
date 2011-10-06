@@ -14,6 +14,7 @@ import H.TransformPred
 
 import qualified Util.Set as Set
 
+import Sorted
 import Unique
 
 import Control.Monad
@@ -384,3 +385,86 @@ instDoms e (Dom (Just pat) _ _)     ds
   where f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let [PatBind Nothing pat (Rhs (UnGuarded e) [])] prop
 instDoms _e _other _ds = undefined -- impossible
+
+
+-- Get expressions type
+
+tcExprType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> m (Sigma p)
+tcExprType (Var x) = return $ sortOf x
+tcExprType (Con con) = return $ sortOf con
+tcExprType (Op op) = return $ sortOf op
+tcExprType (Lit _) = return intTy
+tcExprType (PrefixApp op e) = liftM tau2sigma $ tcAppType op [e]
+tcExprType (InfixApp e1 op e2)
+  =  liftM tau2sigma $ tcAppType op [e1,e2]
+tcExprType (App f a) = liftM tau2sigma $ tcAppType f [a]
+tcExprType (TyApp e tys) = do
+  e_sig <- tcExprType e
+  e_tau <- instSigmaType e_sig tys
+  return $ tau2sigma e_tau
+tcExprType (Lam _ pats body) = do
+  pats_tys <- mapM tcPatType pats
+  let doms = zipWith patternDom pats pats_tys
+  body_ty <- tcExprType body
+    -- the body of a lanbda-expression is ensured to have a Tau-type.
+  return $ funTy doms (sigma2tau body_ty)
+tcExprType (Let _ e) = tcExprType e
+tcExprType (TyLam tvs e) = do
+  e_ty <- tcExprType e
+  return $ forallTy tvs $ sigma2tau e_ty
+tcExprType (Ite (PostTc ite_ty) _ _ _) = return $ tau2sigma ite_ty
+tcExprType (If (PostTc if_ty) _) = return $ tau2sigma if_ty
+tcExprType (Case _ (PostTc case_ty) _) = return $ tau2sigma case_ty
+tcExprType (Tuple (PostTc tup_ty) _) = return $ tau2sigma tup_ty
+tcExprType (List (PostTc list_ty) _) = return $ tau2sigma list_ty
+tcExprType (Paren e) = tcExprType e
+tcExprType (LeftSection e1 op) = liftM tau2sigma $ tcAppType op [e1]
+tcExprType (RightSection op e2) = do
+  op_ty <- tcExprType op
+  let FunTy d1 (FunTy d2 res_ty) = op_ty
+  res_ty'  <- instFunTy (d2,res_ty) e2
+  return $ d1 \--> res_ty'
+tcExprType (EnumFromTo _ _) = return $ ListTy intTy
+tcExprType (EnumFromThenTo _ _ _) = return $ ListTy intTy
+tcExprType (Coerc _ _ sig) = return sig
+tcExprType (QP _ _ _) = return boolTy
+tcExprType _other = undefined -- impossible
+
+tcExprTau :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> m (Tau p)
+tcExprTau = tcExprType >=> return . sigma2tau
+
+
+tcAppType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> [Exp p] -> m (Tau p)
+tcAppType fun args = do
+  fun_sig <- tcExprType fun
+  go args (sigma2tau fun_sig)
+  where
+    go []         res_ty = return res_ty
+    go (arg:args) fun_ty = do
+      rang' <- instFunTy (dom,rang) arg
+      go args rang'
+      where FunTy dom rang = mu_0 fun_ty
+
+tcEqType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => [Pat p] -> Tau p -> m (Tau p)
+tcEqType []         res_ty = return res_ty
+tcEqType (pat:pats) fun_ty = do
+  let FunTy dom rang = mu_0 fun_ty
+  rang' <- instFunTyWithPat (dom,rang) pat
+  tcEqType pats rang'
+
+tcPatType ::  (MonadUnique m, MonadError Doc m, IsPostTc p) => Pat p -> m (Tau p)
+tcPatType (VarPat x) = return $ sigma2tau $ varType x
+tcPatType (LitPat _) = return intTy
+tcPatType (InfixCONSPat (PostTc elem_ty) _ _) = return $ ListTy elem_ty
+tcPatType (ConPat con (PostTc typs) ps)  = do
+  con_tau <- instSigmaType con_ty typs
+  res_ty <- tcEqType ps con_tau
+  return res_ty
+  where con_ty = sortOf con
+tcPatType (TuplePat _ (PostTc tup_ty)) = return tup_ty
+tcPatType (ListPat _ (PostTc list_ty)) = return list_ty
+tcPatType (ParenPat p) = tcPatType p
+tcPatType (WildPat wild_var)
+  = return $ sigma2tau $ varType wild_var
+tcPatType (AsPat x _) = return $ sigma2tau $ varType x
+tcPatType (SigPat _ tau) = return tau
