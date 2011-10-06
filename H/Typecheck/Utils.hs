@@ -173,6 +173,10 @@ expandSyn (ConTy (SynTyCon _ ps rhs) args)
   = liftM (Just . tau2type) $ subst_type [] (zip ps args) rhs
 expandSyn _other = return  Nothing
 
+instSigmaType :: (MonadUnique m, IsPostTc p) => Sigma p -> [Tau p] -> m (Tau p)
+instSigmaType (ForallTy tvs ty) typs = subst_type [] (zip tvs typs) ty
+instSigmaType ty [] = return $ sigma2tau ty
+instSigmaType _ty _typs = error "bug instSigmaType"
 
 -- * Instantiation of function types
 
