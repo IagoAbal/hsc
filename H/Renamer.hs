@@ -232,8 +232,10 @@ instance Rename Con where
   rename (BuiltinCon bcon) = return $ BuiltinCon bcon
 
 instance Rename Rhs where
-  rename (Rhs grhs whr)
-    = renameBndr whr $ \whr' -> liftM (flip Rhs whr') $ rename grhs
+  rename (Rhs NoPostTc grhs whr)
+    = renameBndr whr $ \whr' -> do
+        grhs' <- rename grhs
+        return $ Rhs NoPostTc grhs' whr'
 
 instance Rename GRhs where
   rename (UnGuarded exp) = liftM UnGuarded $ rename exp

@@ -192,9 +192,10 @@ instFunTy (Dom (Just p) _ _,rang) e
   | otherwise = do
       when (not $ matchableWith e p) $
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty p)
+      e_ty <- tcExprTau e
+      let f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
+                 | otherwise = Just $ Let [PatBind Nothing p (rhsExp e_ty e)] prop
       tpType f rang
-  where f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
-               | otherwise = Just $ Let [PatBind Nothing p (Rhs (UnGuarded e) [])] prop
 
 patExpSubst :: forall p. IsPostTc p =>
                 Exp p
@@ -237,7 +238,11 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
   when (not $ matchablePats lpat dpat) $
     throwError (text "Pattern" <+> pretty lpat <+> text "is not compatible with the expected pattern" <+> pretty dpat)
   (s,bs) <- patPatSubst lpat dpat (fvType rang)
-  rang' <- subst_type s [] rang >>= letType [ PatBind Nothing p (Rhs (UnGuarded e) []) | (p,e) <- bs ]
+  binds <- sequence [ do e_ty <- tcExprTau e
+                         return $ PatBind Nothing p (rhsExp e_ty e)
+                    | (p,e) <- bs
+                    ]
+  rang' <- subst_type s [] rang >>= letType binds
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
 instFunTyWithPat _other _lpat = undefined -- impossible
 
@@ -381,9 +386,10 @@ instDoms e (Dom (Just pat) _ _)     ds
   | otherwise = do
       when (not $ matchableWith e pat) $
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty pat)
+      e_ty <- tcExprTau e
+      let f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
+                 | otherwise = Just $ Let [PatBind Nothing pat (rhsExp e_ty e)] prop
       tpDoms f ds
-  where f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
-               | otherwise = Just $ Let [PatBind Nothing pat (Rhs (UnGuarded e) [])] prop
 instDoms _e _other _ds = undefined -- impossible
 
 

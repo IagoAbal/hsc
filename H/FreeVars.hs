@@ -112,7 +112,7 @@ fvAlt :: Ord (VAR p) => Alt p -> Set (VAR p)
 fvAlt (Alt _loc pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
 
 fvRhs :: Ord (VAR p) => Rhs p -> Set (VAR p)
-fvRhs (Rhs grhs whr) = fvBinds whr `Set.union` (fvGRhs grhs Set.\\ bsBinds whr)
+fvRhs (Rhs _ grhs whr) = fvBinds whr `Set.union` (fvGRhs grhs Set.\\ bsBinds whr)
 
 fvGRhs :: Ord (VAR p) => GRhs p -> Set (VAR p)
 fvGRhs (UnGuarded e)   = fvExp e

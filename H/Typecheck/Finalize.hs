@@ -231,8 +231,11 @@ finAlt (Alt (Just loc) pat rhs)
       finPat pat $ \pat'-> liftM (Alt (Just loc) pat') $ finRhs rhs
 
 finRhs :: Rhs Tc -> TiM (Rhs Ti)
-finRhs (Rhs grhs whr)
-  = finBinds whr $ \whr' -> liftM (flip Rhs whr') $ finGRhs grhs
+finRhs (Rhs (PostTc rhs_ty) grhs whr) = do
+  rhs_ty' <- finType rhs_ty
+  finBinds whr $ \whr' -> do
+    grhs' <- finGRhs grhs
+    return $ Rhs (PostTc rhs_ty') grhs' whr'
 
 finGRhs :: GRhs Tc -> TiM (GRhs Ti)
 finGRhs (UnGuarded expr) = liftM UnGuarded $ finExp expr

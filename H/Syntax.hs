@@ -302,7 +302,7 @@ instance PrettyNames p => Pretty (Bind p) where
   pretty (FunBind _rec fun sig _ matches) =
          ppTypeSig fun sig
       $$ ppBindings (map (ppMatch fun) matches)
-  pretty (PatBind _pos pat (Rhs grhs whereDecls)) =
+  pretty (PatBind _pos pat (Rhs _ grhs whereDecls)) =
     myFsep [pretty pat, ppGRhs ValDef grhs]
         $$$ ppWhere whereDecls
 
@@ -311,7 +311,7 @@ ppTypeSig _fun NoTypeSig = empty
 ppTypeSig  fun (TypeSig _loc polyty) = mySep [pretty fun, text ":", pretty polyty]
 
 ppMatch :: PrettyNames p => NAME p -> Match p -> Doc
-ppMatch fun (Match _pos ps (Rhs grhs whereDecls)) =
+ppMatch fun (Match _pos ps (Rhs _ grhs whereDecls)) =
     myFsep (lhs ++ [ppGRhs ValDef grhs])
     $$$ ppWhere whereDecls
       where
@@ -483,7 +483,8 @@ instance PrettyNames p => Pretty (Exp p) where
 -- ** Right-hand side
 
 -- | The right hand side of a function or pattern binding.
-data Rhs p = Rhs (GRhs p) (WhereBinds p)
+-- NB: A Rhs has always a Tau type.
+data Rhs p = Rhs (PostTcType p) (GRhs p) (WhereBinds p)
 
 data GRhs p
 	 = UnGuarded (Exp p)	-- ^ unguarded right hand side (/exp/)
@@ -505,8 +506,8 @@ data Else p where
   Else   :: Ge p Rn => SrcLoc -> Exp p -> Else p
   NoElse :: Ge p Rn => Else p
 
-rhsExp :: Exp p -> Rhs p
-rhsExp e = Rhs (UnGuarded e) []
+rhsExp :: IsPostTc p => Tau p -> Exp p -> Rhs p
+rhsExp ty e = Rhs (PostTc ty) (UnGuarded e) []
 
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
@@ -528,7 +529,7 @@ rhsSepSym CaseAlt = text "->"
 rhsSepSym IfExp   = text "->"
 
 ppRhs :: PrettyNames p => RhsContext -> Rhs p -> Doc
-ppRhs ctx (Rhs grhs whereDecls) = ppGRhs ctx grhs $$$ ppWhere whereDecls
+ppRhs ctx (Rhs _ grhs whereDecls) = ppGRhs ctx grhs $$$ ppWhere whereDecls
 
 ppGRhs :: PrettyNames p => RhsContext -> GRhs p -> Doc
 ppGRhs ctx (UnGuarded e)   = rhsSepSym ctx <+> pretty e

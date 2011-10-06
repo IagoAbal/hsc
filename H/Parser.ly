@@ -277,16 +277,16 @@ Value definitions
 > bind :: { Bind Pr }
 > : funsig semis funbind            {% funWithSig $1 $3 }
 > | funbind                         { $1 }
-> | srcloc pat rhs wherebinds       { PatBind (Just $1) $2 (Rhs $3 $4) }
+> | srcloc pat rhs wherebinds       { PatBind (Just $1) $2 (Rhs NoPostTc $3 $4) }
 
 > funsig :: { (SrcLoc,NAME Pr,Sigma Pr) }
 > : srcloc varid ':' polytype { ($1,$2,$4) }
 
 > funbind :: { Bind Pr }
 > : srcloc varid apats rhs wherebinds
->         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) $3 (Rhs $4 $5)] }
+>         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) $3 (Rhs NoPostTc $4 $5)] }
 > | srcloc varid rhs wherebinds
->         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) [] (Rhs $3 $4)] }
+>         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) [] (Rhs NoPostTc $3 $4)] }
 
 > binds :: { [Bind Pr] }
 > : valdecllist     { getParsedBinds $1 }
@@ -466,7 +466,7 @@ Case alternatives
 > | alt       { [$1] }
 
 > alt :: { Alt Pr }
-> : srcloc pat altrhs { Alt (Just $1) $2 (Rhs $3 []) }
+> : srcloc pat altrhs { Alt (Just $1) $2 (Rhs NoPostTc $3 []) }
 
 > altrhs :: { GRhs Pr }
 > : '->' exp      { UnGuarded $2 }

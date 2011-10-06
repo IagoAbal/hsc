@@ -215,9 +215,11 @@ substExp s (QP q pats body) = do (pats',s') <- substPats s pats
 substExp _s _other = undefined -- impossible
 
 substRhs :: (MonadUnique m, IsPostTc p) => Subst1 p -> Rhs p -> m (Rhs  p)
-substRhs s (Rhs grhs whr)
-  = do (whr',s') <- substBinds s whr
-       liftM (flip Rhs whr') $ substGRhs s' grhs
+substRhs s (Rhs rhs_ty grhs whr)
+  = do rhs_ty' <- substPostTcType s rhs_ty
+       (whr',s') <- substBinds s whr
+       grhs' <- substGRhs s' grhs
+       return $ Rhs rhs_ty' grhs' whr'
 
 substGRhs :: (MonadUnique m, IsPostTc p) => Subst1 p -> GRhs p -> m (GRhs  p)
 substGRhs s (UnGuarded e)   = liftM UnGuarded $ substExp s e

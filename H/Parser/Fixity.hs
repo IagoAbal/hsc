@@ -158,8 +158,8 @@ instance AppFixity (Match Pr) where
             fix x = applyFixities fixs x
 
 instance AppFixity (Rhs Pr) where
-  applyFixities fixs (Rhs grhs whr)
-    = liftM2 Rhs (fix grhs) (mapM fix whr)
+  applyFixities fixs (Rhs NoPostTc grhs whr)
+    = liftM2 (Rhs NoPostTc) (fix grhs) (mapM fix whr)
     where fix :: (Monad m, AppFixity ast) => ast -> m ast
           fix x = applyFixities fixs x
 

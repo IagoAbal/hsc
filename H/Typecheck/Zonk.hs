@@ -121,7 +121,7 @@ zonkAlt :: MonadIO m => Alt Tc -> m (Alt Tc)
 zonkAlt (Alt loc pat rhs) = liftM2 (Alt loc) (zonkPat pat) (zonkRhs rhs)
 
 zonkRhs :: MonadIO m => Rhs Tc -> m (Rhs Tc)
-zonkRhs (Rhs grhs whr) = liftM2 Rhs (zonkGRhs grhs) (zonkBinds whr)
+zonkRhs (Rhs tcty grhs whr) = liftM3 Rhs (T.mapM zonkType tcty) (zonkGRhs grhs) (zonkBinds whr)
 
 zonkGRhs :: MonadIO m => GRhs Tc -> m (GRhs Tc)
 zonkGRhs (UnGuarded expr) = liftM UnGuarded $ zonkExp expr

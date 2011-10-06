@@ -92,7 +92,7 @@ mtvAlt :: Alt Tc -> Set MetaTyVar
 mtvAlt (Alt _loc pat rhs) = mtvPat pat `Set.union` mtvRhs rhs
 
 mtvRhs :: Rhs Tc -> Set MetaTyVar
-mtvRhs (Rhs grhs whr) = mtvBinds whr `Set.union` mtvGRhs grhs
+mtvRhs (Rhs tcty grhs whr) = mtvBinds whr `Set.union` mtvGRhs grhs `Set.union` (F.foldMap mtvType tcty)
 
 mtvGRhs :: GRhs Tc -> Set MetaTyVar
 mtvGRhs (UnGuarded e)   = mtvExp e

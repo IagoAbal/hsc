@@ -556,18 +556,18 @@ checkRhs rhs ty = tcRhs rhs (Check ty)
 
 -- data Rhs p = Rhs (GRhs p) (WhereBinds p)
 tcRhs :: Rhs Rn -> Expected (Tau Tc) -> TcM (Rhs Tc)
-tcRhs (Rhs grhs binds) (Check exp_ty) = do
+tcRhs (Rhs NoPostTc grhs binds) (Check exp_ty) = do
   (binds',binds_env) <- tcBinds binds
   grhs' <- extendVarEnv binds_env $
              checkGRhs grhs exp_ty
-  return (Rhs grhs' binds')
-tcRhs (Rhs grhs binds) (Infer ref) = do
+  return (Rhs (PostTc exp_ty) grhs' binds')
+tcRhs (Rhs NoPostTc grhs binds) (Infer ref) = do
   (binds',binds_env) <- tcBinds binds
   (grhs',grhs_ty) <- extendVarEnv binds_env $
                        inferGRhs grhs
-  grhs_ty' <- letType binds' grhs_ty
-  liftIO $ writeIORef ref grhs_ty'
-  return (Rhs grhs' binds')
+  rhs_ty <- letType binds' grhs_ty
+  liftIO $ writeIORef ref rhs_ty
+  return (Rhs (PostTc rhs_ty) grhs' binds')
 
 inferGRhs :: GRhs Rn -> TcM (GRhs Tc,Tau Tc)
 inferGRhs grhs = do
