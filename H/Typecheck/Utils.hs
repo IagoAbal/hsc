@@ -179,6 +179,31 @@ instSigmaType (ForallTy tvs ty) typs = subst_type [] (zip tvs typs) ty
 instSigmaType ty [] = return $ sigma2tau ty
 instSigmaType _ty _typs = error "bug instSigmaType"
 
+instWithVars :: forall m p. (MonadUnique m, IsPostTc p, MonadError Doc m) => Sigma p -> [Tau p] -> Exp p -> m (Exp p,[Var p])
+instWithVars sig typs expr = do
+  tau <- instSigmaType sig typs
+  (expr',vars_rev) <- go 1 [] (tyApp expr typs) tau
+  return (expr',reverse vars_rev)
+  where go :: Int -> [Var p] -> Exp p -> Tau p -> m (Exp p,[Var p])
+        go  i xs e (FunTy d r) = do
+          x <- newVar ("x" ++ show i) (dom2type d)
+          let v = Var x
+          r' <- instFunTy (d,r) v
+          go (i+1) (x:xs) (App e v) r'
+        go _i xs e _res_ty     = return (e,xs)
+
+
+instTupleWithVars :: forall m p. (MonadUnique m, IsPostTc p, MonadError Doc m) => [Dom p] -> m (Exp p,[Var p])
+instTupleWithVars doms = go 1 [] doms
+  where go :: Int -> [Var p] -> [Dom p] -> m (Exp p,[Var p])
+        go _i xs_rev []     = return (Tuple (PostTc $ TupleTy doms) (map Var xs), xs)
+          where xs = reverse xs_rev
+        go  i xs_rev (d:ds) = do
+          x <- newVar ("x" ++ show i) (dom2type d)
+          let v = Var x
+          ds' <- instDoms v d ds
+          go (i+1) (x:xs_rev) ds'
+
 -- * Instantiation of function types
 
 instFunTy :: (IsPostTc p, MonadUnique m, MonadError Doc m) => (Dom p,Range p) -> Exp p -> m (Range p)
