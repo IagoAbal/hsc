@@ -63,11 +63,21 @@ subst_exp var_env tyvar_env = substExp (mkSubst1_FV var_env tyvar_env)
 subst_mbExp :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> Maybe (Exp p) -> m (Maybe (Exp p))
 subst_mbExp var_env tyvar_env = substMaybeExp (mkSubst1_FV var_env tyvar_env)
 
+subst_rhs :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> Rhs p -> m (Rhs p)
+subst_rhs var_env tyvar_env = substRhs (mkSubst1_FV var_env tyvar_env)
+
 subst_type :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> Type c p -> m (Type c p)
 subst_type var_env tyvar_env = substType (mkSubst1_FV var_env tyvar_env)
 
 subst_doms :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> [Dom p] -> m [Dom p]
 subst_doms var_env tyvar_env = liftM fst . substDoms (mkSubst1_FV var_env tyvar_env)
+
+subst_matches :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> [Match p] -> m [Match p]
+subst_matches var_env tyvar_env = substMatches (mkSubst1_FV var_env tyvar_env)
+
+subst_condecls :: (MonadUnique m, IsPostTc p) => [(Var p,Exp p)] -> [(TyVar,Tau p)] -> [ConDecl p] -> m [ConDecl p]
+subst_condecls var_env tyvar_env = substConDecls (mkSubst1_FV var_env tyvar_env)
+
 
 substBndrs :: (MonadUnique m, IsPostTc p) => Subst1 p -> [Var p] -> m ([Var p],Subst1 p)
 substBndrs = mapAccumM substBndr
