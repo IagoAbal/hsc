@@ -656,14 +656,14 @@ tcPat (VarPat n) exp_ty = do
   (v,n_env) <- tcBndr n exp_ty
   return (VarPat v,n_env)
 tcPat (LitPat lit) exp_ty = do
-  intTy ~>? exp_ty
+  exp_ty ?~> intTy
   return (LitPat lit,[])
   -- how this works when the type is dependent ?
 tcPat (InfixCONSPat NoPostTc p1 p2) exp_ty = do
   (cons_tau,[typ]) <- instantiate (sortOf ConsCon)
   traceDoc (text "InfixCONSPat" <+> text "cons_tau=" <+> pretty cons_tau) $ do
-  ([p1',p2'],ps_env,res_ty) <- checkEq [p1,p2] cons_tau
-  res_ty ~>? exp_ty
+  ([p1',p2'],ps_env,list_ty) <- checkEq [p1,p2] cons_tau
+  exp_ty ?~> list_ty
   return (InfixCONSPat (PostTc typ) p1' p2',ps_env)
   -- how this works when the type is dependent ?
 tcPat (ConPat con NoPostTc ps) exp_ty = do
@@ -673,18 +673,18 @@ tcPat (ConPat con NoPostTc ps) exp_ty = do
     when (funTyArity con_tau /= length ps) $
       error "constructor's number of arguments does not match the number of patterns..."
     (ps',ps_env,res_ty) <- checkEq ps con_tau
-    res_ty ~>? exp_ty
+    exp_ty ?~> res_ty
     return (ConPat con' (PostTc typs) ps',ps_env)
 tcPat (TuplePat ps NoPostTc) exp_ty = do
   mtys <- mapM (\i -> newMetaTy ("a" ++ show i) typeKi) [1..length ps]
   let tup_ty = TupleTy [Dom Nothing mty Nothing | mty <- mtys]
-  tup_ty ~>? exp_ty
+  exp_ty ?~> tup_ty
   (ps',ps_envs) <- liftM unzip $ zipWithM (\p mty -> tcPat p (Check mty)) ps mtys
   return (TuplePat ps' (PostTc tup_ty),concat ps_envs)
 tcPat (ListPat ps NoPostTc) exp_ty = do
   mty <- newMetaTy "a" typeKi
   let list_ty = ListTy mty
-  list_ty ~>? exp_ty
+  exp_ty ?~> list_ty
   (ps',ps_envs) <- liftM unzip $ mapM (\p -> tcPat p (Check mty)) ps
   return (ListPat ps' (PostTc list_ty),concat ps_envs)
 tcPat (ParenPat p) exp_ty = do
@@ -701,7 +701,7 @@ tcPat (AsPat n p) exp_ty = do
 tcPat (SigPat p ty) exp_ty = do
   ty' <- checkKind ty typeKi
   (p',p_env) <- tcPat p (Check ty')
-  ty' ~>? exp_ty
+  exp_ty ?~> ty'
   return (SigPat p' ty',p_env)
 
 
@@ -776,3 +776,7 @@ instSigma exp s1 (Infer ref)  = do
 (~>?) :: Tau Tc -> Expected (Tau Tc) -> TcM ()
 t1 ~>? (Check t2)  = t1 ~> t2
 t1 ~>? (Infer ref) = liftIO $ writeIORef ref t1
+
+(?~>) :: Expected (Tau Tc) -> Tau Tc -> TcM ()
+(Check t1) ?~> t2  = t1 ~> t2
+(Infer ref) ?~> t2 = liftIO $ writeIORef ref t2
