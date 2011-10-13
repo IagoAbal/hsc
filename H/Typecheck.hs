@@ -516,31 +516,24 @@ tcArgs (arg:args) fun_ty = do
 
 tcAlts :: [Alt Rn] -> Tau Tc -> Expected (Tau Tc) -> TcM ([Alt Tc],Tau Tc)
 tcAlts alts scrut_ty (Check exp_ty) = do
-  alts' <- mapM (\alt -> checkAlt alt scrut_ty exp_ty) alts
+  alts' <- mapM (\alt -> tcAlt alt scrut_ty exp_ty) alts
   return (alts',exp_ty)
-tcAlts (alt:alts) scrut_ty (Infer ref) = do
-  (alt',rhs_ty) <- inferAlt alt scrut_ty
-  alts' <- mapM (\alt -> checkAlt alt scrut_ty rhs_ty) alts
-  liftIO $ writeIORef ref rhs_ty
-  return (alt':alts',rhs_ty)
+tcAlts alts scrut_ty (Infer ref) = do
+  mty <- newMetaTy "a" typeKi
+  alts' <- mapM (\alt -> tcAlt alt scrut_ty mty) alts
+  liftIO $ writeIORef ref mty
+  return (alts',mty)
 
-inferAlt :: Alt Rn -> Tau Tc -> TcM (Alt Tc,Tau Tc)
-inferAlt alt scrut_ty = do
-  ref <- liftIO $ newIORef (error "inferAlt: empty result")
-  alt' <- tcAlt alt scrut_ty (Infer ref)
-  ty <- liftIO $ readIORef ref
-  return (alt',ty)
-
-checkAlt :: Alt Rn -> Tau Tc -> Tau Tc -> TcM (Alt Tc)
-checkAlt alt scrut_ty ty = tcAlt alt scrut_ty (Check ty)
-
+-- tcAlt always checks against a type, never infers. If you want to infer
+-- then you can make use of a meta-type, which ensures that no `pat' variable
+-- will appear in the inferred type.
 -- data Alt p = Alt SrcLoc (Pat p) (Rhs p)
-tcAlt :: Alt Rn -> Tau Tc -> Expected (Tau Tc) -> TcM (Alt Tc)
+tcAlt :: Alt Rn -> Tau Tc -> Tau Tc -> TcM (Alt Tc)
 tcAlt (Alt (Just loc) pat rhs) scrut_ty exp_ty
   = inCaseAltCtxt loc pat $ do
   (pat',pat_env) <- checkPat pat scrut_ty
   rhs' <- extendVarEnv pat_env $
-            tcRhs rhs exp_ty
+            checkRhs rhs exp_ty
   return (Alt (Just loc) pat' rhs')
   
 
