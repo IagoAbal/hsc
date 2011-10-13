@@ -1,7 +1,9 @@
-
+{-# LANGUAGE PatternGuards  #-}
 module H.Prop where
 
 import H.Syntax
+
+import Data.List  ( sort )
 
 
 _True_ :: Prop p
@@ -55,4 +57,14 @@ mkConj ps = Just $ foldr1 (.&&.) ps
 
 filterProp :: (Prop p -> Bool) -> Prop p -> Maybe (Prop p)
 filterProp p = mkConj . filter p . splitConj
+
+oneOfInts :: IsPostTc p => Exp p -> [Integer] -> Prop p
+oneOfInts t []  = _False_
+oneOfInts t [n] = t .==. mkInt n
+oneOfInts t ns  = disj $ build_prop $ sort ns
+  where
+    build_prop ns@(a:rest)
+      | ns == [a..b] = [mkInt a .<=. t .&&. t .<=. mkInt b]
+      | otherwise    = [t .==. mkInt a | a <- ns]
+      where b = last rest
 
