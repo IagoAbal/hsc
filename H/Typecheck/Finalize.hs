@@ -180,6 +180,15 @@ finExp (TyApp e tys)
   | Just (MetaTy mtv) <- find isMetaTy tys
   = throwError $ text "Cannot infer the" <+> ppQuot (occNameOf mtv)
                     <+> text "type argument of" <+> ppQuot e
+finExp (TyApp (Op (BoolOp bop)) [ty])
+  | bop `elem` [EqB, NeqB] = do
+    ctx <- getContext
+    when (not $ isPropContext ctx) check_eq_ty
+    liftM (TyApp (Op (BoolOp bop))) $ finTypes [ty]
+  where check_eq_ty
+          | isFunTy ty = throwError $ text "Extensionality only applies inside a logical context"
+          | isVarTy ty = throwError $ text "Equality operators cannot be applied to arbitrary types"
+          | otherwise  = return ()
 finExp (TyApp e tys) = liftM2 TyApp (finExp e) (finTypes tys)
 finExp (Lam mb_loc pats body)
   = lambdaAbsCtxt $ finPats pats $ \pats' ->

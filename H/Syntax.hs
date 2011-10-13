@@ -1040,6 +1040,15 @@ type Range = Tau
 type PostTcType p = PostTc p (Tau p)
 type PostTcTypes p = PostTc p [Tau p]
 
+isVarTy :: Type c p -> Bool
+isVarTy (VarTy _) = True
+isVarTy _ty       = False
+
+isFunTy :: Tau p -> Bool
+isFunTy ty
+  | FunTy _ _ <- mu_0 ty = True
+  | otherwise            = False
+
   -- (args,result)
 splitFunTy :: Tau p -> ([Dom p],Tau p)
 splitFunTy (FunTy a t) = (a:args,res)
