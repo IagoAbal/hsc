@@ -116,7 +116,7 @@ zonkPat (ListPat ps ptcty) = liftM2 ListPat (zonkPats ps) (T.mapM zonkType ptcty
 zonkPat (ParenPat p) = liftM ParenPat $ zonkPat p
 zonkPat (WildPat wild_var) = liftM WildPat $ zonkVar wild_var
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
-zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
+-- zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
 
 zonkAlts :: MonadIO m => [Alt Tc] -> m [Alt Tc]
 zonkAlts = mapM zonkAlt

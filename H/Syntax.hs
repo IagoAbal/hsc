@@ -579,9 +579,9 @@ data Pat p where
   WildPat :: Ge p Rn => VAR p -> Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
-  -- ^ pattern signature
-    -- Add SrcLoc ?
-  SigPat :: Pat p -> Tau p -> Pat p
+--   -- ^ pattern signature
+--     -- Add SrcLoc ?
+--   SigPat :: Pat p -> Tau p -> Pat p
 
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
@@ -597,7 +597,7 @@ patBndrs (ParenPat p) = patBndrs p
 patBndrs WildPatIn    = []
 patBndrs (WildPat var)  = [var]
 patBndrs (AsPat v p)  = v : patBndrs p
-patBndrs (SigPat p _t) = patBndrs p
+-- patBndrs (SigPat p _t) = patBndrs p
 
 patsBndrs :: [Pat p] -> [VAR p]
 patsBndrs = concatMap patBndrs
@@ -651,7 +651,7 @@ matchableWith (List _ [])   (InfixCONSPat _ _ _) = False
 matchableWith (List _ (_:_)) (ConPat _ _ []) = False
 matchableWith (List a (e:es)) (InfixCONSPat _ p ps)
   = matchableWith e p && matchableWith (List a es) ps
-matchableWith e             (SigPat p _) = matchableWith e p
+-- matchableWith e             (SigPat p _) = matchableWith e p
 matchableWith (Coerc _ e _) p            = matchableWith e p
 matchableWith (Paren e)     p            = matchableWith e p
 matchableWith e             (ParenPat p) = matchableWith e p
@@ -692,19 +692,19 @@ matchablePats (ParenPat p) p'            = matchablePats p p'
 matchablePats p            (ParenPat p') = matchablePats p p'
 matchablePats (AsPat _ p)  p'            = matchablePats p p'
 matchablePats p            (AsPat _ p')  = matchablePats p p'
-matchablePats (SigPat p _) p'            = matchablePats p p'
-matchablePats p            (SigPat p' _) = matchablePats p p'
+-- matchablePats (SigPat p _) p'            = matchablePats p p'
+-- matchablePats p            (SigPat p' _) = matchablePats p p'
 matchablePats _p           _p'           = False
 
 
 
 instance PrettyNames p => Pretty (Pat p) where
     -- special case
-  prettyPrec _ (SigPat (VarPat var) ty) =
-    parens $ myFsep [pretty var, text ":", pretty ty]
+--   prettyPrec _ (SigPat (VarPat var) ty) =
+--     parens $ myFsep [pretty var, text ":", pretty ty]
     -- special case
-  prettyPrec _ (SigPat (AsPat var pat) ty) =
-    parens $ myFsep [hcat [pretty var, char '@', pretty pat], text ":", pretty ty]
+--   prettyPrec _ (SigPat (AsPat var pat) ty) =
+--     parens $ myFsep [hcat [pretty var, char '@', pretty pat], text ":", pretty ty]
   prettyPrec _ (VarPat var) = prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
@@ -721,8 +721,8 @@ instance PrettyNames p => Pretty (Pat p) where
     hcat [prettyBndr var, char '@', pretty pat]
   prettyPrec _ WildPatIn     = char '_'
   prettyPrec _ (WildPat var) = pretty var
-  prettyPrec _ (SigPat pat ty) =
-    parens $ myFsep [pretty pat, text ":", pretty ty]
+--   prettyPrec _ (SigPat pat ty) =
+--     parens $ myFsep [pretty pat, text ":", pretty ty]
 
 instance PrettyNames p => Pretty (Alt p) where
   pretty (Alt _pos pat rhs) =

@@ -317,9 +317,9 @@ finPat (WildPat wild_var@(V name pty isSk)) cont = do
   extendVarEnv [(wild_var,wild_var')] $ cont (WildPat wild_var')
 finPat (AsPat x pat) cont
   = finBndr x $ \x' -> finPat pat $ \pat' -> cont (AsPat x' pat')
-finPat (SigPat pat ty) cont = do
-  ty' <- finType ty
-  finPat pat $ cont . flip SigPat ty'
+-- finPat (SigPat pat ty) cont = do
+--   ty' <- finType ty
+--   finPat pat $ cont . flip SigPat ty'
 finPat _other _cont = undefined -- impossible
 
 finTypes :: [Type c Tc] -> TiM [Type c Ti]

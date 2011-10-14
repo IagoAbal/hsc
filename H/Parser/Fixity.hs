@@ -244,7 +244,7 @@ leafFixP fixs p = case p of
         ListPat ps NoPostTc              -> liftM (flip ListPat NoPostTc) $ mapM fix ps
         ParenPat p              -> liftM ParenPat $ fix p
         AsPat n p            -> liftM (AsPat n) $ fix p
-        SigPat p t    -> liftM2 SigPat (fix p) (fix t)
+--         SigPat p t    -> liftM2 SigPat (fix p) (fix t)
         _                     -> return p
       where fix :: (Monad m, AppFixity ast) => ast -> m ast
             fix x = applyFixities fixs x

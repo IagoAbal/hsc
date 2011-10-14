@@ -94,7 +94,7 @@ tpPat f (AsPat x p) = do
   (x',x_s) <- tpBndr f x
   (p',p_s) <- tpPat f p
   return (AsPat x' p', x_s++p_s)
-tpPat f (SigPat p ty) = do
-  ty' <- tpType f ty
-  (p',p_s) <- tpPat f p
-  return (SigPat p' ty',p_s)
+-- tpPat f (SigPat p ty) = do
+--   ty' <- tpType f ty
+--   (p',p_s) <- tpPat f p
+--   return (SigPat p' ty',p_s)

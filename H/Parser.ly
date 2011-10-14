@@ -420,7 +420,9 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > : var       { VarPat $1 }
 > | con        { ConPat $1 NoPostTc [] }
 > | literal     { LitPat $1 }
-> | '(' pat ':' type ')'     { SigPat $2 $4 }
+
+ > | '(' pat ':' type ')'     { SigPat $2 $4 }
+
 > | '(' pat ')'     { ParenPat $2 }
 > | '(' tpats ')'     { TuplePat $2 NoPostTc }
 > | '[' lpats ']'     { ListPat $2 NoPostTc }

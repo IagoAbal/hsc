@@ -87,7 +87,7 @@ fvPat (ParenPat p) = fvPat p
 fvPat WildPatIn     = Set.empty
 fvPat (WildPat _)     = Set.empty
 fvPat (AsPat _x p)  = fvPat p
-fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
+-- fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
 
 bsPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
 bsPats = Set.unions . map bsPat
@@ -103,7 +103,7 @@ bsPat (ParenPat p) = bsPat p
 bsPat WildPatIn      = Set.empty
 bsPat (WildPat wild_var)      = Set.singleton wild_var
 bsPat (AsPat x p)  = Set.insert x $ bsPat p
-bsPat (SigPat p _ty) = bsPat p
+-- bsPat (SigPat p _ty) = bsPat p
 
 fvAlts :: Ord (VAR p) => [Alt p] -> Set (VAR p)
 fvAlts = Set.unions . map fvAlt
@@ -187,7 +187,7 @@ patFTV (ParenPat p) = patFTV p
 patFTV WildPatIn     = Set.empty
 patFTV (WildPat _)   = Set.empty    -- same than for VarPat
 patFTV (AsPat _x p)  = patFTV p
-patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
+-- patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
 
 typesFTV :: Ord (TyVAR p) => [Type c p] -> Set (TyVAR p)
 typesFTV = Set.unions . map typeFTV

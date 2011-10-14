@@ -85,7 +85,7 @@ mtvPat (ListPat ps ptcty) = mtvPats ps `Set.union` (F.foldMap mtvType ptcty)
 mtvPat (ParenPat p) = mtvPat p
 mtvPat (WildPat wild_var)     = mtvVar wild_var
 mtvPat (AsPat x p)  = mtvVar x `Set.union` mtvPat p
-mtvPat (SigPat p ty) = mtvPat p `Set.union` mtvType ty
+-- mtvPat (SigPat p ty) = mtvPat p `Set.union` mtvType ty
 
 mtvAlts :: [Alt Tc] -> Set MetaTyVar
 mtvAlts = Set.unions . map mtvAlt

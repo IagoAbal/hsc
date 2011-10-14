@@ -280,10 +280,10 @@ substPat s (WildPat wild_var) = do
 substPat s (AsPat v p) = do (p',s') <- substPat s p
                             (v',s'') <- substBndr s' v
                             return (AsPat v' p',s'')
-substPat s (SigPat p ty) = do
-  (p',s') <- substPat s p
-  ty' <- substType s ty
-  return (SigPat p' ty',s')
+-- substPat s (SigPat p ty) = do
+--   (p',s') <- substPat s p
+--   ty' <- substType s ty
+--   return (SigPat p' ty',s')
 
 {- NOTE [SubstBndr.AsPat]
 Since the renamer ensures that, for 'v@pat', 'v' is fresh w.r.t. FV('pat')

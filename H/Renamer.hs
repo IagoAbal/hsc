@@ -307,10 +307,10 @@ rn_pat WildPatIn = do
   uniq <- getUniq
   let wild_var = mkSysName (mkOccName VarNS "_x") uniq
   return (WildPat wild_var,Map.empty)
-rn_pat (SigPat p t) = do
-  (p',p_map) <- rn_pat p
-  t' <- rename t
-  return (SigPat p' t',p_map)
+-- rn_pat (SigPat p t) = do
+--   (p',p_map) <- rn_pat p
+--   t' <- rename t
+--   return (SigPat p' t',p_map)
 rn_pat (AsPat occ p) = do
   name <- renameBndr occ return
   (p',p_map) <- rn_pat p

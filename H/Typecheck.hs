@@ -649,8 +649,7 @@ inferPats :: [Pat Rn] -> TcM ([Pat Tc],[Tau Tc],[(Name,Var Tc)])
 inferPats []   = return ([],[],[])
 inferPats (pat:pats) = do
   (pat',pat_ty,pat_env) <- inferPat pat
-  (pats',pats_tys,pats_env) <- extendVarEnv pat_env $
-                                 inferPats pats
+  (pats',pats_tys,pats_env) <- inferPats pats
   return (pat':pats',pat_ty:pats_tys,pat_env++pats_env)
 
 
@@ -701,11 +700,11 @@ tcPat (AsPat n p) exp_ty = do
   v_ty <- getExpected exp_ty
   (p',p_env) <- checkPat p v_ty
   return (AsPat v p',n_env ++ p_env)
-tcPat (SigPat p ty) exp_ty = do
-  ty' <- checkKind ty typeKi
-  (p',p_env) <- tcPat p (Check ty')
-  exp_ty ?~> ty'
-  return (SigPat p' ty',p_env)
+-- tcPat (SigPat p ty) exp_ty = do
+--   ty' <- checkKind ty typeKi
+--   (p',p_env) <- tcPat p (Check ty')
+--   exp_ty ?~> ty'
+--   return (SigPat p' ty',p_env)
 
 
 --  check "equation"

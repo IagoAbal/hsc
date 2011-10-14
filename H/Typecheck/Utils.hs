@@ -88,7 +88,7 @@ patMTV (ListPat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
 patMTV (ParenPat p) = patMTV p
 patMTV (WildPat wild_var) = typeMTV $ varType wild_var
 patMTV (AsPat _x p)  = patMTV p
-patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
+-- patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
 
 typesMTV :: [Type c Tc] -> Set MetaTyVar
 typesMTV = Set.unions . map typeMTV
@@ -166,7 +166,7 @@ pat2exp (ParenPat p) = Paren $ pat2exp p
 pat2exp (WildPat wild_var)
   = Var wild_var
 pat2exp (AsPat _ p)  = pat2exp p
-pat2exp (SigPat p ty) = pat2exp p
+-- pat2exp (SigPat p ty) = pat2exp p
 
 
 expandSyn :: (IsPostTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
@@ -249,7 +249,7 @@ patExpSubst e1 pat_dom target_fv = get_subst e1 pat_dom
           | length es == length ps = liftM concat $ zipWithM get_subst es ps
         get_subst (List _ es) (ListPat ps _)
           | length es == length ps = liftM concat $ zipWithM get_subst es ps
-        get_subst e (SigPat p _) = get_subst e p
+--         get_subst e (SigPat p _) = get_subst e p
         get_subst e (AsPat x p) = liftM ((x,e):) $ get_subst e p
         get_subst (Paren e) p    = get_subst e p
         get_subst e (ParenPat p) = get_subst e p
@@ -315,8 +315,8 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
           =  get_subst ((x,e):s,bs) q p
           where e = pat2exp q
         get_subst acc (AsPat _y q) p           = get_subst acc q p
-        get_subst acc (SigPat q _) p            = get_subst acc q p
-        get_subst acc q            (SigPat p _) = get_subst acc q p
+--         get_subst acc (SigPat q _) p            = get_subst acc q p
+--         get_subst acc q            (SigPat p _) = get_subst acc q p
         get_subst acc (ParenPat q) p            = get_subst acc q p
         get_subst acc q            (ParenPat p) = get_subst acc q p
           -- just check preconditions... change it by an earlier assert
@@ -498,4 +498,4 @@ tcPatType (ParenPat p) = tcPatType p
 tcPatType (WildPat wild_var)
   = return $ sigma2tau $ varType wild_var
 tcPatType (AsPat x _) = return $ sigma2tau $ varType x
-tcPatType (SigPat _ tau) = return tau
+-- tcPatType (SigPat _ tau) = return tau
