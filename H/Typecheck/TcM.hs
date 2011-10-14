@@ -35,7 +35,7 @@ data TcEnv
     , tcVarEnv   :: Map Name (Var Tc)
     , tcTyVarEnv :: Map Name TyVar
     , tcTyConEnv :: Map (TyName Rn) (TyCon Tc)
-    , tcConEnv   :: Map (Con Rn) (Con Tc)
+    , tcConEnv   :: Map (Con Rn) (TcCon Tc)
     }
 
 emptyTcEnv :: TcEnv
@@ -44,11 +44,11 @@ emptyTcEnv = TcEnv Set.empty Map.empty Map.empty
                               ,(BuiltinTyCon BoolTyCon,boolTyCon)
                               ,(BuiltinTyCon IntTyCon,intTyCon)
                               ,(BuiltinTyCon NatTyCon,natTyCon)])
-                (Map.fromList [(unitCon,unitCon)
-                              ,(falseCon,falseCon)
-                              ,(trueCon,trueCon)
-                              ,(nilCon,nilCon)
-                              ,(consCon,consCon)])
+                (Map.fromList [(unitCon,tcUnitCon)
+                              ,(falseCon,tcFalseCon)
+                              ,(trueCon,tcTrueCon)
+                              ,(nilCon,tcNilCon)
+                              ,(consCon,tcConsCon)])
 
 lookupTyCon :: TyName Rn -> TcM (TyCon Tc)
 lookupTyCon tn = do
@@ -72,13 +72,12 @@ lookupTyVar n = do
       Just tv -> return tv
       Nothing -> error "lookupTyVar"
 
-lookupCon :: Con Rn -> TcM (Con Tc)
-lookupCon con@(UserCon _) = do
+lookupCon :: Con Rn -> TcM (TcCon Tc)
+lookupCon con = do
   conEnv <- asks tcConEnv
   case Map.lookup con conEnv of
       Just con' -> return con'
       Nothing   -> error "lookupCon"
-lookupCon (BuiltinCon bcon) = return $ BuiltinCon bcon
 
 addGlobalVars :: [Var Tc] -> TcM a -> TcM a
 addGlobalVars vars = local (\env@TcEnv{tcGblVars} -> env{tcGblVars = Set.union tcGblVars vars_set})
@@ -96,7 +95,7 @@ extendTyConEnv :: [(TyName Rn,TyCon Tc)] -> TcM a -> TcM a
 extendTyConEnv envl = local (\env@TcEnv{tcTyConEnv} -> env{tcTyConEnv = Map.union tcenv' tcTyConEnv})
   where tcenv' = Map.fromList envl
 
-extendConEnv :: [(Con Rn,Con Tc)] -> TcM a -> TcM a
+extendConEnv :: [(Con Rn,TcCon Tc)] -> TcM a -> TcM a
 extendConEnv envl = local (\env@TcEnv{tcConEnv} -> env{tcConEnv = Map.union cenv' tcConEnv})
   where cenv' = Map.fromList envl
 

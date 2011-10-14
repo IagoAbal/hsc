@@ -61,9 +61,13 @@ zonkVar x@V{varType} = do
   varType' <- zonkType varType
   return x{varType = varType'}
 
-zonkCon :: MonadIO m => Con Tc -> m (Con Tc)
-zonkCon (UserCon ucon)      = liftM UserCon $ zonkVar ucon
-zonkCon bcon@(BuiltinCon _) = return bcon
+zonkCon :: MonadIO m => TcCon Tc -> m (TcCon Tc)
+zonkCon con@TcCon{tcConCon} = do
+  tcConCon' <- goCon tcConCon
+  return con{tcConCon = tcConCon'}
+  where
+    goCon (UserCon ucon)      = liftM UserCon $ zonkVar ucon
+    goCon bcon@(BuiltinCon _) = return bcon
 
 zonkExps :: MonadIO m => [Exp Tc] -> m [Exp Tc]
 zonkExps = mapM zonkExp

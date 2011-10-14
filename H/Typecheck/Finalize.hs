@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, NamedFieldPuns #-}
+{-# LANGUAGE GADTs, NamedFieldPuns, DoRec #-}
 
 module H.Typecheck.Finalize where
 
@@ -26,21 +26,21 @@ type TiM = H TiEnv () ()
 data TiEnv
   = TiEnv {
       tiVarEnv   :: Map (Var Tc) (Var Ti)
-    , tiTyConEnv :: Map (TyCon Tc) (TyCon Ti)
-    , tiConEnv   :: Map (Con Tc) (Con Ti)
+    , tiTyConEnv :: Map (TyName Tc) (TyCon Ti)
+    , tiConEnv   :: Map (Con Tc) (TcCon Ti)
     }
 
 emptyTiEnv :: TiEnv
 emptyTiEnv = TiEnv Map.empty
-                (Map.fromList [(unitTyCon,unitTyCon)
-                              ,(boolTyCon,boolTyCon)
-                              ,(intTyCon,intTyCon)
-                              ,(natTyCon,natTyCon)])
-                (Map.fromList [(unitCon,unitCon)
-                              ,(falseCon,falseCon)
-                              ,(trueCon,trueCon)
-                              ,(nilCon,nilCon)
-                              ,(consCon,consCon)])
+                (Map.fromList [(unitTyName,unitTyCon)
+                              ,(boolTyName,boolTyCon)
+                              ,(intTyName,intTyCon)
+                              ,(natTyName,natTyCon)])
+                (Map.fromList [(unitCon,tcUnitCon)
+                              ,(falseCon,tcFalseCon)
+                              ,(trueCon,tcTrueCon)
+                              ,(nilCon,tcNilCon)
+                              ,(consCon,tcConsCon)])
 
 
 finModule :: UniqSupply -> Module Tc -> IO (Either Message (Module Ti),UniqSupply)
@@ -54,7 +54,7 @@ finModule us (Module loc modname decls)
 lookupTyCon :: TyCon Tc -> TiM (TyCon Ti)
 lookupTyCon tc = do
   tyConEnv <- asks tiTyConEnv
-  case Map.lookup tc tyConEnv of
+  case Map.lookup (tyConName tc) tyConEnv of
       Just tc' -> return tc'
       Nothing -> error $ "Finalize.lookupTyCon tc=" ++ prettyPrint tc
 
@@ -65,24 +65,23 @@ lookupVar x = do
       Just x'  -> return x'
       Nothing -> error $ "Finalize.lookupVar  x=" ++ prettyPrint x
 
-lookupCon :: Con Tc -> TiM (Con Ti)
-lookupCon con@(UserCon _) = do
+lookupCon :: TcCon Tc -> TiM (TcCon Ti)
+lookupCon con = do
   conEnv <- asks tiConEnv
-  case Map.lookup con conEnv of
+  case Map.lookup (tcConCon con) conEnv of
       Just con' -> return con'
       Nothing   -> error $ "Finalize.lookupCon con" ++ prettyPrint con
-lookupCon (BuiltinCon bcon) = return $ BuiltinCon bcon
 
 
 extendVarEnv :: [(Var Tc,Var Ti)] -> TiM a -> TiM a
 extendVarEnv envl = local (\env@TiEnv{tiVarEnv} -> env{tiVarEnv = Map.union tiVarEnv venv'})
   where venv' = Map.fromList envl
   
-extendTyConEnv :: [(TyCon Tc,TyCon Ti)] -> TiM a -> TiM a
+extendTyConEnv :: [(TyName Tc,TyCon Ti)] -> TiM a -> TiM a
 extendTyConEnv envl = local (\env@TiEnv{tiTyConEnv} -> env{tiTyConEnv = Map.union tiTyConEnv tcenv'})
   where tcenv' = Map.fromList envl
 
-extendConEnv :: [(Con Tc,Con Ti)] -> TiM a -> TiM a
+extendConEnv :: [(Con Tc,TcCon Ti)] -> TiM a -> TiM a
 extendConEnv envl = local (\env@TiEnv{tiConEnv} -> env{tiConEnv = Map.union tiConEnv cenv'})
   where cenv' = Map.fromList envl
 
@@ -91,13 +90,21 @@ finDecls [] = return []
 finDecls (TypeDecl loc tyname tvs rhs:ds) = do
   rhs' <- inTypeDeclCtxt loc (ppQuot tyname) $
             finType rhs
-  extendTyConEnv [(SynTyCon (UserTyCon tyname) tvs rhs,SynTyCon (UserTyCon tyname) tvs rhs')] $ do
+  extendTyConEnv [(UserTyCon tyname,SynTyCon (UserTyCon tyname) tvs rhs')] $ do
     ds' <- finDecls ds
     return (TypeDecl loc tyname tvs rhs':ds')
 finDecls (DataDecl loc tyname tvs constrs:ds)
-  = extendTyConEnv [(AlgTyCon (UserTyCon tyname), AlgTyCon (UserTyCon tyname))] $ do
-      (constrs',con_env) <- inDataDeclCtxt loc (ppQuot tyname) $
-                              liftM unzip $ mapM finConDecl constrs
+  = do
+    rec {
+      let tycon_ti = AlgTyCon (UserTyCon tyname) $ map snd con_env'
+          tycon_env = [(UserTyCon tyname,tycon_ti)]
+          con_env = [ (con_tc,TcCon con_ti tycon_ti) | (con_tc,con_ti) <- con_env' ]
+            -- I think ConEnv should be Con Tc -> TcCon Ti ...
+    ; (constrs',con_env') <- inDataDeclCtxt loc (ppQuot tyname) $
+                                extendTyConEnv tycon_env $
+                                  liftM unzip $ mapM finConDecl constrs
+    }
+    extendTyConEnv tycon_env $
       extendConEnv con_env $ do
         ds' <- finDecls ds
         return (DataDecl loc tyname tvs constrs':ds')

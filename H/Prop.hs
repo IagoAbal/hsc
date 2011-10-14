@@ -6,11 +6,11 @@ import H.Syntax
 import Data.List  ( sort )
 
 
-_True_ :: Prop p
-_True_ = Con (BuiltinCon TrueCon)
+_True_ :: IsPostTc p => Prop p
+_True_ = Con tcTrueCon
 
-_False_ :: Prop p
-_False_ = Con (BuiltinCon FalseCon)
+_False_ :: IsPostTc p => Prop p
+_False_ = Con tcFalseCon
 
 infixr .==>.
 
@@ -38,15 +38,15 @@ splitConj (InfixApp p (Op (BoolOp AndB)) q)
   = splitConj p ++ splitConj q
 splitConj p = [p]
 
-conj :: [Prop p] -> Prop p
+conj :: IsPostTc p => [Prop p] -> Prop p
 conj [] = _True_
 conj ps = foldr1 (.&&.) ps
 
-disj :: [Prop p] -> Prop p
+disj :: IsPostTc p => [Prop p] -> Prop p
 disj [] = _False_
 disj ps = foldr1 (.||.) ps
 
-hypos :: [Prop p] -> Prop p -> Prop p
+hypos :: IsPostTc p => [Prop p] -> Prop p -> Prop p
 hypos [] p = p
 hypos hs p = hypo (conj hs) p
 

@@ -32,9 +32,11 @@ mtvMatch (Match _loc pats rhs) = mtvPats pats `Set.union` mtvRhs rhs
 mtvVar :: Var Tc -> Set MetaTyVar
 mtvVar = mtvType . varType
 
-mtvCon :: Con Tc -> Set MetaTyVar
-mtvCon (UserCon ucon) = mtvVar ucon
-mtvCon (BuiltinCon _) = Set.empty
+mtvCon :: TcCon Tc -> Set MetaTyVar
+mtvCon = goCon . tcConCon
+  where
+     goCon (UserCon ucon) = mtvVar ucon
+     goCon (BuiltinCon _) = Set.empty
 
 mtvExps :: [Exp Tc] -> Set MetaTyVar
 mtvExps = Set.unions . map mtvExp

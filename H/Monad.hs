@@ -20,7 +20,7 @@ import Control.Monad.RWS.Strict
 import Data.IORef
 
 newtype H env log st a = H { unH :: RWST (Henv env) log st (ErrorT Message IO) a }
-  deriving (Functor, Monad, MonadIO)
+  deriving (Functor, Monad, MonadIO, MonadFix)
 
 runH :: H env log st a -> SrcContext -> UniqSupply -> env -> st -> IO (Either Message (a,st,log),UniqSupply)
 runH m (SrcContext loc descr isprop) us env st0 = do

@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, ScopedTypeVariables, NamedFieldPuns #-}
+{-# LANGUAGE GADTs, ScopedTypeVariables, NamedFieldPuns, DoRec #-}
 
 -- I still need to check linearity
 module H.Typecheck where
@@ -166,18 +166,21 @@ kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
   where tc_kind = funKi (replicate (length ty_params) typeKi) typeKi
 
 -- DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
-kcDataDecl :: Decl Rn -> TcM (Decl Tc,[(TyName Rn,TyCon Tc)],[(Con Rn,Con Tc)])
+kcDataDecl :: Decl Rn -> TcM (Decl Tc,[(TyName Rn,TyCon Tc)],[(Con Rn,TcCon Tc)])
 kcDataDecl (DataDecl loc ty_name typarams constrs)
   = inDataDeclCtxt loc (ppQuot ty_name) $ do
     let tvs = map (flip mkTyVar typeKi) typarams
-    (constrs',cons_env) <- liftM unzip $
-                           extendTyConEnv tycon_env $
-                             mapM (tc_constr tvs) constrs
+    rec {
+      let tycon = AlgTyCon (UserTyCon ty_var) $ map snd cons_env'
+          tycon_env = [(UserTyCon ty_name,tycon)]
+          cons_env = [ (con_rn,TcCon con_tc tycon) | (con_rn,con_tc) <- cons_env' ]
+    ; (constrs',cons_env') <- liftM unzip $
+                                extendTyConEnv tycon_env $
+                                  mapM (tc_constr tvs) constrs
+    }
     return (DataDecl loc ty_var tvs constrs',tycon_env,cons_env)
   where ty_kind = funKi (replicate (length typarams) typeKi) typeKi
         ty_var = mkTyVar ty_name ty_kind
-        tycon = AlgTyCon $ UserTyCon ty_var
-        tycon_env = [(UserTyCon ty_name,tycon)]
         con_res_ty = appTyIn (UserTyCon ty_name) (map VarTy typarams)
 --         ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))

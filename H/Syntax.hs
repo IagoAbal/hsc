@@ -138,6 +138,12 @@ type instance VAR Ti = Var Ti
 
 type NAME phase = VAR phase
 
+type family CON phase
+type instance CON Pr = Con Pr
+type instance CON Rn = Con Rn
+type instance CON Tc = TcCon Tc
+type instance CON Ti = TcCon Ti
+
 type family TyVAR phase
 type instance TyVAR Pr = OccName
 type instance TyVAR Rn = Name
@@ -159,7 +165,7 @@ type instance GoalNAME Tc = Name
 type instance GoalNAME Ti = Name
 
 
-class (Pretty (VAR p), PrettyBndr (VAR p), Pretty (TyVAR p), PrettyBndr (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
+class (Pretty (VAR p), Pretty (CON p), PrettyBndr (VAR p), Pretty (TyVAR p), PrettyBndr (TyVAR p), Pretty (TyCON p), Pretty(GoalNAME p)) => PrettyNames p where
 instance PrettyNames Pr where
 instance PrettyNames Rn where
 instance PrettyNames Tc where
@@ -187,7 +193,7 @@ type PostTcTyParams p = PostTc p [TyVar]
 -- * IsPostTc
 
       -- FIX this
-class (Ge p Rn, Ge p Tc, VAR p ~ Var p, TyVAR p ~ TyVar, TyCON p ~ TyCon p, GoalNAME p ~ Name, PrettyNames p) => IsPostTc p where
+class (Ge p Rn, Ge p Tc, VAR p ~ Var p, CON p ~ TcCon p, TyVAR p ~ TyVar, TyCON p ~ TyCon p, GoalNAME p ~ Name, PrettyNames p) => IsPostTc p where
 
 instance IsPostTc Tc where
 instance IsPostTc Ti where
@@ -334,7 +340,7 @@ data Exp p where
   -- | variable
   Var :: VAR p -> Exp p
   -- | data constructor
-  Con :: Con p -> Exp p
+  Con :: CON p -> Exp p
   -- | operator
   Op  :: Op -> Exp p
   -- | literal constant
@@ -454,7 +460,7 @@ instance PrettyNames p => Pretty (Exp p) where
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
   pretty (Var var) = pretty var
-  pretty (Con con) = ppPrefixCon con
+  pretty (Con con) = pretty con
   pretty (Op op)   = ppPrefixOp op
   pretty (Tuple _ expList) = parenList . map pretty $ expList
   pretty (Paren e) = parens . pretty $ e
@@ -561,7 +567,7 @@ data Pat p where
   -- | pattern with infix data constructor
   InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
   -- | data constructor and argument
-  ConPat :: Con p -> PostTcTypes p -> [Pat p] -> Pat p
+  ConPat :: CON p -> PostTcTypes p -> [Pat p] -> Pat p
   -- | tuple pattern
   TuplePat :: [Pat p] -> PostTcType p -> Pat p
   -- | list pattern
@@ -773,9 +779,26 @@ instance Pretty (NAME p) => Pretty (Con p) where
   pretty (UserCon name)    = pretty name
   pretty (BuiltinCon bcon) = pretty bcon
 
-ppPrefixCon :: Pretty (NAME p) => Con p -> Doc
-ppPrefixCon (BuiltinCon ConsCon) = text "(::)"
-ppPrefixCon con                  = pretty con
+data TcCon p = TcCon {
+    tcConCon :: Con p
+  , tcConTy  :: TyCon p
+  }
+
+instance Eq (NAME p) => Eq (TcCon p) where
+  (==) = (==) `on` tcConCon
+
+instance Ord (NAME p) => Ord (TcCon p) where
+  compare = compare `on` tcConCon
+
+instance IsPostTc p => Sorted (TcCon p) (Sigma p) where
+  sortOf = sortOf . tcConCon
+
+instance Pretty (NAME p) => Pretty (TcCon p) where
+  pretty = pretty . tcConCon
+
+-- ppPrefixCon :: Pretty (NAME p) => Con p -> Doc
+-- ppPrefixCon (BuiltinCon ConsCon) = text "(::)"
+-- ppPrefixCon con                  = pretty con
 
 instance Pretty BuiltinCon where
   pretty UnitCon  = text "()"
@@ -790,6 +813,13 @@ trueCon  = BuiltinCon TrueCon
 falseCon = BuiltinCon FalseCon
 nilCon   = BuiltinCon NilCon
 consCon  = BuiltinCon ConsCon
+
+tcUnitCon, tcTrueCon, tcFalseCon, tcNilCon, tcConsCon :: IsPostTc p => TcCon p
+tcUnitCon  = TcCon unitCon unitTyCon
+tcTrueCon  = TcCon trueCon boolTyCon
+tcFalseCon = TcCon falseCon boolTyCon
+tcNilCon   = TcCon nilCon listTyCon
+tcConsCon  = TcCon consCon listTyCon
 
 -- ** Built-in operators
 
@@ -1162,6 +1192,7 @@ data BuiltinTyCon = UnitTyCon
                   | BoolTyCon
                   | IntTyCon
                   | NatTyCon    -- ^ @{n:Int|n >= 0}@
+                  | ListTyCon
     deriving (Eq,Ord)
 
 instance Sorted (UTyNAME p) Kind => Sorted (TyName p) Kind where
@@ -1177,10 +1208,12 @@ instance Pretty BuiltinTyCon where
   pretty BoolTyCon = text "Bool"
   pretty IntTyCon  = text "Int"
   pretty NatTyCon  = text "Nat"
+  pretty ListTyCon = text "[]"    -- should not happen...
 
 data TyCon p
   = AlgTyCon {
       tyConName   :: TyName p
+    , tyConCons   :: [Con p]
 --     , tyConParams :: [TyVar]
     }
   | SynTyCon {
@@ -1207,33 +1240,42 @@ boolTyName = BuiltinTyCon BoolTyCon
 intTyName  = BuiltinTyCon IntTyCon
 natTyName  = BuiltinTyCon NatTyCon
 
-unitTyCon, boolTyCon, intTyCon, natTyCon :: IsPostTc p => TyCon p
+unitTyCon, boolTyCon, intTyCon, natTyCon, listTyCon :: IsPostTc p => TyCon p
 unitTyCon = AlgTyCon {
-              tyConName   = BuiltinTyCon UnitTyCon
+              tyConName = unitTyName
 --             , tyConParams = []
+            , tyConCons = [unitCon]
             }
 boolTyCon = AlgTyCon {
-              tyConName   = BuiltinTyCon BoolTyCon
+              tyConName   = boolTyName
 --             , tyConParams = []
+            , tyConCons = [falseCon,trueCon]
             }
 intTyCon  = AlgTyCon {
-              tyConName   = BuiltinTyCon IntTyCon
+              tyConName   = intTyName
 --             , tyConParams = []
+            , tyConCons = []  -- special case, infinite constructors!
             }
 natTyCon  = SynTyCon {
-              tyConName   = BuiltinTyCon NatTyCon
+              tyConName   = natTyName
             , tyConParams = []
             , synTyConRhs = predTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
             }
   where n = mkVar n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
         n_uniq = -4001
+listTyCon = AlgTyCon {
+              tyConName   = BuiltinTyCon ListTyCon
+--             , tyConParams = []
+            , tyConCons = [nilCon,consCon]
+            }
 
 instance Sorted BuiltinTyCon Kind where
   sortOf UnitTyCon = typeKi
   sortOf BoolTyCon = typeKi
   sortOf IntTyCon  = typeKi
   sortOf NatTyCon  = typeKi
+  sortOf ListTyCon = typeKi ++> typeKi
 
 -- ** Meta type variables
 
