@@ -146,6 +146,7 @@ propMTV (EnumFromTo e1 e2) = propsMTV [e1,e2]
 propMTV (EnumFromThenTo e1 e2 e3) = propsMTV [e1,e2,e3]
 propMTV (Coerc _loc e polyty) = propMTV e
 propMTV (QP qt pats body) = patsMTV pats `Set.union` propMTV body
+propMTV _other = undefined -- impossible
 
 -- * pat2exp
 
@@ -167,6 +168,7 @@ pat2exp (WildPat wild_var)
   = Var wild_var
 pat2exp (AsPat _ p)  = pat2exp p
 -- pat2exp (SigPat p ty) = pat2exp p
+pat2exp _other = undefined -- impossible
 
 
 expandSyn :: (IsPostTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
@@ -221,13 +223,14 @@ instFunTy (Dom (Just p) _ _,rang) e
       let f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
                  | otherwise = Just $ Let [PatBind Nothing p (rhsExp e_ty e)] prop
       tpType f rang
+instFunTy _other _e = undefined -- impossible
 
 patExpSubst :: forall p. IsPostTc p =>
                 Exp p
               -> Pat p   -- ^ domain pattern
               -> Set (Var p)
               -> Maybe [(Var p,Exp p)]    -- ^ substitution for range  
-patExpSubst e1 pat_dom target_fv = get_subst e1 pat_dom
+patExpSubst expr pat_dom target_fv = get_subst expr pat_dom
   where get_subst :: Exp p -> Pat p -> Maybe [(Var p,Exp p)]
         get_subst _ (WildPat _) = Just []
         get_subst e (VarPat x) | not (x `Set.member` target_fv) = Just []
@@ -237,9 +240,9 @@ patExpSubst e1 pat_dom target_fv = get_subst e1 pat_dom
           , Just con <- get_con f
           , con == con' = liftM concat $ zipWithM get_subst args ps
           where get_con (Con con) = Just con
-                get_con (TyApp e _) = get_con e
-                get_con (Coerc _ e _) = get_con e
-                get_con (Paren e) = get_con e
+                get_con (TyApp e1 _) = get_con e1
+                get_con (Coerc _ e1 _) = get_con e1
+                get_con (Paren e1) = get_con e1
                 get_con _other    = Nothing
         get_subst (InfixApp e1 (Op CONSOp) e2) (InfixCONSPat _ p1 p2)
           = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
@@ -322,6 +325,7 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
           -- just check preconditions... change it by an earlier assert
         get_subst _acc lpat dpat
          | not (matchablePats lpat dpat) = error "bug found!"
+        get_subst _acc _lpat _dpat = undefined -- impossible
           -- Here 'dpat' (hence, 'pat_dom') bounds some variable that is
           -- being used in rang but such (sub-)expression is ignored by
           -- 'pat_lam'.
@@ -466,9 +470,9 @@ tcExprTau = tcExprType >=> return . sigma2tau
 
 
 tcAppType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> [Exp p] -> m (Tau p)
-tcAppType fun args = do
+tcAppType fun args1 = do
   fun_sig <- tcExprType fun
-  go args (sigma2tau fun_sig)
+  go args1 (sigma2tau fun_sig)
   where
     go []         res_ty = return res_ty
     go (arg:args) fun_ty = do
@@ -499,3 +503,4 @@ tcPatType (WildPat wild_var)
   = return $ sigma2tau $ varType wild_var
 tcPatType (AsPat x _) = return $ sigma2tau $ varType x
 -- tcPatType (SigPat _ tau) = return tau
+tcPatType _other = undefined -- impossible
