@@ -21,6 +21,8 @@ import H.Pretty
 import H.Message
 import H.Monad
 
+import Util.Monad
+
 import Name
 import Unique
 
@@ -151,7 +153,7 @@ instance RenameBndr (Bind Pr) (Bind Rn) where
           popContext $ f (FunBind rec' name sig' NoPostTc matches')
   renameBndr (PatBind (Just loc) pat rhs) f
     = inPatBindCtxt loc (ppQuot pat) $ do
-        renameBndr pat $ \pat' -> do
+        rnPat pat $ \pat' -> do
           rhs' <- rename rhs
           popContext $ f (PatBind (Just loc) pat' rhs')
 
@@ -165,7 +167,7 @@ instance Rename Match where
   rename (Match (Just loc) pats rhs)
     = inFunMatchCtxt loc $ do
         checkDupPatBndrs pats
-        renameBndr pats $ \pats' -> liftM (Match (Just loc) pats') $ rename rhs
+        rnPats pats $ \pats' -> liftM (Match (Just loc) pats') $ rename rhs
 
 
 rnConDecl :: ConDecl Pr -> RnM (ConDecl Rn,(OccName,Name))
@@ -191,7 +193,7 @@ instance Rename Exp where
   rename (App f n) = liftM2 App (rename f) (rename n)
   rename (Lam (Just loc) pats body)
     = inLambdaAbsCtxt loc pats $
-        renameBndr pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
+        rnPats pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
   rename (Ite NoPostTc g t e)
@@ -218,7 +220,7 @@ instance Rename Exp where
     checkQuantifierInPropContext qt
     inQPExprCtxt qt pats $ do
       checkDupPatBndrs pats
-      renameBndr pats $ \pats' ->
+      rnPats pats $ \pats' ->
         liftM (QP qt pats') $ rename body
 
 checkQuantifierInPropContext :: Quantifier -> RnM ()
@@ -268,33 +270,64 @@ instance Rename Alt where
   rename (Alt (Just loc) pat rhs)
     = inCaseAltCtxt loc pat $ do
         checkDupPatBndrs [pat]
-        renameBndr pat $ \pat' -> liftM (Alt (Just loc) pat') $ rename rhs
+        rnPat pat $ \pat' -> liftM (Alt (Just loc) pat') $ rename rhs
 
 
-instance RenameBndr (Pat Pr) (Pat Rn) where
-  renameBndr (VarPat occ) f = renameBndr occ $ f . VarPat
-  renameBndr (LitPat lit) f = f (LitPat lit)
-  renameBndr (InfixCONSPat NoPostTc p1 p2) f
-    = renameBndr p1 $ \p1' ->
-      renameBndr p2 $ \p2' ->
-        f (InfixCONSPat NoPostTc p1' p2')
-  renameBndr (ConPat con NoPostTc ps) f = do
+rn_pats :: [Pat Pr] -> RnM ([Pat Rn],Map OccName Name)
+rn_pats ps = mapAccumM (\acc_map pat -> do
+                          (pat',pat_map) <- rn_pat pat
+                          return (pat',Map.union acc_map pat_map)
+                      )
+                      Map.empty
+                      ps
+
+rn_pat :: Pat Pr -> RnM (Pat Rn,Map OccName Name)
+rn_pat (VarPat occ) = do
+  name <- renameBndr occ return
+  return (VarPat name,Map.fromList [(occ,name)])
+rn_pat (LitPat lit) = return (LitPat lit,Map.empty)
+rn_pat (InfixCONSPat NoPostTc p1 p2) = do
+  (p1',p1_map) <- rn_pat p1
+  (p2',p2_map) <- rn_pat p2
+  return (InfixCONSPat NoPostTc p1' p2',Map.union p1_map p2_map)
+rn_pat (ConPat con NoPostTc ps) = do
     con' <- rename con
-    renameBndr ps $ f . (ConPat con' NoPostTc)
-  renameBndr (TuplePat ps NoPostTc) f = renameBndr ps $ f . (flip TuplePat NoPostTc)
-  renameBndr (ListPat ps NoPostTc) f = renameBndr ps $ f . (flip ListPat NoPostTc)
-  renameBndr (ParenPat p) f = renameBndr p $ f . ParenPat
-  renameBndr WildPatIn f = do
-    uniq <- getUniq
-    let wild_var = mkSysName (mkOccName VarNS "_x") uniq
-    f (WildPat wild_var)
-  renameBndr (SigPat p t) f = do t' <- rename t
-                                 renameBndr p $ f . (flip SigPat t')
-  renameBndr (AsPat x p) f
-    = renameBndr p $ \p' ->
-      renameBndr x $ \x' ->
-        f (AsPat x' p')
-  renameBndr _other  _f = undefined -- impossible
+    (ps',ps_map) <- rn_pats ps
+    return (ConPat con' NoPostTc ps',ps_map)
+rn_pat (TuplePat ps NoPostTc) = do
+  (ps',ps_map) <- rn_pats ps
+  return (TuplePat ps' NoPostTc,ps_map)
+rn_pat (ListPat ps NoPostTc) = do
+  (ps',ps_map) <- rn_pats ps
+  return (ListPat ps' NoPostTc,ps_map)
+rn_pat (ParenPat p) = do
+  (p',p_map) <- rn_pat p
+  return (ParenPat p',p_map)
+rn_pat WildPatIn = do
+  uniq <- getUniq
+  let wild_var = mkSysName (mkOccName VarNS "_x") uniq
+  return (WildPat wild_var,Map.empty)
+rn_pat (SigPat p t) = do
+  (p',p_map) <- rn_pat p
+  t' <- rename t
+  return (SigPat p' t',p_map)
+rn_pat (AsPat occ p) = do
+  name <- renameBndr occ return
+  (p',p_map) <- rn_pat p
+  return (AsPat name p',Map.insert occ name p_map)
+rn_pat _other = undefined -- impossible
+
+rnPat :: Pat Pr -> (Pat Rn -> RnM a) -> RnM a
+rnPat p f = do
+    (p',p_map) <- rn_pat p
+    withMapping (Map.toList p_map) $
+      f p'
+
+rnPats :: [Pat Pr] -> ([Pat Rn] -> RnM a) -> RnM a
+rnPats ps f = do
+    (ps',ps_map) <- rn_pats ps
+    withMapping (Map.toList ps_map) $
+      f ps'
 
 instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
@@ -302,7 +335,7 @@ instance Rename (Type c) where
   rename (AppTyIn s t) = liftM2 AppTyIn (rename s) (rename t)
   rename (PredTy pat ty mbProp) = do
     ty' <- rename ty
-    renameBndr pat $ \pat' ->
+    rnPat pat $ \pat' ->
       liftM (PredTy pat' ty') $ inPropContext $ rnMaybe mbProp
   rename (FunTy a b) =
     renameBndr a $ \a' ->
@@ -323,7 +356,7 @@ instance RenameBndr (Dom Pr) (Dom Rn) where
     f (Dom Nothing ty' Nothing)
   renameBndr (Dom (Just pat) ty mbProp) f = do
     ty' <- rename ty
-    renameBndr pat $ \pat' -> do
+    rnPat pat $ \pat' -> do
       mbProp' <- inPropContext $ rnMaybe mbProp
       f (Dom (Just pat') ty' mbProp')
   renameBndr _other _f = undefined -- impossible
