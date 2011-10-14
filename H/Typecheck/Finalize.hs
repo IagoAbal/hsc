@@ -235,8 +235,11 @@ finExp (Coerc loc expr pty)
 finExp (QP qt pats prop)
   = inQPExprCtxt qt pats $
       finPats pats $ \pats' ->
-        liftM (QP qt pats') $ finExp prop
+        liftM (QP qt pats') $ finProp prop
 finExp _other = undefined -- impossible
+
+finProp :: Prop Tc -> TiM (Prop Ti)
+finProp = inPropContext . finExp
 
 finAlts :: [Alt Tc] -> TiM [Alt Ti]
 finAlts = mapM finAlt
@@ -328,7 +331,7 @@ finType (ConTy tc tys) = liftM2 ConTy (lookupTyCon tc) (finTypes tys)
 finType (PredTy pat ty mb_prop) = do
   ty' <- finType ty
   finPat pat $ \pat' ->
-    liftM (PredTy pat' ty') (T.mapM finExp mb_prop)
+    liftM (PredTy pat' ty') (T.mapM finProp mb_prop)
 finType (FunTy dom rang)
   = finDom dom $ \dom' -> liftM (FunTy dom') $ finType rang
 finType (ListTy ty) = liftM ListTy $ finType ty
@@ -352,6 +355,6 @@ finDom (Dom Nothing ty Nothing) cont = do
 finDom (Dom (Just pat) ty mb_prop) cont = do
   ty' <- finType ty
   finPat pat $ \pat' -> do
-    mb_prop' <- T.mapM finExp mb_prop
+    mb_prop' <- T.mapM finProp mb_prop
     cont (Dom (Just pat') ty' mb_prop')
 finDom _other _cont = undefined -- imposible
