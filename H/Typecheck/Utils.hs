@@ -294,6 +294,7 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
         get_subst (s,bs) (VarPat y) dpat = do
           yexp' <- subst_exp s [] (Var y)
           return (s,bs++[(dpat,yexp')])
+        get_subst (s,bs) (LitPat i) (LitPat j) | i == j = return (s,bs)
         get_subst (s,bs) (InfixCONSPat _ q1 q2) (InfixCONSPat _ p1 p2)
           = do (s',bs') <- get_subst (s,bs) q1 p1
                get_subst (s',bs') q2 p2
