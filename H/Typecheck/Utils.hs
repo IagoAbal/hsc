@@ -128,7 +128,7 @@ propMTV (PrefixApp _op e) = propMTV e
 propMTV (InfixApp e1 _op e2) = propsMTV [e1,e2]
 propMTV (App e1 e2) = propsMTV [e1,e2]
 propMTV (TyApp e tys) = propMTV e
-propMTV (Lam _loc _pats body)
+propMTV (Lam _loc _pats (Rhs _ (UnGuarded body) _))
   = propMTV body
   -- we don't go inside bindings...
 propMTV (Let _bs body)
@@ -438,12 +438,10 @@ tcExprType (TyApp e tys) = do
   e_sig <- tcExprType e
   e_tau <- instSigmaType e_sig tys
   return $ tau2sigma e_tau
-tcExprType (Lam _ pats body) = do
+tcExprType (Lam _ pats (Rhs (PostTc rhs_ty) _ _)) = do
   pats_tys <- mapM tcPatType pats
   let doms = zipWith patternDom pats pats_tys
-  body_ty <- tcExprType body
-    -- the body of a lanbda-expression is ensured to have a Tau-type.
-  return $ funTy doms (sigma2tau body_ty)
+  return $ funTy doms rhs_ty
 tcExprType (Let _ e) = tcExprType e
 tcExprType (TyLam tvs e) = do
   e_ty <- tcExprType e

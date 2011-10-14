@@ -342,7 +342,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | exp10b      { $1 }
 
 > exp10a :: { Exp Pr }
-> : '\\' srcloc apats '->' exp  { Lam (Just $2) $3 $5 }
+> : '\\' srcloc apats '->' exp  { Lam (Just $2) $3 (Rhs NoPostTc (UnGuarded $5) []) }
 > | 'let' binds 'in' exp { Let $2 $4 }
 > | 'if' exp 'then' exp 'else' exp { Ite NoPostTc $2 $4 $6 }
 > | 'if' gdpats    { If NoPostTc (GuardedRhssIn $2) }

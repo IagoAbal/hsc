@@ -52,8 +52,8 @@ mtvExp (PrefixApp op e) = mtvExp e
 mtvExp (InfixApp e1 _op e2) = mtvExps [e1,e2]
 mtvExp (App e1 e2) = mtvExps [e1,e2]
 mtvExp (TyApp e tys) = mtvExp e `Set.union` mtvTypes tys
-mtvExp (Lam _loc pats body)
-  = mtvPats pats `Set.union` mtvExp body
+mtvExp (Lam _loc pats rhs)
+  = mtvPats pats `Set.union` mtvRhs rhs
 mtvExp (Let bs body)
   = mtvBinds bs `Set.union` mtvExp body
 mtvExp (TyLam tvs body) = mtvExp body

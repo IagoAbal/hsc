@@ -357,7 +357,7 @@ data Exp p where
   -- | type application
   TyApp :: Ge p Tc => Exp p -> [Tau p] -> Exp p
   -- | lambda expression
-  Lam :: Maybe SrcLoc -> [Pat p] -> Exp p -> Exp p
+  Lam :: Maybe SrcLoc -> [Pat p] -> LamRHS p -> Exp p
   -- | local declarations with @let@
   Let :: [Bind p] -> Exp p -> Exp p
   -- | type lambda
@@ -443,8 +443,8 @@ instance PrettyNames p => Pretty (Exp p) where
           Op op  -> myFsep [pretty a, pretty op, pretty b]
           _other -> myFsep [pretty opE, ppParenExp a, ppParenExp b]
   pretty (App a b) = myFsep [pretty a, ppParenExp b]
-  pretty (Lam _loc patList body) = myFsep $
-    char '\\' : map pretty patList ++ [text "->", pretty body]
+  pretty (Lam _loc patList rhs) = myFsep $
+    char '\\' : map pretty patList ++ [text "->", ppRhs LamAbs rhs]
   pretty (TyApp e tys) = myFsep $ pretty e : map (\ty -> char '@' <> ppAType ty) tys
   pretty (TyLam tvs body) = myFsep $ char '\\' : map prettyBndr tvs ++ [text "->", pretty body]
   pretty (Let expList letBody) =
@@ -492,6 +492,10 @@ instance PrettyNames p => Pretty (Exp p) where
 -- NB: A Rhs has always a Tau type.
 data Rhs p = Rhs (PostTcType p) (GRhs p) (WhereBinds p)
 
+-- | RHS of a lamba-abstraction
+-- Invariant: no guards nor `where' bindings
+type LamRHS = Rhs
+
 data GRhs p
 	 = UnGuarded (Exp p)	-- ^ unguarded right hand side (/exp/)
 	 | Guarded (GuardedRhss p)
@@ -526,11 +530,13 @@ convenient when writing critical software.
 -}
 
 data RhsContext = ValDef
+                | LamAbs
                 | CaseAlt
                 | IfExp
 
 rhsSepSym :: RhsContext -> Doc
 rhsSepSym ValDef  = equals
+rhsSepSym LamAbs  = text "->"
 rhsSepSym CaseAlt = text "->"
 rhsSepSym IfExp   = text "->"
 

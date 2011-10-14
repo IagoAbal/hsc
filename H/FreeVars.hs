@@ -51,8 +51,8 @@ fvExp (PrefixApp _op e) = fvExp e
 fvExp (InfixApp e1 _op e2) = fvExps [e1,e2]
 fvExp (App e1 e2) = fvExps [e1,e2]
 fvExp (TyApp e tys) = fvExp e `Set.union` fvTypes tys
-fvExp (Lam _loc pats body)
-  = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
+fvExp (Lam _loc pats rhs)
+  = fvPats pats `Set.union` (fvRhs rhs Set.\\ bsPats pats)
 fvExp (Let bs body)
   = fvBinds bs `Set.union` (fvExp body Set.\\ bsBinds bs)
 fvExp (TyLam _tvs body) = fvExp body

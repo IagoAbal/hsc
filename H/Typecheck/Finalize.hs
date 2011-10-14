@@ -197,9 +197,9 @@ finExp (TyApp (Op (BoolOp bop)) [ty])
           | isVarTy ty = throwError $ text "Equality operators cannot be applied to arbitrary types"
           | otherwise  = return ()
 finExp (TyApp e tys) = liftM2 TyApp (finExp e) (finTypes tys)
-finExp (Lam mb_loc pats body)
+finExp (Lam mb_loc pats rhs)
   = lambdaAbsCtxt $ finPats pats $ \pats' ->
-                      liftM (Lam mb_loc pats') $ finExp body
+                      liftM (Lam mb_loc pats') $ finRhs rhs
   where lambdaAbsCtxt = case mb_loc of
                             Nothing  -> inContext (text "In lambda abstraction: \\" <+> (myFsep $ map pretty pats) <+> text "-> ...")
                             Just loc -> inLambdaAbsCtxt loc pats

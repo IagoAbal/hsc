@@ -196,9 +196,9 @@ substExp s (InfixApp e1 op e2)
   = liftM3 InfixApp (substExp s e1) (substExp s op) (substExp s e2)
 substExp s (App f n) = liftM2 App (substExp s f) (substExp s n)
 substExp s (TyApp e tys) = liftM2 TyApp (substExp s e) (substTypes s tys)
-substExp s (Lam loc pats body)
+substExp s (Lam loc pats rhs)
     = do (pats',s') <- substPats s pats
-         liftM (Lam loc pats') $ substExp s' body
+         liftM (Lam loc pats') $ substRhs s' rhs
 substExp s (TyLam tvs e) = do
   (tvs',s') <- substTyBndrs s tvs
   TyLam tvs' `liftM` substExp s' e

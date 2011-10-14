@@ -385,21 +385,21 @@ tcExp (App fun arg) exp_ty = do
   (fun',[arg']) <- tcApp fun [arg] exp_ty
   return (App fun' arg')
 --   Lam :: SrcLoc -> [Pat p] -> Exp p -> Exp p
-tcExp (Lam (Just loc) pats body) (Check exp_ty)
+tcExp (Lam (Just loc) pats rhs) (Check exp_ty)
   = inLambdaAbsCtxt loc pats $ do
   (pats',pats_env,resty) <- checkEq pats exp_ty
-  body' <- extendVarEnv pats_env $
-             checkExpType body resty
-  return (Lam (Just loc) pats' body')
-  where n_pats = length pats
-tcExp (Lam (Just loc) pats body) (Infer ref)
+  rhs' <- extendVarEnv pats_env $
+            checkRhs rhs resty
+  return (Lam (Just loc) pats' rhs')
+--   where n_pats = length pats
+tcExp (Lam (Just loc) pats rhs) (Infer ref)
   = inLambdaAbsCtxt loc pats $ do
   (pats',pats_tys,pats_env) <- inferPats pats
-  (body',body_ty) <- extendVarEnv pats_env $
-                       inferExpType body
+  (rhs',rhs_ty) <- extendVarEnv pats_env $
+                     inferRhs rhs
   let doms = zipWith patternDom pats' pats_tys
-  liftIO $ writeIORef ref (funTy doms body_ty)
-  return (Lam (Just loc) pats' body')
+  liftIO $ writeIORef ref (funTy doms rhs_ty)
+  return (Lam (Just loc) pats' rhs')
 --   Let :: [Bind p] -> Exp p -> Exp p
 tcExp (Let binds body) (Check exp_ty) = do
   (binds',binds_env) <- tcBinds binds
