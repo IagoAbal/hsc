@@ -15,7 +15,7 @@ import qualified Data.Traversable as T
 tpType :: forall c p m. (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Type c p -> m (Type c p)
 tpType f = go
   where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
-        go :: forall c. Type c p -> m (Type c p)
+        go :: forall c1. Type c1 p -> m (Type c1 p)
         go ty@(VarTy _)     = return ty
         go (ConTy tc tys)   = liftM (ConTy tc) $ mapM go tys
         go (PredTy pat ty mb_prop) = do
@@ -51,7 +51,7 @@ tpDom f (Dom (Just pat) ty mb_prop) = do
   ty' <- tpType f ty
   mb_prop' <- subst_mbExp pat_s [] mb_prop
   return  (Dom (Just pat') ty' (apply_f mb_prop'),pat_s)
-  where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
+  where apply_f mb_prop1 = (mb_prop1 >>= f) <|> mb_prop1
 tpDom _f _other = undefined -- impossible
 
 
@@ -98,3 +98,4 @@ tpPat f (AsPat x p) = do
 --   ty' <- tpType f ty
 --   (p',p_s) <- tpPat f p
 --   return (SigPat p' ty',p_s)
+tpPat _f _other = undefined -- impossible
