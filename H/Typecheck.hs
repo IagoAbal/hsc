@@ -260,7 +260,8 @@ tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
   (skol_tvs,skol_ty) <- skolemise pty'
   matches' <- extendVarEnv [(fun,fun')] $
                 tcMatches matches (Check skol_ty)
-  matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'
+  matches'_zo <- zonkMatches matches'
+  matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'_zo
   return (FunBind Rec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   = inFunBindCtxt (ppQuot fun) $ do
