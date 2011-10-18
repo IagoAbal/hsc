@@ -191,6 +191,10 @@ double = return . P.double
 rational :: Rational -> Doc
 rational = return . P.rational
 
+bool :: Bool -> Doc
+bool True = text "True"
+bool False = text "False"
+
 -- ** Simple combining forms
 
 parens, brackets, braces,quotes,doubleQuotes :: Doc -> Doc
