@@ -35,10 +35,8 @@ getFreeTyVars ptys = do
 getMetaTyVars :: [Type c Tc] -> TcM (Set MetaTyVar)
 -- This function takes account of zonking, and returns a set
 -- (no duplicates) of unbound meta-type variables
-getMetaTyVars ptys = traceDoc (text "getMetaTyVars no=" <+> int (length ptys)) $ do
-  traceDoc (text "getMetaTyVars pre-zonkPolyType") $ do
+getMetaTyVars ptys = do
   ptys' <- mapM zonkType ptys
-  traceDoc (text "getMetaTyVars post-zonkPolyType") $ do
   return (typesMTV ptys')
 
 
@@ -498,7 +496,7 @@ tcEqType (pat:pats) fun_ty = do
 tcPatsTypes :: (MonadUnique m, MonadError Doc m, IsPostTc p) => [Pat p] -> m [Tau p]
 tcPatsTypes = mapM tcPatType
 
-tcPatType ::  (MonadUnique m, MonadError Doc m, IsPostTc p) => Pat p -> m (Tau p)
+tcPatType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Pat p -> m (Tau p)
 tcPatType (VarPat x) = return $ sigma2tau $ varType x
 tcPatType (LitPat _) = return intTy
 tcPatType (InfixCONSPat (PostTc elem_ty) _ _) = return $ ListTy elem_ty
