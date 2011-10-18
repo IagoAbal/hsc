@@ -24,9 +24,9 @@ import Data.Function ( on )
 -- | A kappa type contains no reference to local variables.
 -- Importance: A meta-variable can only be instantiated with a kappa type.
 kappaType :: Tau Tc -> TcM (Tau Tc)
-kappaType ty = do
+kappaType ty1 = do
   gbl_vars <- asks tcGblVars
-  return $ go gbl_vars ty
+  return $ go gbl_vars ty1
   where
       go :: Set (Var Tc)  -- valid variables
             -> Tau Tc -> Tau Tc
@@ -42,7 +42,8 @@ kappaType ty = do
       go vv (TupleTy ds) = TupleTy $ go_doms vv ds
         -- 'kappaType' does not "go" into meta type variables,
         -- that is unifier's task.
-      go vv ty@(MetaTy _) = ty
+      go _vv ty@(MetaTy _) = ty
+      go _vv _ty = undefined -- impossible
       go_prop :: Set (Var Tc) -> Prop Tc -> Maybe (Prop Tc)
       go_prop vv prop
         = filterProp valid prop
@@ -52,12 +53,13 @@ kappaType ty = do
         where valid :: Prop Tc -> Bool
               valid p = fvExp p `Set.isSubsetOf` vv
       go_dom :: Set (Var Tc) -> Dom Tc -> (Dom Tc,Set (Var Tc))
-      go_dom vv (Dom Nothing ty Nothing) = (Dom Nothing (go vv ty) Nothing,vv)
-      go_dom vv (Dom (Just pat) ty Nothing)
+      go_dom  vv (Dom Nothing ty Nothing) = (Dom Nothing (go vv ty) Nothing,vv)
+      go_dom  vv (Dom (Just pat) ty Nothing)
         = (Dom (Just pat) (go vv ty) Nothing,vv `Set.union` bsPat pat)
-      go_dom vv (Dom (Just pat) ty (Just prop))
+      go_dom  vv (Dom (Just pat) ty (Just prop))
         = (Dom (Just pat) (go vv ty) (go_prop vv' prop),vv')
         where vv' = vv `Set.union` bsPat pat
+      go_dom _vv _other = undefined -- impossible
       go_doms :: Set (Var Tc) -> [Dom Tc] -> [Dom Tc]
       go_doms _vv [] = []
       go_doms  vv (d:ds) = d' : go_doms vv' ds
@@ -76,7 +78,7 @@ kappaType ty = do
 (~>) :: Tau Tc -> Tau Tc -> TcM ()
 (~>) = unify
 
-    -- !! no expression is needed because we don't generate TCCs now
+  -- NB: no expression is needed because we don't generate TCCs now
 unify :: Tau Tc      -- ^ actual type
           -> Tau Tc  -- ^ expected type
           -> TcM ()
@@ -158,25 +160,28 @@ flipByDirection LeftToRight = id
 flipByDirection RightToLeft = flip
 
 unifyVar :: Direction -> MetaTyVar -> Tau Tc -> TcM ()
-unifyVar dir mtv ty = traceDoc (text "unifyVar mtv=" <+> pretty mtv <+> text "ty=" <+> pretty ty) $ do
+unifyVar dir mtv ty = do
   mb_ty1 <- readMetaTyVar mtv
   case mb_ty1 of
       Nothing  -> do
 --         ty_z <- zonkType ty
-        traceDoc (text "unifyVar by unifyUnboundVar") $ do
+--         traceDoc (text "unifyVar by unifyUnboundVar") $ do
         unifyUnboundVar dir mtv ty (mtvType ty)
-      Just ty1 -> traceDoc (text "unifyVar by unifyKappa ty1=" <+> pretty ty1) $ flipByDirection dir unifyKappa ty1 ty
+      Just ty1 -> flipByDirection dir unifyKappa ty1 ty
 
 unifyUnboundVar :: Direction -> MetaTyVar -> Tau Tc -> Set MetaTyVar -> TcM ()
-unifyUnboundVar dir mtv1 ty@(MetaTy mtv2) ty_mtvs = traceDoc (text "unifyUnboundVar mtv1=" <+> pretty mtv1 <+> text "mtv2=" <+> pretty mtv2) $ do
+unifyUnboundVar  dir mtv1 ty@(MetaTy mtv2) _ty_mtvs = do
   mb_ty2 <- readMetaTyVar mtv2
   case mb_ty2 of
       Nothing  -> writeMetaTyVar mtv1 ty
       Just ty2 -> flipByDirection dir unifyKappa (MetaTy mtv1) ty2
-unifyUnboundVar dir mtv (PredTy _ ty1 _) ty_mtvs
+unifyUnboundVar  dir mtv  (PredTy _ ty1 _)   ty_mtvs
   | mtv `Set.member` ty_mtvs = flipByDirection dir unifyKappa (MetaTy mtv) ty1
-unifyUnboundVar dir mtv ty ty_mtvs
-  | mtv `Set.member` ty_mtvs = error "occurs check" -- fix
+unifyUnboundVar _dir mtv  ty                 ty_mtvs
+  | mtv `Set.member` ty_mtvs = throwError $ text "Occurs check: Cannot unify"
+                                              <+> pretty mtv
+                                              <+> text "with"
+                                              <+> pretty ty
   | otherwise                = writeMetaTyVar mtv ty
 
 
@@ -193,7 +198,9 @@ unifyFun ty = do
       let funty@(FunTy dom rang) = s --> t
       writeMetaTyVar mtv funty
       return (dom,rang)
-    other           -> error "not a function type" -- fix
+    other           -> throwError $ text "Cannot unify"
+                                    <+> pretty other
+                                    <+> text "with a function type `? -> ?'"
 
 unifyFuns :: Int -> Tau Tc -> TcM ([Dom Tc],Range Tc)
 unifyFuns 0 ty = return ([],ty)
