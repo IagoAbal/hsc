@@ -43,7 +43,7 @@ kcType (ConTyIn tn) = do
   tycon <- lookupTyCon tn
   return (ConTy tycon [],kindOf tycon)
 --   AppTy :: Type p -> Type p -> Type p
-kcType rntype@(AppTyIn t a) = traceDoc (text "AppTyIn" <+> pretty rntype) $ do
+kcType rntype@(AppTyIn t a) = do
   (ConTy tc args,t_ki) <- kcType t
   (a',a_ki) <- kcType a
   case t_ki of
@@ -231,25 +231,18 @@ tc_bind prev_binds (PatBind (Just loc) pat rhs)
   return (PatBind (Just loc) pat' rhs',pat_env)
 tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
-  traceDoc (text "FunBind-NonRec-TypeSig" <+> pretty fun <+> text "==============") $ do
   (pty',_) <- kcType pty
---   traceDoc (text "FunBind" <+> pretty fun <+> text "type_sig=" <+> pretty pty') $ do
   let poly_tvs = quantifiedTyVars pty'
   (skol_tvs,sk_ty) <- skolemise pty'
---   traceDoc (text "FunBind" <+> pretty fun <+> text "sk_ty=" <+> pretty sk_ty) $ do
   matches' <- tcMatches matches (Check sk_ty)
   matches'_z <- zonkMatches matches'
   matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'_z
   let fun' = mkVar fun pty'
---   traceDoc (text "FunBind" <+> pretty fun <+> text "matches''=" <+> sep (map (ppMatch fun') matches'')) $ do
   return (FunBind NonRec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
 tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
-  traceDoc (text "FunBind-NonRec-NoTypeSig" <+> pretty fun <+> text "==============") $ do
   (matches',tau_fun_ty) <- inferMatches matches
-  traceDoc (text "FunBind" <+> pretty fun <+> text "tau_fun_ty=" <+> pretty tau_fun_ty) $ do
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
---   traceDoc (text "FunBind" <+> pretty fun <+> text "fun_ty=" <+> pretty fun_ty) $ do
   let fun' = mkVar fun fun_ty
   return (FunBind NonRec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
@@ -272,9 +265,7 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   return (FunBind Rec fun_tc NoTypeSig (PostTc poly_tvs) matches_tc,[(fun,fun_tc)])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_))
   = inFunBindCtxt (ppQuot fun) $ do
-  traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches" <+> pretty fun <+> text "==============") $ do
   (_,pats_tys,_) <- inferPats pats
-  traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred pats_ty =" <+> (sep $ map pretty pats_tys)) $ do
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (map type2dom pats_tys) res_ty
   (fun_tc,poly_tvs,matches_tc) <- inferRecFun fun tau_fun_ty matches
@@ -282,16 +273,6 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_
 
 inferRecFun :: VAR Rn -> Tau Tc -> [Match Rn]-> TcM (VAR Tc,[TyVar],[Match Tc])
 inferRecFun fun_rn fun_pre_tau matches_rn = do
---   _matches' <- extendVarEnv [(fun_rn,fun')] $
---                  tcMatches matches_rn (Check fun_pre_tau)
---   (poly_tvs,fun_ty) <- generalise fun_pre_tau
---   let fun_tc = mkVar fun_rn fun_ty
---   (skol_tvs,skol_ty) <- skolemise fun_ty
---   matches_tc' <- extendVarEnv [(fun_rn,fun_tc)] $
---                    tcMatches matches_rn (Check skol_ty)
---   matches_tc'_zo <- zonkMatches matches_tc'
---   matches_tc <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches_tc'_zo
---   return (fun_tc,poly_tvs,matches_tc)
   matches_tc' <- extendVarEnv [(fun_rn,fun')] $
                    tcMatches matches_rn (Check fun_pre_tau)
   (poly_tvs,fun_ty) <- generalise fun_pre_tau
@@ -343,11 +324,9 @@ inferMatch match = do
 tcMatch :: Match Rn -> Expected (Tau Tc) -> TcM (Match Tc)
 tcMatch (Match (Just loc) pats rhs) (Check exp_ty)
   = inFunMatchCtxt loc $ do
-  traceDoc (text "tcMatch-Check pats=" <+> (sep $ map pretty pats)) $ do
   (pats',pats_env,rhs_exp_ty) <- checkEq pats exp_ty
   rhs' <- extendVarEnv pats_env $
             checkRhs rhs rhs_exp_ty
-  traceDoc (text "tcMatch-Check checkRhs done") $ do
   return (Match (Just loc) pats' rhs')
 tcMatch (Match (Just loc) pats rhs) (Infer ref)
   = inFunMatchCtxt loc $ do
@@ -455,8 +434,8 @@ tcExp (Tuple NoPostTc es) exp_ty = do
   es' <- zipWithM checkExpType es mtys
   return (Tuple (PostTc tup_ty) es')
 --   List :: [Exp p] -> Exp p
-tcExp rnexp@(List NoPostTc es) exp_ty
-  = inExprCtxt rnexp $ do
+tcExp list@(List NoPostTc es) exp_ty
+  = inExprCtxt list $ do
   mty <- newMetaTy "a" typeKi
   let list_ty = ListTy mty
   list_ty ~>? exp_ty
@@ -468,9 +447,7 @@ tcExp (Paren e) exp_ty = liftM Paren $ tcExp e exp_ty
 tcExp (LeftSection arg1 op) exp_ty = do
   (op',op_ty) <- inferExpType op
   split_op_ty@([dom1,dom2],rang) <- unifyFuns 2 op_ty
---   traceDoc (text "LeftSection tcArgs") $ do
   ([arg1'],rang') <- tcArgs [arg1] (dom1 \--> (dom2 \--> rang))
---   traceDoc (text "LeftSection res_ty=" <+> pretty (dom2 \--> rang)) $ do
   (dom2 \--> rang') ~>? exp_ty
   return (LeftSection arg1' op')
 --   RightSection :: Op -> Exp p -> Exp p
@@ -497,7 +474,6 @@ tcExp (EnumFromThenTo e1 e2 e3) exp_ty = do
 tcExp (Coerc loc exp pty) exp_ty
   = inCoercExprCtxt loc $ do
   (pty',_) <- kcType pty
-  traceDoc (text "Coerc pty'=" <+> pretty pty') $ do
   exp' <- checkSigma exp pty'
   let e' = Coerc loc exp' pty'
   e'' <- instSigma e' pty' exp_ty
@@ -523,10 +499,8 @@ tcArgs :: [Exp Rn] -> Tau Tc -> TcM ([Exp Tc],Range Tc)
 tcArgs []         res_ty = return ([],res_ty)
 tcArgs (arg:args) fun_ty = do
   split_fun_ty@(dom,_) <- unifyFun fun_ty
---   traceDoc (text "tcArgs checkExpType arg=" <+> pretty arg <+> text "dom" <+> pretty (dom2type dom)) $ do
   arg' <- checkExpType arg (dom2type dom)
   rang' <- instFunTy split_fun_ty arg'
---   traceDoc (text "tcArgs fun_ty=" <+> pretty fun_ty <+> text "arg=" <+> pretty arg <+> text "dom=" <+> pretty (dom2type dom) <+> text "rang'=" <+> pretty rang') $ do
   (args',res_ty) <- tcArgs args rang'
   return (arg':args',res_ty)
 
@@ -676,7 +650,6 @@ tcPat (LitPat lit) exp_ty = do
   -- how this works when the type is dependent ?
 tcPat (InfixCONSPat NoPostTc p1 p2) exp_ty = do
   (cons_tau,[typ]) <- instantiate (sortOf ConsCon)
-  traceDoc (text "InfixCONSPat" <+> text "cons_tau=" <+> pretty cons_tau) $ do
   ([p1',p2'],ps_env,list_ty) <- checkEq [p1,p2] cons_tau
   exp_ty ?~> list_ty
   return (InfixCONSPat (PostTc typ) p1' p2',ps_env)
@@ -684,12 +657,11 @@ tcPat (InfixCONSPat NoPostTc p1 p2) exp_ty = do
 tcPat (ConPat con NoPostTc ps) exp_ty = do
   con' <- lookupCon con
   (con_tau,typs) <- instantiate (sortOf con')
-  traceDoc (text "ConPat con=" <+> pretty con <+> text "con_tau=" <+> pretty con_tau) $ do
-    when (funTyArity con_tau /= length ps) $
-      error "constructor's number of arguments does not match the number of patterns..."
-    (ps',ps_env,res_ty) <- checkEq ps con_tau
-    exp_ty ?~> res_ty
-    return (ConPat con' (PostTc typs) ps',ps_env)
+  when (funTyArity con_tau /= length ps) $
+    error "constructor's number of arguments does not match the number of patterns..."
+  (ps',ps_env,res_ty) <- checkEq ps con_tau
+  exp_ty ?~> res_ty
+  return (ConPat con' (PostTc typs) ps',ps_env)
 tcPat (TuplePat ps NoPostTc) exp_ty = do
   mtys <- mapM (\i -> newMetaTy ("a" ++ show i) typeKi) [1..length ps]
   let tup_ty = TupleTy [Dom Nothing mty Nothing | mty <- mtys]
@@ -713,11 +685,6 @@ tcPat (AsPat n p) exp_ty = do
   v_ty <- getExpected exp_ty
   (p',p_env) <- checkPat p v_ty
   return (AsPat v p',n_env ++ p_env)
--- tcPat (SigPat p ty) exp_ty = do
---   ty' <- checkKind ty typeKi
---   (p',p_env) <- tcPat p (Check ty')
---   exp_ty ?~> ty'
---   return (SigPat p' ty',p_env)
 
 tcQVars :: [QVar Rn] -> TcM ([QVar Tc],[(Name,Var Tc)])
 tcQVars []     = return ([],[])
@@ -764,20 +731,15 @@ checkEq (pat:pats) exp_ty  = do
 
 generalise :: Tau Tc -> TcM ([TyVar],Sigma Tc)
 generalise ty = do
-  traceDoc (text "generalise ty=" <> pretty ty) $ do
   env_tys <- getEnvTypes
   env_mtvs <- getMetaTyVars env_tys
-  traceDoc (text "generalise ty=" <> pretty ty <+> text "env_mtvs=" <+> (sep $ map pretty $ Set.toList env_mtvs)) $ do
   ty_mtvs <- getMetaTyVars [ty]
-  traceDoc (text "generalise ty=" <> pretty ty <+> text "ty_mtvs=" <+> (sep $ map pretty $ Set.toList ty_mtvs)) $ do
   let poly_mtvs = ty_mtvs Set.\\ env_mtvs
-  traceDoc (text "generalise ty=" <> pretty ty <+> text "poly_mtvs=" <+> sep (map pretty $ Set.toList poly_mtvs)) $ do
   quantify (Set.toAscList poly_mtvs) ty
 
 checkSigma :: Exp Rn -> Sigma Tc -> TcM (Exp Tc)
 checkSigma exp polyty = do
   (skol_tvs,ty) <- skolemise polyty
---   traceDoc (text "checkSigma ty=" <+> pretty ty <+> text "skol_tvs=" <+> sep (map pretty skol_tvs)) $ do
   exp' <- checkExpType exp ty
     -- check ...
   env_tys <- getEnvTypes
