@@ -446,10 +446,11 @@ tcExprType (TyApp e tys) = do
   e_sig <- tcExprType e
   e_tau <- instSigmaType e_sig tys
   return $ tau2sigma e_tau
-tcExprType (Lam _ pats (Rhs (PostTc rhs_ty) _ _)) = do
+tcExprType (Lam _ pats rhs) = do
   pats_tys <- mapM tcPatType pats
   let doms = zipWith patternDom pats pats_tys
   return $ funTy doms rhs_ty
+  where rhs_ty = tcRhsType rhs
 tcExprType (Let _ e) = tcExprType e
 tcExprType (TyLam tvs e) = do
   e_ty <- tcExprType e
@@ -494,6 +495,9 @@ tcEqType (pat:pats) fun_ty = do
   rang' <- instFunTyWithPat (dom,rang) pat
   tcEqType pats rang'
 
+tcPatsTypes :: (MonadUnique m, MonadError Doc m, IsPostTc p) => [Pat p] -> m [Tau p]
+tcPatsTypes = mapM tcPatType
+
 tcPatType ::  (MonadUnique m, MonadError Doc m, IsPostTc p) => Pat p -> m (Tau p)
 tcPatType (VarPat x) = return $ sigma2tau $ varType x
 tcPatType (LitPat _) = return intTy
@@ -511,3 +515,7 @@ tcPatType (WildPat wild_var)
 tcPatType (AsPat x _) = return $ sigma2tau $ varType x
 -- tcPatType (SigPat _ tau) = return tau
 tcPatType _other = undefined -- impossible
+
+
+tcRhsType :: IsPostTc p => Rhs p -> Tau p
+tcRhsType (Rhs (PostTc rhs_ty) _ _) = rhs_ty
