@@ -32,7 +32,7 @@ import Data.List
 import Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-
+import qualified Data.Traversable as T
 
 
 
@@ -216,12 +216,12 @@ instance Rename Exp where
   rename (Coerc loc e polyty)
     = inCoercExprCtxt loc $
         liftM2 (Coerc loc) (rename e) (rename polyty)
-  rename (QP qt pats body) = do
+  rename (QP qt qvars body) = do
     checkQuantifierInPropContext qt
-    inQPExprCtxt qt pats $ do
-      checkDupPatBndrs pats
-      rnPats pats $ \pats' ->
-        liftM (QP qt pats') $ rename body
+    inQPExprCtxt qt qvars $ do
+      checkDupQVars qvars
+      renameBndr qvars $ \qvars' ->
+        liftM (QP qt qvars') $ rename body
 
 checkQuantifierInPropContext :: Quantifier -> RnM ()
 checkQuantifierInPropContext qt = do
@@ -329,6 +329,13 @@ rnPats ps f = do
     withMapping (Map.toList ps_map) $
       f ps'
 
+instance RenameBndr (QVar Pr) (QVar Rn) where
+  renameBndr (QVar occ mb_ty) f = do
+    name <- renameBndr occ return
+    mb_ty' <- T.mapM rename mb_ty
+    withMapping [(occ,name)] $
+      f (QVar name mb_ty')
+
 instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
   rename (ConTyIn tycon) = liftM ConTyIn $ rename tycon
@@ -379,6 +386,12 @@ checkDupPatBndrs pats
   | nub bs == bs = return ()
   | otherwise    = throwError $ text "Duplicated binder(s) in pattern(s)"
   where bs = patsBndrs pats
+
+checkDupQVars :: [QVar Pr] -> RnM ()
+checkDupQVars qvars
+  | nub bs == bs = return ()
+  | otherwise    = throwError $ text "Duplicated binder(s)"
+  where bs = map qVarVar qvars
 
 checkFunBindRec :: Name -> [Match Rn] -> IsRec Rn
 checkFunBindRec x matches

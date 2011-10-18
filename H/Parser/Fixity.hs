@@ -78,6 +78,11 @@ instance AppFixity (Exp Pr) where
 instance AppFixity (Pat Pr) where
   applyFixities fixs = leafFixP fixs
 
+instance AppFixity (QVar Pr) where
+  applyFixities _fixs v@(QVar _n Nothing)  = return v
+  applyFixities  fixs   (QVar n (Just ty)) = do
+    ty' <- applyFixities fixs ty
+    return $ QVar n (Just ty')
 
 -- Internal: lookup associativity and precedence of an operator
 askFixity :: [Fixity] -> Op -> (Assoc, Int)

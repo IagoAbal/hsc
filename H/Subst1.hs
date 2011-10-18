@@ -220,8 +220,8 @@ substExp s (EnumFromTo e1 en) = liftM2 EnumFromTo (substExp s e1) (substExp s en
 substExp s (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (substExp s e1) (substExp s e2) (substExp s en)
 substExp s (Coerc loc e polyty) = liftM2 (Coerc loc) (substExp s e) (substType s polyty)
-substExp s (QP q pats body) = do (pats',s') <- substPats s pats
-                                 liftM (QP q pats') $ substExp s' body
+substExp s (QP q qvars body) = do (qvars',s') <- substQVars s qvars
+                                  liftM (QP q qvars') $ substExp s' body
 substExp _s _other = undefined -- impossible
 
 substRhs :: (MonadUnique m, IsPostTc p) => Subst1 p -> Rhs p -> m (Rhs  p)
@@ -292,6 +292,15 @@ we must remember that an @-pattern is translated by shifting the 'alias'
 variable to the RHS as a let-binding, so to call substBndr over 'pat'
 in first place is the 'most correct' way.
 -}
+
+substQVars :: (MonadUnique m, IsPostTc p) => Subst1 p -> [QVar p] -> m ([QVar p],Subst1 p)
+substQVars = mapAccumM substQVar
+
+substQVar :: (MonadUnique m, IsPostTc p) => Subst1 p -> QVar p -> m (QVar p,Subst1 p)
+substQVar s (QVar var mb_ty) = do
+  (var',s') <- substBndr s var
+  mb_ty' <- T.mapM (substType s) mb_ty
+  return (QVar var' mb_ty',s')
 
 substAlts :: (MonadUnique m, IsPostTc p) => Subst1 p -> [Alt p] -> m [Alt p]
 substAlts s = mapM (substAlt s)

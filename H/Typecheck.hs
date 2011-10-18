@@ -491,13 +491,13 @@ tcExp (Coerc loc exp pty) exp_ty
   e'' <- instSigma e' pty' exp_ty
   return e''
 --   QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
-tcExp (QP qt pats prop) exp_ty
-  = inQPExprCtxt qt pats $ do
-  (pats',_,pats_env) <- inferPats pats
-  prop' <- extendVarEnv pats_env $
+tcExp (QP qt qvars prop) exp_ty
+  = inQPExprCtxt qt qvars $ do
+  (qvars',qvars_env) <- tcQVars qvars
+  prop' <- extendVarEnv qvars_env $
              checkExpType prop boolTy
   boolTy ~>? exp_ty
-  return (QP qt pats' prop')
+  return (QP qt qvars' prop')
 
 
 tcApp :: Exp Rn -> [Exp Rn] -> Expected (Tau Tc) -> TcM (Exp Tc,[Exp Tc])
@@ -707,6 +707,23 @@ tcPat (AsPat n p) exp_ty = do
 --   exp_ty ?~> ty'
 --   return (SigPat p' ty',p_env)
 
+tcQVars :: [QVar Rn] -> TcM ([QVar Tc],[(Name,Var Tc)])
+tcQVars []     = return ([],[])
+tcQVars (v:vs) = do
+  (v',v_env) <- tcQVar v
+  (vs',vs_env) <- extendVarEnv v_env $
+                    tcQVars vs
+  return (v':vs',v_env++vs_env)
+
+tcQVar :: QVar Rn -> TcM (QVar Tc,[(Name,Var Tc)])
+tcQVar (QVar n Nothing) = do
+  mty <- newMetaTy "a" typeKi
+  (v,n_env) <- tcBndr n (Check mty)
+  return (QVar v Nothing,n_env)
+tcQVar (QVar n (Just tau)) = do
+  (tau',_) <- kcType tau
+  (v,n_env) <- tcBndr n (Check tau')
+  return (QVar v (Just tau'),n_env)
 
 --  check "equation"
 checkEq :: [Pat Rn] -> Tau Tc -> TcM ([Pat Tc],[(Name,Var Tc)],Tau Tc)

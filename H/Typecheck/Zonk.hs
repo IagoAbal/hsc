@@ -99,7 +99,7 @@ zonkExp (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (zonkExp e1) (zonkExp e2) (zonkExp en)
 zonkExp (Coerc loc expr polyty)
   = liftM2 (Coerc loc) (zonkExp expr) (zonkType polyty)
-zonkExp (QP qt pats prop) = liftM2 (QP qt) (zonkPats pats) (zonkExp prop)
+zonkExp (QP qt qvars prop) = liftM2 (QP qt) (zonkQVars qvars) (zonkExp prop)
 zonkExp _other = undefined -- impossible
 
 zonkPats :: MonadIO m => [Pat Tc] -> m [Pat Tc]
@@ -117,6 +117,15 @@ zonkPat (ParenPat p) = liftM ParenPat $ zonkPat p
 zonkPat (WildPat wild_var) = liftM WildPat $ zonkVar wild_var
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
 -- zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
+
+zonkQVars :: MonadIO m => [QVar Tc] -> m [QVar Tc]
+zonkQVars = mapM zonkQVar
+
+zonkQVar :: MonadIO m => QVar Tc -> m (QVar Tc)
+zonkQVar (QVar x mb_ty) = do
+  x' <- zonkVar x
+  mb_ty' <- T.mapM zonkType mb_ty
+  return $ QVar x' mb_ty'
 
 zonkAlts :: MonadIO m => [Alt Tc] -> m [Alt Tc]
 zonkAlts = mapM zonkAlt

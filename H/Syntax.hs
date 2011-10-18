@@ -388,13 +388,32 @@ data Exp p where
   -- | explicit type coercion
   Coerc :: SrcLoc -> Exp p -> Sigma p -> Exp p
   -- | logic quantifier
-  QP :: Quantifier -> [Pat p] -> Prop p -> Prop p
+  QP :: Quantifier -> [QVar p] -> Prop p -> Prop p
 
 -- | An Op or a TyApp on an Op
 type OpExp = Exp
 
 -- | Expressions of boolean type
 type Prop = Exp
+
+-- | Annotated variable
+data QVar p = QVar {
+                qVarVar :: VAR p         -- ^ the variable itself
+              , qVarSig :: Maybe (Tau p) -- ^ optional type signature
+              }
+
+mkQVar :: VAR p -> QVar p
+mkQVar var = QVar var Nothing
+
+instance Eq (VAR p) => Eq (QVar p) where
+  (==) = (==)  `on` qVarVar
+
+instance Ord (VAR p) => Ord (QVar p) where
+  compare = compare  `on` qVarVar
+
+instance PrettyNames p => Pretty (QVar p) where
+  pretty (QVar v Nothing)   = prettyBndr v
+  pretty (QVar v (Just ty)) = parens $ pretty v <> char ':' <> pretty ty
 
 isElseGuard :: Exp Pr -> Bool
 isElseGuard ElseGuard = True

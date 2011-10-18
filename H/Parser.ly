@@ -346,7 +346,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | 'let' binds 'in' exp { Let $2 $4 }
 > | 'if' exp 'then' exp 'else' exp { Ite NoPostTc $2 $4 $6 }
 > | 'if' gdpats    { If NoPostTc (GuardedRhssIn $2) }
-> | quantifier apats ',' exp  { QP $1 $2 $4 }
+> | quantifier qvars ',' exp  { QP $1 $2 $4 }
 
 > quantifier :: { Quantifier }
 > : 'exists'  { ExistsQ }
@@ -436,6 +436,15 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > : lpats ',' pat     { $1 ++ [$3] }
 > | pat             { [$1] }
 > | {- empty -}     { [] }
+
+
+> qvar :: { QVar Pr }
+> : var                   { QVar $1 Nothing }
+> | '(' var ':' type ')'  { QVar $2 (Just $4) }
+
+> qvars :: { [QVar Pr] }
+> : qvars qvar  { $1 ++ [$2] }
+> | qvar        { [$1] }
 
 -----------------------------------------------------------------------------
 List expressions

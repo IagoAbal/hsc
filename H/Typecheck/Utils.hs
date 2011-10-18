@@ -90,6 +90,14 @@ patMTV (WildPat wild_var) = typeMTV $ varType wild_var
 patMTV (AsPat _x p)  = patMTV p
 -- patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
 
+qvarsMTV :: [QVar Tc] -> Set MetaTyVar
+qvarsMTV = Set.unions . map qvarMTV
+
+qvarMTV :: QVar Tc -> Set MetaTyVar
+  -- I think we don't need to get MTVs from x type for the typeMTV case, but
+  -- it does not hurt, and I think we really need this for the propMTV case.
+qvarMTV (QVar x mb_ty) = typeMTV (varType x) `Set.union` (F.foldMap typeMTV mb_ty)
+
 typesMTV :: [Type c Tc] -> Set MetaTyVar
 typesMTV = Set.unions . map typeMTV
 
@@ -145,7 +153,7 @@ propMTV (RightSection _op e) = propMTV e
 propMTV (EnumFromTo e1 e2) = propsMTV [e1,e2]
 propMTV (EnumFromThenTo e1 e2 e3) = propsMTV [e1,e2,e3]
 propMTV (Coerc _loc e polyty) = propMTV e
-propMTV (QP qt pats body) = patsMTV pats `Set.union` propMTV body
+propMTV (QP qt qvars body) = qvarsMTV qvars `Set.union` propMTV body
 propMTV _other = undefined -- impossible
 
 -- * pat2exp

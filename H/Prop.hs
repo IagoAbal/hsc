@@ -24,9 +24,9 @@ p .||. q = InfixApp p (Op orOp) q
 p .==>. q = InfixApp p (Op impOp) q
 p .<=>. q = InfixApp p (Op iffOp) q
 
-mkForall :: [Pat p] -> Prop p -> Prop p
+mkForall :: [QVar p] -> Prop p -> Prop p
 mkForall [] prop = prop
-mkForall ps prop = QP ForallQ ps prop
+mkForall vs prop = QP ForallQ vs prop
 
 hypo :: Prop p -> Prop p -> Prop p
 hypo p = (p .==>.)

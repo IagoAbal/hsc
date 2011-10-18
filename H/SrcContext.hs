@@ -70,8 +70,8 @@ inExprCtxt expr = inContext (text "In expression:" <+> pretty expr)
 inCoercExprCtxt :: MonadContext m => SrcLoc -> m a -> m a
 inCoercExprCtxt loc = inContextAt loc (text "In type coercion")
 
-inQPExprCtxt :: (MonadContext m, PrettyNames p) => Quantifier -> [Pat p] -> m a -> m a
-inQPExprCtxt qt pats = inContext (text "In formula:" <+> myFsep (pretty qt : map pretty pats) <+> comma <+> text "...")
+inQPExprCtxt :: (MonadContext m, PrettyNames p) => Quantifier -> [QVar p] -> m a -> m a
+inQPExprCtxt qt qvars = inContext (text "In formula:" <+> myFsep (pretty qt : map pretty qvars) <+> comma <+> text "...")
 
 inIteExprCtxt :: (MonadContext m, PrettyNames p) => Prop p -> m a -> m a
 inIteExprCtxt guard = inContext (text "In expression:" <+> text "if" <+> pretty guard <+> text "then ... else ...")

@@ -69,7 +69,7 @@ mtvExp (RightSection _op e) = mtvExp e
 mtvExp (EnumFromTo e1 e2) = mtvExps [e1,e2]
 mtvExp (EnumFromThenTo e1 e2 e3) = mtvExps [e1,e2,e3]
 mtvExp (Coerc _loc e polyty) = mtvExp e `Set.union` mtvType polyty
-mtvExp (QP qt pats body) = mtvPats pats `Set.union` mtvExp body
+mtvExp (QP qt qvars body) = mtvQVars qvars `Set.union` mtvExp body
 
 
 mtvPats :: [Pat Tc] -> Set MetaTyVar
@@ -86,6 +86,12 @@ mtvPat (ParenPat p) = mtvPat p
 mtvPat (WildPat wild_var)     = mtvVar wild_var
 mtvPat (AsPat x p)  = mtvVar x `Set.union` mtvPat p
 -- mtvPat (SigPat p ty) = mtvPat p `Set.union` mtvType ty
+
+mtvQVars :: [QVar Tc] -> Set MetaTyVar
+mtvQVars = Set.unions . map mtvQVar
+
+mtvQVar :: QVar Tc -> Set MetaTyVar
+mtvQVar (QVar x mb_ty) = mtvVar x `Set.union` (F.foldMap mtvType mb_ty)
 
 mtvAlts :: [Alt Tc] -> Set MetaTyVar
 mtvAlts = Set.unions . map mtvAlt

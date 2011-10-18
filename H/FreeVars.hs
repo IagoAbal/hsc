@@ -67,7 +67,7 @@ fvExp (RightSection _op e) = fvExp e
 fvExp (EnumFromTo e1 e2) = fvExps [e1,e2]
 fvExp (EnumFromThenTo e1 e2 e3) = fvExps [e1,e2,e3]
 fvExp (Coerc _loc e polyty) = fvExp e `Set.union` fvType polyty
-fvExp (QP _qt pats body) = fvPats pats `Set.union` (fvExp body Set.\\ bsPats pats)
+fvExp (QP _qt qvars body) = fvQVars qvars `Set.union` (fvExp body Set.\\ bsQVars qvars)
 
 
 fvPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
@@ -89,6 +89,12 @@ fvPat (WildPat _)     = Set.empty
 fvPat (AsPat _x p)  = fvPat p
 -- fvPat (SigPat p ty) = fvPat p `Set.union` fvType ty
 
+fvQVars :: Ord (VAR p) => [QVar p] -> Set (VAR p)
+fvQVars = Set.unions . map fvQVar
+
+fvQVar :: Ord (VAR p) => QVar p -> Set (VAR p)
+fvQVar (QVar _x mb_ty) = foldMap fvType mb_ty
+
 bsPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
 bsPats = Set.unions . map bsPat
 
@@ -104,6 +110,12 @@ bsPat WildPatIn      = Set.empty
 bsPat (WildPat wild_var)      = Set.singleton wild_var
 bsPat (AsPat x p)  = Set.insert x $ bsPat p
 -- bsPat (SigPat p _ty) = bsPat p
+
+bsQVars :: Ord (VAR p) => [QVar p] -> Set (VAR p)
+bsQVars = Set.unions . map bsQVar
+
+bsQVar :: Ord (VAR p) => QVar p -> Set (VAR p)
+bsQVar (QVar x _mb_ty) = Set.singleton x
 
 fvAlts :: Ord (VAR p) => [Alt p] -> Set (VAR p)
 fvAlts = Set.unions . map fvAlt

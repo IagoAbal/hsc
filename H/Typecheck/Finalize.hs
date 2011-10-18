@@ -232,10 +232,10 @@ finExp (EnumFromThenTo e1 e2 eN)
 finExp (Coerc loc expr pty)
   = inCoercExprCtxt loc $
       liftM2 (Coerc loc) (finExp expr) (finType pty)
-finExp (QP qt pats prop)
-  = inQPExprCtxt qt pats $
-      finPats pats $ \pats' ->
-        liftM (QP qt pats') $ finProp prop
+finExp (QP qt qvars prop)
+  = inQPExprCtxt qt qvars $
+      finQVars qvars $ \qvars' ->
+        liftM (QP qt qvars') $ finProp prop
 finExp _other = undefined -- impossible
 
 finProp :: Prop Tc -> TiM (Prop Ti)
@@ -321,6 +321,17 @@ finPat (AsPat x pat) cont
 --   ty' <- finType ty
 --   finPat pat $ cont . flip SigPat ty'
 finPat _other _cont = undefined -- impossible
+
+finQVars :: [QVar Tc] -> ([QVar Ti] -> TiM a) -> TiM a
+finQVars []     cont = cont []
+finQVars (v:vs) cont = finQVar v $ \v' ->
+                       finQVars vs $ \vs' ->
+                        cont (v':vs')
+
+finQVar :: QVar Tc -> (QVar Ti -> TiM a) -> TiM a
+finQVar (QVar x mb_ty) f = do
+  mb_ty' <- T.mapM finType mb_ty
+  finBndr x $ \x' -> f (QVar x' mb_ty')
 
 finTypes :: [Type c Tc] -> TiM [Type c Ti]
 finTypes = mapM finType
