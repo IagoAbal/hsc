@@ -1095,6 +1095,25 @@ data Type c p where
   -- | rank-1 polymorphic type
   ForallTy :: TyParams p -> Tau p -> Sigma p
 
+instance (Eq (TyVAR p), Eq (TyCON p)) => Eq (Type c p) where
+  VarTy a == VarTy b = a == b
+  ConTyIn tc1 == ConTyIn tc2 = tc1 == tc2
+  AppTyIn tc1 ty1 == AppTyIn tc2 ty2
+    = tc1 == tc2 && ty1 == ty2
+  ConTy tc1 args1 == ConTy tc2 args2
+    | length args1 == length args2 = tc1 == tc2 && and (zipWith (==) args1 args2)
+  FunTy d1 r1 == FunTy d2 r2 = d1 == d2 && r1 == r2
+  ListTy ty1 == ListTy ty2 = ty1 == ty2
+  TupleTy ds1 == TupleTy ds2
+    | length ds1 == length ds2 = and (zipWith (==) ds1 ds2)
+  ParenTy ty1 == ParenTy ty2 = ty1 == ty2
+  MetaTy mtv1 == MetaTy mtv2 = mtv1 == mtv2
+  _ty1 == _ty2 = False
+
+instance (Eq (TyVAR p), Eq (TyCON p)) => Eq (Dom p) where
+  Dom Nothing ty1 Nothing == Dom Nothing ty2 Nothing = ty1 == ty2
+  _dom1 == _dom2 = False
+
   -- NB: The @Dom Nothing ty (Just prop)@ is pointless
 data Dom p = Dom {
                domMbPat  :: Maybe (Pat p)
