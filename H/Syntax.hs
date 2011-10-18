@@ -272,6 +272,9 @@ data ConDecl p where
 data Match p
 	 = Match (Maybe SrcLoc) [Pat p] (Rhs p)
 
+matchArity :: Match p -> Int
+matchArity (Match _ pats _) = length pats
+
 data GoalType = TheoremGoal
               | LemmaGoal
   deriving Eq
@@ -608,6 +611,16 @@ data Pat p where
 --     -- Add SrcLoc ?
 --   SigPat :: Pat p -> Tau p -> Pat p
 
+isVarPat :: Pat p -> Bool
+isVarPat (VarPat _) = True
+isVarPat _other     = False
+
+mkNILPat :: IsPostTc p => Tau p -> Pat p
+mkNILPat ty = ConPat tcNilCon (PostTc [ty]) []
+
+mkCONSPat :: IsPostTc p => Tau p -> Pat p -> Pat p -> Pat p
+mkCONSPat ty p1 p2 = ConPat tcConsCon (PostTc [ty]) [p1,p2]
+
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
 
@@ -626,6 +639,7 @@ patBndrs (AsPat v p)  = v : patBndrs p
 
 patsBndrs :: [Pat p] -> [VAR p]
 patsBndrs = concatMap patBndrs
+
 
 instWildPat :: Uniq -> Tau p -> Var p
 instWildPat uniq tau
@@ -995,6 +1009,9 @@ instance Pretty Quantifier where
 lit_0 :: Exp p
 lit_0 = Lit (IntLit 0)
 
+mkInt :: Integer -> Exp p
+mkInt = Lit . IntLit
+
 app :: Exp p -> [Exp p] -> Exp p
 app f args = foldl App f args
 
@@ -1106,9 +1123,19 @@ isFunTy ty
 
   -- (args,result)
 splitFunTy :: Tau p -> ([Dom p],Tau p)
-splitFunTy (FunTy a t) = (a:args,res)
-  where (args,res) = splitFunTy t
+splitFunTy ty
+ | FunTy a t <- mu_0 ty
+ , let (args,res) = splitFunTy t
+ = (a:args,res)
 splitFunTy ty = ([],ty)
+
+splitFunTyN :: Int -> Tau p -> ([Dom p],Tau p)
+splitFunTyN 0 ty = ([],ty)
+splitFunTyN n ty
+ | FunTy a t <- mu_0 ty
+ , let (args,res) = splitFunTyN (n-1) t
+ = (a:args,res)
+splitFunTyN _ ty = ([],ty)
 
 funTyArity :: Tau p -> Int
 funTyArity ty = length args
