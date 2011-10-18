@@ -268,12 +268,8 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   (pats',pats_tys,_) <- inferPats pats
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (zipWith patternDom pats' pats_tys) res_ty
-      fun_rec    = mkVar fun (tau2sigma tau_fun_ty)
-  matches' <- extendVarEnv [(fun,fun_rec)] $
-                tcMatches matches (Check tau_fun_ty)
-  (poly_tvs,fun_ty) <- generalise tau_fun_ty
-  let fun' = mkVar fun fun_ty
-  return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
+  (fun_tc,poly_tvs,matches_tc) <- inferRecFun fun tau_fun_ty matches
+  return (FunBind Rec fun_tc NoTypeSig (PostTc poly_tvs) matches_tc,[(fun,fun_tc)])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_))
   = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches" <+> pretty fun <+> text "==============") $ do
@@ -281,15 +277,31 @@ tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_
   traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred pats_ty =" <+> (sep $ map pretty pats_tys)) $ do
   res_ty <- newMetaTy "t" typeKi
   let tau_fun_ty = funTy (map type2dom pats_tys) res_ty
-      fun_rec    = mkVar fun (tau2sigma tau_fun_ty)
-  matches' <- extendVarEnv [(fun,fun_rec)] $
-                tcMatches matches (Check tau_fun_ty)
-  traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred tau_fun_ty =" <+> pretty tau_fun_ty) $ do
-  (poly_tvs,fun_ty) <- generalise tau_fun_ty
-  traceDoc (text "FunBind-Rec-NoTypeSig-ManyMatches inferred fun_ty =" <+> pretty fun_ty) $ do
-  let fun' = mkVar fun fun_ty
-  return (FunBind Rec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
+  (fun_tc,poly_tvs,matches_tc) <- inferRecFun fun tau_fun_ty matches
+  return (FunBind Rec fun_tc NoTypeSig (PostTc poly_tvs) matches_tc,[(fun,fun_tc)])
 
+inferRecFun :: VAR Rn -> Tau Tc -> [Match Rn]-> TcM (VAR Tc,[TyVar],[Match Tc])
+inferRecFun fun_rn fun_pre_tau matches_rn = do
+--   _matches' <- extendVarEnv [(fun_rn,fun')] $
+--                  tcMatches matches_rn (Check fun_pre_tau)
+--   (poly_tvs,fun_ty) <- generalise fun_pre_tau
+--   let fun_tc = mkVar fun_rn fun_ty
+--   (skol_tvs,skol_ty) <- skolemise fun_ty
+--   matches_tc' <- extendVarEnv [(fun_rn,fun_tc)] $
+--                    tcMatches matches_rn (Check skol_ty)
+--   matches_tc'_zo <- zonkMatches matches_tc'
+--   matches_tc <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches_tc'_zo
+--   return (fun_tc,poly_tvs,matches_tc)
+  matches_tc' <- extendVarEnv [(fun_rn,fun')] $
+                   tcMatches matches_rn (Check fun_pre_tau)
+  (poly_tvs,fun_ty) <- generalise fun_pre_tau
+  let fun_tc = mkVar fun_rn fun_ty
+  matches_tc <- if null poly_tvs
+                  then return matches_tc'
+                  else let fun_inst = tyApp (Var fun_tc) (map VarTy poly_tvs)
+                         in substMatches [(fun_tc,fun_inst)] [] matches_tc'
+  return (fun_tc,poly_tvs,matches_tc)
+  where fun' = mkVar fun_rn (tau2sigma fun_pre_tau)
 
 inferMatches :: [Match Rn] -> TcM ([Match Tc],Tau Tc)
 inferMatches matches = do
