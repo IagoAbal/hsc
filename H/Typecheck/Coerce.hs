@@ -140,7 +140,11 @@ coBinds :: [Bind Ti] -> CoM ()
 coBinds = mapM_ coBind
 
 coBind :: Bind Ti -> CoM ()
-coBind (PatBind loc pat rhs@(Rhs (PostTc rhs_ty) _ _)) = coRhs rhs
+coBind (PatBind (Just loc) pat rhs@(Rhs (PostTc rhs_ty) _ _)) = do
+  coRhs rhs
+  (x,rhs_ctxt) <- getCaseLikeCtxt (rhs2exp rhs) (tau2sigma rhs_ty) [pat]
+  rhs_ctxt $
+    co_Equations [x] [patbin2eq loc pat]
 coBind (FunBind _rec fun fun_tsig (PostTc tvs) matches)
   = inFunBindCtxt (ppQuot fun) $ do
   traceDoc (text "coBind-FunBind " <+> pretty fun <+> char ':' <+> pretty fun_ty <+> text "==============") $ do
@@ -167,12 +171,14 @@ coMatches matches@(m:_) exp_ty = do
   where arity = matchArity m
         (doms,_) = splitFunTyN arity exp_ty
 
--- -- WRONG: Use coEquations
--- coMatch :: Match Ti -> Tau Ti -> CoM ()
--- coMatch (Match loc pats rhs) exp_ty = do
---   void $ coEq pats exp_ty
---   withForall pats $
---     coRhs rhs
+getCaseLikeCtxt :: Exp Ti -> Sigma Ti -> [Pat Ti] -> CoM (Var Ti,CoM a -> CoM a)
+getCaseLikeCtxt (Var x) _ty _pats = return (x,id)
+getCaseLikeCtxt scrut    ty  pats = do
+  x <- newVar n ty
+  return (x, withForall [mkQVar x] . withFacts [Var x .==. scrut])
+  where n = case getNameForPats pats of
+                Nothing -> "x"
+                Just n1 -> n1
 
 coExp :: Exp Ti -> Expected (Sigma Ti) -> CoM (Sigma Ti)
 coExp e@(Var x) exp_ty = (varType x ~>? exp_ty) e
@@ -253,9 +259,9 @@ coExp e@(If (PostTc if_ty) grhss) exp_ty = do
   -- and it matches with the rhs_ty of all alternatives
 coExp (Case scrut (PostTc case_ty) alts) exp_ty = do
   scrut_ty <- coExp scrut Infer
-  coAlts alts (sigma2tau scrut_ty)
---   -- WRONG: I have to use co_Equations
---   mapM_ (`coAlt` (sigma2tau scrut_ty)) alts
+  (x,scrut_ctxt) <- getCaseLikeCtxt scrut scrut_ty [ pat | Alt _ pat _ <- alts ]
+  scrut_ctxt $
+    coAlts x alts
   return $ tau2sigma case_ty
 coExp e@(Tuple (PostTc tup_ty) es) exp_ty = do
   let TupleTy ds = tup_ty
@@ -316,10 +322,10 @@ coTuple (e:es) (d:ds) = do
   ds_e <- instDoms e d ds
   coTuple es ds_e
 
-coAlts :: [Alt Ti] -> Tau Ti -> CoM ()
-coAlts alts scrut_ty = do
+coAlts :: Var Ti -> [Alt Ti] -> CoM ()
+coAlts scrut_var alts = do
   qs <- mapM alt2eq alts
-  coEquations [type2dom scrut_ty] qs
+  co_Equations [scrut_var] qs
 
 -- WRONG
 -- coAlt :: Alt Ti -> Tau Ti -> CoM ()
@@ -432,16 +438,23 @@ data Equation
   = E {
     eqLoc  :: SrcLoc
   , eqPats :: [SimplePat Ti]
-  , eqRhs  :: Rhs Ti
+  , eqRhs  :: EqRHS
   }
+
+data EqRHS = NoEqRHS
+           | EqRHS (Rhs Ti)
+
+coEqRHS :: EqRHS -> CoM ()
+coEqRHS NoEqRHS     = return ()
+coEqRHS (EqRHS rhs) = coRhs rhs
 
 -- eqArity :: Equation -> Int
 -- eqArity (E _ pats _) = length pats
 
-mkEq :: SrcLoc -> [Pat Ti] -> LamRHS Ti -> CoM Equation
+mkEq :: SrcLoc -> [Pat Ti] -> Rhs Ti -> CoM Equation
 mkEq loc pats rhs = do
   rhs' <- subst_rhs var_s [] rhs
-  return $ E loc pats' rhs'
+  return $ E loc pats' (EqRHS rhs')
   where (pats',var_s) = simplifyPats pats
 
 alt2eq :: Alt Ti -> CoM Equation
@@ -452,6 +465,10 @@ match2eq (Match (Just loc) pats rhs) = mkEq loc pats rhs
 
 matches2eqs :: [Match Ti] -> CoM [Equation]
 matches2eqs = mapM match2eq
+
+patbin2eq :: SrcLoc -> Pat Ti -> Equation
+patbin2eq loc pat = E loc [pat'] NoEqRHS
+  where ([pat'],_) = simplifyPats [pat]
 
 isVar :: Equation -> Bool
 isVar (E _ (VarPat _:_) _) = True
@@ -559,7 +576,7 @@ coEquations ds qs = do
 
 co_Equations :: [Var Ti] -> [Equation] -> CoM ()
 co_Equations [] []  = error "coEquations undefined 1" -- FALSE must hold
-co_Equations [] [E _ [] rhs] = coRhs rhs
+co_Equations [] [E _ [] rhs] = coEqRHS rhs
 co_Equations [] (_:_) = error "Non-uniform definition/pattern"
 co_Equations xs []    = error "coEquations undefined 2" -- FALSE must hold
 co_Equations (x:xs) qs
@@ -577,11 +594,13 @@ co_Equations (x:xs) qs
 subst_eq :: [(Var Ti,Exp Ti)] -> Equation -> CoM Equation
 subst_eq var_s (E loc pats rhs) = do
   (pats',s') <- substPats s pats
-  rhs' <- substRhs s' rhs
+  rhs' <- substEqRHS s' rhs
   return (E loc pats' rhs')
   where s = mkSubst1_FV var_s []
+        substEqRHS s NoEqRHS     = return NoEqRHS
+        substEqRHS s (EqRHS rhs) = liftM EqRHS $ substRhs s rhs
 
-getNameForPats :: [SimplePat Ti] -> Maybe String
+getNameForPats :: [Pat Ti] -> Maybe String
 getNameForPats pats = do
   VarPat var <- find is_ok_varpat pats
   return $ clean_str var

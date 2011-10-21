@@ -435,6 +435,10 @@ tyLam :: (Ge p Tc, TyVAR p ~ TyVar) => [TyVar] -> Exp p -> Exp p
 tyLam [] expr  = expr
 tyLam tvs expr = TyLam tvs expr
 
+mkLet :: [Bind p] -> Exp p -> Exp p
+mkLet [] body = body
+mkLet bs body = Let bs body
+
 isAtomicExp :: Exp p -> Bool
 isAtomicExp (Var _)   = True
 isAtomicExp (Con _)   = True
@@ -540,6 +544,12 @@ data Else p where
 
 rhsExp :: IsPostTc p => Tau p -> Exp p -> Rhs p
 rhsExp ty e = Rhs (PostTc ty) (UnGuarded e) []
+
+rhs2exp :: Rhs p -> Exp p
+rhs2exp (Rhs _tc_ty (UnGuarded e) binds)
+  = mkLet binds e
+rhs2exp (Rhs  tc_ty (Guarded grhss) binds)
+  = mkLet binds $ If tc_ty grhss
 
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
