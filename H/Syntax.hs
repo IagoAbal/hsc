@@ -224,10 +224,13 @@ instance Pretty ModuleName where
 -- * Declarations
 
 data Decl p where
-  -- | type synonym 
+  -- | type synonym
+  -- NB: You can only specify synonyns for monotypes, the RHS cannot be a polytype.
   TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Tau p -> Decl p
   -- | inductive data type
   DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
+     -- "Type signatures anywhere" as allowed by Haskell introduce many problems due to
+     -- dependent typing. I could it more flexible but for now I think it does not worth it.
 --   -- | type signature
 --   TypeSig :: SrcLoc -> NAME Pr -> PolyType Pr -> Decl Pr
   -- | Value declarations
@@ -264,6 +267,8 @@ data IsRec p where
   NonRec :: Lt Pr p => IsRec p
 
 -- | Declaration of a data constructor.
+-- Constructor arguments are parsed as simple types and then converted
+-- to @Dom@ during renaming.
 data ConDecl p where
   ConDeclIn :: SrcLoc -> NAME Pr -> [Tau Pr] -> ConDecl Pr
   ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
@@ -349,7 +354,8 @@ data Exp p where
   -- | literal constant
   Lit :: Lit -> Exp p
   -- | @else@ guard expression
-  -- It is used to facilitate parsing but then removed during renaming
+  -- It is used to facilitate parsing of case expressions
+  -- but then removed during renaming
   ElseGuard :: Exp Pr
   -- | prefix application
   PrefixApp :: OpExp p -> Exp p -> Exp p
@@ -362,6 +368,7 @@ data Exp p where
   -- | lambda expression
   Lam :: Maybe SrcLoc -> [Pat p] -> LamRHS p -> Exp p
   -- | local declarations with @let@
+  -- NB: Mutually recursive bindings are not supported
   Let :: [Bind p] -> Exp p -> Exp p
   -- | type lambda
   TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
@@ -551,6 +558,10 @@ rhs2exp (Rhs _tc_ty (UnGuarded e) binds)
 rhs2exp (Rhs  tc_ty (Guarded grhss) binds)
   = mkLet binds $ If tc_ty grhss
 
+grhs2exp :: IsPostTc p => Tau p -> GRhs p -> Exp p
+grhs2exp _ty (UnGuarded e)   = e
+grhs2exp  ty (Guarded grhss) = If (PostTc ty) grhss
+
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
 First, a set of guards has to be exhaustive, which may cause the
@@ -597,12 +608,13 @@ ppElse _ctx  NoElse   = empty
 -- ** Patterns
 
 -- | A pattern, to be matched against a value.
+-- NB: Only uniform patterns are supported.
 data Pat p where
   -- | variable
   VarPat :: VAR p -> Pat p
   -- | literal constant
   LitPat :: Lit -> Pat p
-  -- | pattern with infix data constructor
+  -- | Infix @::@ (cons) pattern
   InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
   -- | data constructor and argument
   ConPat :: CON p -> PostTcTypes p -> [Pat p] -> Pat p
@@ -613,6 +625,7 @@ data Pat p where
   -- | parenthesized pattern
   ParenPat :: Pat p -> Pat p
   -- | wildcard pattern (@_@)
+  -- For convenience, those are converted into variables after renaming.
   WildPatIn :: Pat Pr
   WildPat :: Ge p Rn => VAR p -> Pat p
   -- ^ as-pattern (@\@@)
@@ -656,12 +669,12 @@ instWildPat uniq tau
   = mkSkVar (mkSysName (mkOccName VarNS "x") uniq) (tau2sigma tau)
 
 -- | Check if an arbitrary expression could be matched against some
--- given pattern. This is an undecidable problem and since the purpose of
--- this function is to detect trivial errors, it is conservative
+-- given pattern. This is an undecidable problem and hence the purpose of
+-- this function is to detect trivial errors: it is conservative
 -- considering that an expression may match a pattern in case of doubt.
 -- NB: It *requires* that the given expression and pattern have compatible types.
 -- e.g. @Just 1 `matchableWith` Nothing == False@
--- e.g. @tail [x] `matchableWith (y::ys) == True@
+-- e.g. @tail [x] `matchableWith (y::ys) == True@ because @tail@ is a function
 matchableWith :: IsPostTc p => Exp p -> Pat p -> Bool
 matchableWith _e            (VarPat _)    = True
 matchableWith _e            (WildPat _)   = True
@@ -711,7 +724,7 @@ matchableWith _e            _p           = True
 -- "shapes" can be matched one against the other.
 -- Some examples:
 --   @matchablePats (_::_) (x::xs) == True@
---   @matchablePats [1,2,x] [1,2,_] == Truee@
+--   @matchablePats [1,2,x] [1,2,_] == True@
 --   @matchablePats (_::_) [] == False@
 --   @matchablePats (1,b) (x,y) == True@
 --   @matchablePats (a,b,c) (x,y) == False@
@@ -874,7 +887,7 @@ tcConsCon  = TcCon consCon listTyCon
 
 data Op = BoolOp BoolOp
         | IntOp IntOp
-        | CONSOp
+        | CONSOp          -- ^ ::
     deriving(Eq,Ord)
 
 instance IsPostTc p => Sorted Op (Sigma p) where
@@ -886,8 +899,8 @@ instance IsPostTc p => Sorted Op (Sigma p) where
 data BoolOp = NotB
             | OrB
             | AndB
-            | ImpB
-            | IffB
+            | ImpB  -- ^ @==>@
+            | IffB  -- ^ @<=>@
             | EqB   -- ^ @==@
             | NeqB  -- ^ @/=@
             | LtB
@@ -936,15 +949,15 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
            | AddI
            | SubI
            | MulI
-           | DivI
-           | ModI
-           | ExpI
+           | DivI   -- ^ @/@
+           | ModI   -- ^ @%@
+           | ExpI   -- ^ @^@
     deriving(Eq,Ord)
 
   -- / and % could be more specific but that would introduce a mutually recursive
   -- dependency between both of them: that should be OK since they are built-in, but
   -- since the language does not allow you to do that.. we don't allow that as well.
-  -- we may provide some assumed theorems, for instance
+  -- We *may* provide some assumed theorems, for instance
   -- theorem div_mod = forall n m, (n/m) * m + (n%m) == n
 instance IsPostTc p => Sorted IntOp (Sigma p) where
   sortOf NegI = intTy --> intTy
@@ -952,14 +965,14 @@ instance IsPostTc p => Sorted IntOp (Sigma p) where
   sortOf SubI = intTy --> intTy --> intTy
   sortOf MulI = intTy --> intTy --> intTy
   sortOf DivI = intTy
-                            --> (varDom m intTy (Var m ./=. lit_0)
-                            \--> intTy)
+                  --> varDom m intTy (Var m ./=. lit_0)
+                  \--> intTy
     where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3002
   sortOf ModI = intTy
-                            --> (varDom m intTy (Var m ./=. lit_0)
-                            \--> intTy)
+                  --> varDom m intTy (Var m ./=. lit_0)
+                  \--> intTy
     where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
           m_uniq = -3102
@@ -1081,7 +1094,6 @@ sigma2tau (ForallTy _ _) = error "bug sigma2tau"  -- FIX
 sigma2tau ty             = unsafeCoerce ty
 
 
--- | Monomorphic types
 data Type c p where
   -- | type variable
   VarTy :: TyVAR p -> Type c p
@@ -1168,7 +1180,7 @@ splitFunTyN _ ty = ([],ty)
 
 funTyArity :: Tau p -> Int
 funTyArity ty = length args
-  where (args,res) = splitFunTy ty
+  where (args,_res) = splitFunTy ty
 
 -- | Removes outermost predicate-types
 mu_0 :: Tau p -> Tau p
@@ -1256,6 +1268,7 @@ ppTupleDom (Dom (Just pat) ty mb_prop)
   where pp_prop = case mb_prop of
                       Nothing -> [empty]
                       Just prop -> [char '|', pretty prop]
+ppTupleDom _other = undefined -- impossible
 
 -- ** Type constructors
 
@@ -1434,9 +1447,9 @@ vpatDom :: VAR p -> Tau p -> Dom p
 vpatDom x = patternDom (VarPat x)
 
 patternTy :: Pat p -> Tau p -> Type c p
-patternTy WildPatIn     ty = unsafeCoerce ty
-patternTy (WildPat _)   ty = unsafeCoerce ty
-patternTy (VarPat _)    ty = unsafeCoerce ty
+patternTy WildPatIn     ty = tau2type ty
+patternTy (WildPat _)   ty = tau2type ty
+patternTy (VarPat _)    ty = tau2type ty
 patternTy pat           ty = PredTy pat ty Nothing
 
 predTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p

@@ -140,7 +140,6 @@ getEnvTypes = liftM (map varType . Set.toList) getVarScope
 --   return (e',ty')
 
 instantiate :: Sigma Tc -> TcM (Tau Tc,[Tau Tc])
-  -- short-cut for mono-types
 instantiate (ForallTy tvs ty) = do
   mtys <- mapM instTyVar tvs
   ty' <- substType [] (zip tvs mtys) ty
@@ -164,8 +163,8 @@ readMetaTyVar :: MonadIO m => MetaTyVar -> m (Maybe (Tau Tc))
 readMetaTyVar = liftIO . readIORef . mtvRef
 
 writeMetaTyVar :: MonadIO m => MetaTyVar -> Tau Tc -> m ()
--- writeMetaTyVar MetaTyV{mtvRef} = liftIO . writeIORef mtvRef . Just
+writeMetaTyVar MetaTyV{mtvRef} = liftIO . writeIORef mtvRef . Just
   -- for debugging
-writeMetaTyVar mtv@MetaTyV{mtvRef} ty =
-  traceDoc (text "writeMetaTyVar mtv=" <+> pretty mtv <+> text "ty=" <+> pretty ty) $ do
-    liftIO $ writeIORef mtvRef (Just ty)
+-- writeMetaTyVar mtv@MetaTyV{mtvRef} ty =
+--   traceDoc (text "writeMetaTyVar mtv=" <+> pretty mtv <+> text "ty=" <+> pretty ty) $ do
+--     liftIO $ writeIORef mtvRef (Just ty)

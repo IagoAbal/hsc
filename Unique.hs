@@ -18,6 +18,7 @@ module Unique
 import Control.Monad.Identity
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Control.Monad.Trans.Maybe
 
 
 -- * Unique values
@@ -59,6 +60,9 @@ class Monad m => MonadUnique m where
 -- MonadUnique instances for some monad stacks based on lifting.
 
 instance MonadUnique m => MonadUnique (ReaderT r m) where
+  getUniq = lift getUniq
+  
+instance MonadUnique m => MonadUnique (MaybeT m) where
   getUniq = lift getUniq
 
 

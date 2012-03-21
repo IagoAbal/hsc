@@ -13,7 +13,6 @@
 -- | One-shot substitution
 -- It allows several *independent* substitutions to be performed in parallel.
 -- TO DO: Use GHC-like UniqSupply and implicit parameters to avoid the monadic stuff
--- FIX: Add Ge p Tc to constraints, perhaps define a "PostTc class alias"
 module H.Subst1 where
 
 import H.Syntax

@@ -157,7 +157,6 @@ propMTV _other = undefined -- impossible
 -- * pat2exp
 
 -- | Converts a pattern to an expression.
--- NB: Such a conversion is not possible in case of wild-card patterns.
 pat2exp :: IsPostTc p => Pat p -> Exp p
 pat2exp (LitPat lit) = Lit lit
 pat2exp (VarPat x)   = Var x
@@ -395,19 +394,6 @@ letType binds ty
           | otherwise                         = rev_binds
         f prop | bsBinds binds' `Set.disjointWith` fvExp prop = Nothing
                | otherwise = Just $ Let binds' prop
-
--- instPredTyProp :: (IsPostTc p, MonadUnique m) =>
---                     Exp p -> Pat p -> Tau p -> Maybe (Prop p) -> m (Maybe (Prop p))
--- instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
--- instPredTyProp  e pat  ty mb_prop
---  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = T.mapM (subst_exp s []) mb_prop
---  | otherwise = do
---     uniq  <- getUniq
---     return $ Just $ Case e (PostTc boolTy)
---                       [Alt Nothing pat (rhsExp prop)
---                       ,Alt Nothing (WildPat uniq (PostTc ty)) (rhsExp P._False_)
---                       ]
---  where prop = maybe P._True_ id mb_prop
 
 
 instDoms :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> Dom p -> [Dom p] -> m [Dom p]

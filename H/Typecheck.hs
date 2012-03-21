@@ -405,6 +405,9 @@ tcExp (Let binds body) (Infer ref) = do
   body_ty' <- letType binds' body_ty
   liftIO $ writeIORef ref body_ty'
   return (Let binds' body')
+-- FIX?: Is it really necessary to introduce a new metatype here?
+-- I think we could infer the type of t and then check that e has the same
+-- type...
 --   Ite :: Prop p -> Exp p -> Exp p -> Exp p
 tcExp (Ite NoPostTc g t e) exp_ty
   = inIteExprCtxt g $ do
@@ -700,7 +703,7 @@ tcQVar (QVar n Nothing) = do
   (v,n_env) <- tcBndr n (Check mty)
   return (QVar v Nothing,n_env)
 tcQVar (QVar n (Just tau)) = do
-  (tau',_) <- kcType tau
+  (tau',_) <- kcType tau    -- FIX?: checkKind tau typeKi
   (v,n_env) <- tcBndr n (Check tau')
   return (QVar v (Just tau'),n_env)
 
@@ -756,6 +759,7 @@ checkSigma exp polyty = do
 
 -- * Subsumption checking
 
+  -- rename it could be a good idea
 instSigma :: Exp Tc -> Sigma Tc -> Expected (Tau Tc) -> TcM (Exp Tc)
 instSigma exp s1 (Check t2) = do
   (exp',t1) <- instantiateExp exp s1

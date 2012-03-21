@@ -147,14 +147,14 @@ coBind (PatBind (Just loc) pat rhs@(Rhs (PostTc rhs_ty) _ _)) = do
     co_Equations [x] [patbin2eq loc pat]
 coBind (FunBind _rec fun fun_tsig (PostTc tvs) matches)
   = inFunBindCtxt (ppQuot fun) $ do
-  traceDoc (text "coBind-FunBind " <+> pretty fun <+> char ':' <+> pretty fun_ty <+> text "==============") $ do
+--   traceDoc (text "coBind-FunBind " <+> pretty fun <+> char ':' <+> pretty fun_ty <+> text "==============") $ do
   coTypeSig fun_tsig
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
-  traceDoc (text "coBind-FunBind sko_tys =" <+> sep (map pretty sko_tys)) $ do
+--   traceDoc (text "coBind-FunBind sko_tys =" <+> sep (map pretty sko_tys)) $ do
   sko_matches <- subst_matches [] (zip tvs sko_tys) matches
   fun_tau <- instSigmaType fun_ty sko_tys
-  traceDoc (text "fun-tau =" <+> pretty fun_tau) $ do
+--   traceDoc (text "fun-tau =" <+> pretty fun_tau) $ do
   coMatches sko_matches fun_tau
 --   -- WRONG: I have to use co_Equations
 --   mapM_ (`coMatch` fun_tau) matches
@@ -169,6 +169,7 @@ coMatches matches@(m:_) exp_ty = do
   qs <- matches2eqs matches
   coEquations doms qs
   where arity = matchArity m
+        -- splitFunTy* must to take care of type synonyms... so I need to use expandSyn
         (doms,_) = splitFunTyN arity exp_ty
 
 getCaseLikeCtxt :: Exp Ti -> Sigma Ti -> [Pat Ti] -> CoM (Var Ti,CoM a -> CoM a)
@@ -577,14 +578,14 @@ coEquations ds qs = do
 co_Equations :: [Var Ti] -> [Equation] -> CoM ()
 co_Equations [] []  = error "coEquations undefined 1" -- FALSE must hold
 co_Equations [] [E _ [] rhs] = coEqRHS rhs
-co_Equations [] (_:_) = error "Non-uniform definition/pattern"
+co_Equations [] (_:_) = throwError $ text "Non-uniform definition/pattern(s)"
 co_Equations xs []    = error "coEquations undefined 2" -- FALSE must hold
 co_Equations (x:xs) qs
   | all isVar   qs = matchVar x xs qs
   | all isLit   qs = matchLit x xs qs
   | all isTuple qs = matchTuple x xs qs
   | all isCon   qs = matchCon x xs qs
-  | otherwise = error "Non-uniform definition/pattern"
+  | otherwise = throwError $ text "Non-uniform definition/pattern(s)"
 -- match sup [] [] def = def
 -- match sup [] [q] def = snd q
 -- match sup [] (_:_) def = error "Non-uniform: empty-rule failed"

@@ -1,9 +1,10 @@
-
+{-# LANGUAGE DeriveDataTypeable #-}
 module Name where
 
 
 import Unique
 
+import Data.Data ( Data, Typeable )
 import Data.Function
 
 
@@ -14,14 +15,14 @@ data OccName
       occNameSpace :: !NameSpace
     , occString    :: !String
     }
-    deriving(Eq,Ord)
+    deriving(Eq,Ord,Typeable,Data)
 
 data NameSpace = VarNS
                | ConNS
                | TyVarNS
                | TyConNS
                | GoalNS
-    deriving(Eq, Ord)
+    deriving(Eq,Ord,Typeable,Data)
 
 mkOccName :: NameSpace -> String -> OccName
 mkOccName = OccName
@@ -30,11 +31,13 @@ mkOccName = OccName
 -- * Name
 
 data NameSort = UserNm | SystemNm
+    deriving(Typeable,Data)
 
 data Name = Name { nameSort :: !NameSort
                  , nameOcc :: !OccName
                  , nameUniq :: !Uniq
                  }
+    deriving(Typeable,Data)
 
 instance Eq Name where
   (==) = (==) `on` nameUniq
