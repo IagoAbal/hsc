@@ -8,7 +8,7 @@ import H.Typecheck.Utils
 import H.Syntax
 import H.Phase
 import H.FreeVars
-import H.Pretty
+import Pretty
 import qualified H.Prop as P
 import H.Message
 import H.Monad

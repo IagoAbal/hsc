@@ -20,7 +20,7 @@
 > 
 > import H.Syntax
 > import H.SrcLoc
-> import H.Pretty
+> import Pretty
 > import H.Phase
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer

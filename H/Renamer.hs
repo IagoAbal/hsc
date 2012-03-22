@@ -17,7 +17,7 @@ import H.Syntax
 import H.FreeVars
 import H.SrcContext
 import H.Phase
-import H.Pretty
+import Pretty
 import H.Message
 import H.Monad
 

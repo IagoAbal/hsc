@@ -6,7 +6,7 @@ import H.Typecheck.TcM
 import H.Typecheck.Zonk
 
 import H.Syntax
-import H.Pretty
+import Pretty
 import H.Phase
 import H.FreeVars
 import H.Subst1 ( subst_exp, subst_type, subst_doms )

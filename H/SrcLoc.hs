@@ -1,7 +1,7 @@
 module H.SrcLoc where
 
 
-import H.Pretty
+import Pretty
 
 
 -- | A position in the source

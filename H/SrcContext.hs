@@ -7,7 +7,7 @@ module H.SrcContext where
 
 import H.Syntax
 import H.SrcLoc
-import H.Pretty
+import Pretty
 
 
 -- * Source context

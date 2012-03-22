@@ -10,7 +10,7 @@ module H.Typecheck.TcM where
 
 import H.Syntax
 import H.Phase
-import H.Pretty
+import Pretty
 import H.Monad
 import qualified H.Subst1 as Subst1
 import H.FreeVars

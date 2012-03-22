@@ -9,7 +9,7 @@ import H.Typecheck.Utils
 
 import H.Syntax
 import H.Phase
-import H.Pretty
+import Pretty
 import H.FreeVars
 import H.Prop
 

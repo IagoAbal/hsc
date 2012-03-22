@@ -2,7 +2,7 @@
 
 module H.Message where
 
-import H.Pretty
+import Pretty
 import H.SrcLoc ( SrcLoc )
 import H.SrcContext ( CtxtDescr, SrcContext(..) )
 

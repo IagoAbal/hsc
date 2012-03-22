@@ -10,7 +10,7 @@ module H.Monad where
 import H.Message
 import H.SrcLoc
 import H.SrcContext
-import H.Pretty
+import Pretty
 
 import Unique
 

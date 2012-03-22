@@ -4,7 +4,7 @@ module H.Typecheck.TCC where
 
 import H.Syntax
 import H.Phase
-import H.Pretty
+import Pretty
 import H.Prop
 import H.Message
 

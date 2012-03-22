@@ -15,7 +15,7 @@
 --
 -----------------------------------------------------------------------------
 
-module H.Pretty where
+module Pretty where
 --   ( -- * Pretty printing
 --     Pretty,
 --     ppStyleMode, ppWithMode, pp,

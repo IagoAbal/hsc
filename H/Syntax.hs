@@ -15,7 +15,7 @@ module H.Syntax
   where
 
 import H.Phase
-import H.Pretty
+import Pretty
 import H.SrcLoc
 
 import Name
