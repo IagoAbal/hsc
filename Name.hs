@@ -1,10 +1,14 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
+
 module Name where
 
 
 import Unique
 
+import Data.Binary ( Binary(..), getWord8, putWord8 )
 import Data.Data ( Data, Typeable )
+import Data.DeriveTH
 import Data.Function
 
 
@@ -72,3 +76,12 @@ newName ns str = getUniq >>= return . mkSysName (mkOccName ns str)
 newNameFrom :: MonadUnique m => Name -> m Name
 newNameFrom nm = do uniq <- getUniq
                     return nm{nameUniq=uniq}
+
+
+
+-- ! Binary instances generated through Template Haskell
+
+$( derive makeBinary ''NameSpace )
+$( derive makeBinary ''OccName )
+$( derive makeBinary ''NameSort )
+$( derive makeBinary ''Name )
