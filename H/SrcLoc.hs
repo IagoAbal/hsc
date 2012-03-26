@@ -7,9 +7,9 @@ import Pretty
 -- | A position in the source
 data SrcLoc = SrcLoc {
       srcFilename :: String
-		, srcLine     :: Int
+    , srcLine     :: Int
     , srcColumn   :: Int
-		}
+    }
     deriving(Eq,Ord,Show)
 
 
