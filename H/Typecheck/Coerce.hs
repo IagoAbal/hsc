@@ -7,7 +7,6 @@ import H.Typecheck.Utils
 
 import H.Syntax
 import H.Phase
-import H.FreeVars
 import Pretty
 import qualified H.Prop as P
 import H.Message
@@ -18,13 +17,14 @@ import H.Subst1
 
 import Name
 import Sorted
-import Unique
 
 import Control.Monad
 import Control.Monad.RWS
 import Control.Monad.Error
 import Data.Char ( isLower )
 import Data.List ( find, inits, nub, (\\) )
+import Data.IntMap ( IntMap )
+import qualified Data.IntMap as IMap
 import Data.Sequence ( (|>) )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
@@ -32,11 +32,13 @@ import qualified Data.Traversable as T
 -- import qualified Data.Set as Set
 
 
-
-type CoM = H CoEnv [TCC] ()
+type CoM = H CoEnv ModTCCs CoST
 
 data CoEnv = CoEnv { propCtxt :: TccPropCtxt }
 
+type ModTCCs = IntMap TCC
+
+data CoST = CoST { tccCount :: !Int }
 
 coModule :: UniqSupply -> Module Ti -> IO (Either Message [TCC],UniqSupply)
 coModule us (Module loc modname decls)
@@ -48,14 +50,20 @@ coModule us (Module loc modname decls)
 emptyCoEnv :: CoEnv
 emptyCoEnv = CoEnv Seq.empty
 
+emptyCoST :: CoST
+emptyCoST = CoST 1
+
+resetST :: CoM ()
+resetST = modify (const emptyCoST)
+
 
   -- Bidirectional typechecking !
 data Expected a = Infer
                 | Check a
 
 instance Functor Expected where
-  fmap f Infer     = Infer
-  fmap f (Check x) = Check $ f x
+  fmap _f Infer     = Infer
+  fmap  f (Check x) = Check $ f x
 
 
 withForall :: [QVar Ti] -> CoM a -> CoM a
@@ -91,6 +99,16 @@ is_trivial_coercion act_ty          exp_ty expr
 is_trivial_coercion _act_ty        _exp_ty _expr
   = return False
 
+getNextTCCId :: CoM Int
+getNextTCCId = do
+  c <- gets tccCount
+  modify (\st -> st{tccCount = c+1})
+  return c
+
+addTCCToList :: Int -> TCC -> CoM ()
+addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
+
+
 (~>?) :: Sigma Ti -> Expected (Sigma Ti) -> Exp Ti -> CoM (Sigma Ti)
 (~>?) act_ty Infer          _expr = return act_ty
 (~>?) act_ty (Check exp_ty)  expr = do
@@ -98,7 +116,8 @@ is_trivial_coercion _act_ty        _exp_ty _expr
   when is_not_trivial $ do
     SrcContext{contextDescr} <- getContext
     tccPropCtxt <- asks propCtxt
-    tell [CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty]
+    tccId <- getNextTCCId
+    addTCCToList tccId $ CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty
   return exp_ty
 
 (->?) :: Tau Ti -> Expected (Tau Ti) -> Exp Ti -> CoM (Tau Ti)
@@ -110,7 +129,8 @@ addCompletenessTCC :: Prop Ti -> CoM ()
 addCompletenessTCC prop = do
   SrcContext{contextDescr} <- getContext
   tccPropCtxt <- asks propCtxt
-  tell [CompletenessTCC contextDescr tccPropCtxt prop]
+  tccId <- getNextTCCId
+  addTCCToList tccId $ CompletenessTCC contextDescr tccPropCtxt prop
 
 coDecls :: [Decl Ti] -> CoM ()
 coDecls = mapM_ coDecl
