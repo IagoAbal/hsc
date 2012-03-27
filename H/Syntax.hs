@@ -630,9 +630,34 @@ data Pat p where
   WildPat :: Ge p Rn => VAR p -> Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: VAR p -> Pat p -> Pat p
---   -- ^ pattern signature
---     -- Add SrcLoc ?
---   SigPat :: Pat p -> Tau p -> Pat p
+
+{- Note [SigPat]
+SigPats are banned to simplify things. For instance, we would expect
+that an @-pattern can be eliminated by introducing a let-expression in
+the RHS as in
+
+  \l@(x::xs) -> x::l
+  ===
+  \(x::xs) -> let l = x::xs in x::l
+
+but if we allow SigPats then the type of a variable may depend on a
+variable introduced by a previous @-pattern making this conversion
+impossible as in
+
+  \p@(x::xs) q:({q1:[Int] | head q1 == head p}) -> p ++ q
+
+where you cannot simply move 'p' since the type of 'q' depends on it.
+
+Also note that the main problem is caused by instantiation of
+pattern-types... for normal expressions we could translate @-patterns
+as specificed in the Haskell Report. 
+
+Future work:
+  a) Careful handling of @-patterns, potentially complicating
+     functions for stuff like dependent-arrow instantiation.
+  b) Syntactically restrict type annotations in patterns.
+-}
+
 
 isVarPat :: Pat p -> Bool
 isVarPat (VarPat _) = True
