@@ -1102,10 +1102,8 @@ quantifiedTyVars :: Sigma p -> [TyVAR p]
 quantifiedTyVars (ForallTy tvs _) = tvs
 quantifiedTyVars _other           = []
 
-data SIG
-data TAU
 
-type Sigma = Type SIG
+type Sigma = Type SIGMA
 type Tau   = Type TAU
 
 tau2sigma :: Tau p -> Sigma p

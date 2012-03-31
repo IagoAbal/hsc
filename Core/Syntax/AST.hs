@@ -4,7 +4,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
 module Core.Syntax.AST where
@@ -531,14 +530,6 @@ splitSigma ty                 = ([],sigma2tau ty)
 qTyVars :: Sigma -> [TyVar]
 qTyVars (ForallTy tvs _) = tvs
 qTyVars _other           = []
-
-data TAU
-data SIGMA
-
-deriving instance Data TAU
-deriving instance Typeable TAU
-deriving instance Data SIGMA
-deriving instance Typeable SIGMA
 
 tau2sigma :: Tau -> Sigma
 tau2sigma = unsafeCoerce
