@@ -25,6 +25,10 @@ instance Pretty TyVar where
 instance PrettyBndr TyVar where
   prettyBndr tv = parens $ pretty tv <> colon <> pretty (tyVarKind tv)
 
+-- ** Params
+
+ppTyParams :: TyParams -> [Doc]
+ppTyParams = map (\tv -> char '@' <> pretty tv)
 
 -- * Modules
 
@@ -59,27 +63,31 @@ instance Pretty Decl where
                (map pretty constrList))
   pretty (ValDecl bind) = blankline $ pretty bind
   pretty (GoalDecl goaltype gname typs prop)
-    = blankline $
-        myFsep $ [pretty goaltype, pretty gname] ++ pp_typs ++ [equals, pretty prop]
-    where pp_typs = map (\tv -> char '@' <> pretty tv) typs
+    = blankline $ myFsep $ [pretty goaltype, pretty gname]
+                            ++ ppTyParams typs
+                            ++ [equals, pretty prop]
 
 instance Pretty GoalType where
   pretty TheoremGoal = text "theorem"
   pretty LemmaGoal   = text "lemma"
 
 instance Pretty Bind where
-  pretty (FunBind _rec fun _ matches) =
-    ppBindings (map (ppMatch fun) matches)
-  pretty (PatBind pat (Rhs _tau grhs whereDecls)) =
-    myFsep [pretty pat, ppGRhs ValDef grhs]
+  pretty (FunBind _rec fun typs args (Rhs _tau expr whereDecls))
+    =  pretty fun <> colon <> pretty (varType fun)
+    $$ myFsep ([pretty fun] ++ ppTyParams typs ++ pp_args
+                ++ [ppRhsExp ValDef expr])
+    $$$ ppWhere whereDecls
+    where pp_args = map pretty args
+  pretty (PatBind pat (Rhs _tau expr whereDecls)) =
+    myFsep [pretty pat, ppRhsExp ValDef expr]
         $$$ ppWhere whereDecls
 
-ppMatch :: Var -> Match -> Doc
-ppMatch fun (Match  ps (Rhs _tau grhs whereDecls)) =
-    myFsep (lhs ++ [ppGRhs ValDef grhs])
-    $$$ ppWhere whereDecls
-      where
-    lhs = prettyBndr fun : map (prettyPrec 2) ps
+--ppMatch :: Var -> Match -> Doc
+--ppMatch fun (Match  ps (Rhs _tau expr whereDecls)) =
+--    myFsep (lhs ++ [ppGRhs ValDef grhs])
+--    $$$ ppWhere whereDecls
+--      where
+--    lhs = prettyBndr fun : map (prettyPrec 2) ps
 
 ppWhere :: WhereBinds -> Doc
 ppWhere [] = empty
@@ -168,37 +176,42 @@ rhsSepSym CaseAlt = text "->"
 rhsSepSym IfExp   = text "->"
 
 ppRhs :: RhsContext -> Rhs -> Doc
-ppRhs ctx (Rhs _tau grhs whereDecls) = ppGRhs ctx grhs $$$ ppWhere whereDecls
+ppRhs ctx (Rhs _tau expr whereDecls)
+  = ppRhsExp ctx expr
+  $$$ ppWhere whereDecls
 
-ppGRhs :: RhsContext -> GRhs -> Doc
-ppGRhs ctx (UnGuarded e)   = rhsSepSym ctx <+> pretty e
-ppGRhs ctx (Guarded grhss) = ppGuardedRhss ctx grhss
+ppRhsExp :: RhsContext -> Exp -> Doc
+ppRhsExp ctx e = rhsSepSym ctx <+> pretty e
 
-ppGuardedRhss :: RhsContext -> GuardedRhss -> Doc
-ppGuardedRhss ctx (GuardedRhss guardList elserhs)
-  = myVcat $ map (ppGuardedRhs ctx) guardList ++ [ppElse ctx elserhs]
+--ppGRhs :: RhsContext -> GRhs -> Doc
+--ppGRhs ctx (UnGuarded e)   = rhsSepSym ctx <+> pretty e
+--ppGRhs ctx (Guarded grhss) = ppGuardedRhss ctx grhss
 
-ppGuardedRhs :: RhsContext -> GuardedRhs -> Doc
-ppGuardedRhs ctx (GuardedRhs guard body) =
-    myFsep [char '|', pretty guard, rhsSepSym ctx, pretty body]
+--ppGuardedRhss :: RhsContext -> GuardedRhss -> Doc
+--ppGuardedRhss ctx (GuardedRhss guardList elserhs)
+--  = myVcat $ map (ppGuardedRhs ctx) guardList ++ [ppElse ctx elserhs]
 
-ppElse :: RhsContext -> Exp -> Doc
-ppElse ctx body
-  = myFsep [char '|', text "else", rhsSepSym ctx, pretty body]
+--ppGuardedRhs :: RhsContext -> GuardedRhs -> Doc
+--ppGuardedRhs ctx (GuardedRhs guard body) =
+--    myFsep [char '|', pretty guard, rhsSepSym ctx, pretty body]
+
+--ppElse :: RhsContext -> Exp -> Doc
+--ppElse ctx body
+--  = myFsep [char '|', text "else", rhsSepSym ctx, pretty body]
 
 -- ** Patterns
 
 instance Pretty Pat where
   prettyPrec _ (VarPat var) = prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
-  prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
-    myFsep [pretty a, text "::", pretty b]
+--   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
+--     myFsep [pretty a, text "::", pretty b]
   prettyPrec _ (ConPat _taus con []) = pretty con
   prettyPrec p (ConPat _taus con ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
   prettyPrec _ (TuplePat _tau ps) = parenList . map pretty $ ps
-  prettyPrec _ (ListPat _tau ps) =
-    bracketList . punctuate comma . map pretty $ ps
+--   prettyPrec _ (ListPat _tau ps) =
+--     bracketList . punctuate comma . map pretty $ ps
   prettyPrec _ (ParenPat p) = parens . pretty $ p
 
 instance Pretty Alt where

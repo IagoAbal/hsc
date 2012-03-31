@@ -132,7 +132,7 @@ data Decl = TypeDecl TyVar TyParams Tau
               -- ^ logical goal (theorem or lemma)
     deriving(Eq,Typeable,Data)
 
-data Bind = FunBind IsRec Var [TyVar] [Match]
+data Bind = FunBind IsRec Var [TyVar] [Var] Rhs -- [Match]
                 -- ^ a function defined by a *set* of equations
                 -- NB: Only uniform definitions are allowed
           | PatBind Pat Rhs
@@ -148,15 +148,6 @@ data IsRec = Rec
 -- | Declaration of a data constructor.
 data ConDecl = ConDecl Var [Dom]
     deriving (Eq,Typeable,Data)
-
-
--- | Clauses of a function binding.
-data Match = Match [Pat] Rhs
-    deriving(Eq,Typeable,Data)
-
-matchArity :: Match -> Int
-matchArity (Match pats _) = length pats
-
 
 data GoalType = TheoremGoal
               | LemmaGoal
@@ -175,7 +166,7 @@ data Exp = Var Var -- ^ variable
             -- ^ application
          | TyApp Exp [Tau]
             -- ^ type application
-         | Lam [Pat] LamRHS
+         | Lam [Var] LamRHS
             -- ^ lambda expression
          | Let [Bind] Exp -- ^ local declarations with @let@
          | TyLam [TyVar] Exp  -- ^ type lambda
@@ -225,42 +216,15 @@ mkTyLam tvs expr = TyLam tvs expr
 
 -- | The right hand side of a function or pattern binding.
 -- NB: A Rhs has always a Tau type.
-data Rhs = Rhs Tau GRhs WhereBinds
+data Rhs = Rhs Tau Exp WhereBinds
     deriving(Eq,Typeable,Data)
 
 -- | RHS of a lamba-abstraction
 -- Invariant: no guards nor `where' bindings
 type LamRHS = Rhs
 
-data GRhs
-	 = UnGuarded Exp	-- ^ unguarded right hand side (/exp/)
-	 | Guarded GuardedRhss
-				-- ^ guarded right hand side (/gdrhs/)
-        -- See [Guards]
-    deriving(Eq,Typeable,Data)
-
-data GuardedRhss
-  = GuardedRhss [GuardedRhs]  -- ^ These cannot overlap
-                Exp           -- ^ /else/
-    deriving(Eq,Typeable,Data)
-
--- | A guarded right hand side @|@ /exp/ @=@ /exp/ or @|@ /exp/ @->@ /exp/.
--- The first expression is boolean-valued.
-data GuardedRhs = GuardedRhs Prop Exp
-    deriving(Eq,Typeable,Data)
-
 rhsExp :: Tau -> Exp -> Rhs
-rhsExp ty e = Rhs ty (UnGuarded e) []
-
--- rhs2exp :: Rhs -> Exp
--- rhs2exp (Rhs _ty (UnGuarded e) binds)
---   = Let binds $ e
--- rhs2exp (Rhs ty (Guarded grhss) binds)
---   = Let binds $ If ty grhss
-
--- grhs2exp :: Tau -> GRhs -> Exp
--- grhs2exp _ty (UnGuarded e)   = e
--- grhs2exp  ty (Guarded grhss) = If ty grhss
+rhsExp ty e = Rhs ty e []
 
 -- ** Patterns
 
@@ -269,44 +233,44 @@ data Pat = VarPat Var
             -- ^ variable
          | LitPat Lit
             -- ^ literal constant
-         | InfixCONSPat Tau Pat Pat
-            -- ^ infix @::@ pattern
          | ConPat [Tau] Con [Pat]
             -- ^ data constructor pattern
          | TuplePat Tau [Pat]
             -- ^ tuple pattern
-         | ListPat Tau [Pat]
-            -- ^ list pattern
+--          | ListPat Tau [Pat]
+--             -- ^ list pattern
          | ParenPat Pat
             -- ^ parenthesized pattern
   deriving(Eq,Typeable,Data)
+
+-- | A very basic, non-nested pattern
+type SPat = Pat
 
 -- isVarPat :: Pat p -> Bool
 -- isVarPat (VarPat _) = True
 -- isVarPat _other     = False
 
--- mkNILPat :: IsPostTc p => Tau p -> Pat p
--- mkNILPat ty = ConPat tcNilCon (PostTc [ty]) []
+mkNILPat :: Tau -> Pat
+mkNILPat ty = ConPat [ty] nilCon []
 
--- mkCONSPat :: IsPostTc p => Tau p -> Pat p -> Pat p -> Pat p
--- mkCONSPat ty p1 p2 = ConPat tcConsCon (PostTc [ty]) [p1,p2]
+mkCONSPat :: Tau -> Pat -> Pat -> Pat
+mkCONSPat ty p1 p2 = ConPat [ty] consCon [p1,p2]
 
 pat2exp :: Pat -> Exp
 pat2exp (LitPat lit) = Lit lit
 pat2exp (VarPat x)   = Var x
-pat2exp (InfixCONSPat elem_ty p1 p2)
+pat2exp (ConPat [elem_ty] (BuiltinCon ConsCon) [p1,p2])
   = InfixApp (pat2exp p1) consE (pat2exp p2)
   where consE = OpExp [elem_ty] CONSOp
 pat2exp (ConPat typs con ps)
   = conE `mkApp` map pat2exp ps
   where conE = mkTyApp (Con con) typs
 pat2exp (TuplePat tup_ty ps) = Tuple tup_ty $ map pat2exp ps
-pat2exp (ListPat list_ty ps) = List list_ty $ map pat2exp ps
 pat2exp (ParenPat p) = Paren $ pat2exp p
 
 
 -- | An /alt/ in a @case@ expression.
-data Alt = Alt Pat Rhs
+data Alt = Alt SPat Rhs
     deriving(Eq,Typeable,Data)
 
 -- ** Literals
