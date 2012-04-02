@@ -154,28 +154,6 @@ propMTV (Coerc _loc e polyty) = propMTV e
 propMTV (QP qt qvars body) = qvarsMTV qvars `Set.union` propMTV body
 propMTV _other = undefined -- impossible
 
--- * pat2exp
-
--- | Converts a pattern to an expression.
-pat2exp :: IsPostTc p => Pat p -> Exp p
-pat2exp (LitPat lit) = Lit lit
-pat2exp (VarPat x)   = Var x
-pat2exp (InfixCONSPat (PostTc typ) p1 p2)
-  = InfixApp (pat2exp p1) conE (pat2exp p2)
-  where conE = tyApp (Op CONSOp) [typ]
-pat2exp (ConPat con (PostTc typs) ps)
-  = conE `app` map pat2exp ps
-  where conE = tyApp (Con con) typs
-pat2exp (TuplePat ps tup_ty) = Tuple tup_ty $ map pat2exp ps
-pat2exp (ListPat ps list_ty) = List list_ty $ map pat2exp ps
-pat2exp (ParenPat p) = Paren $ pat2exp p
-pat2exp (WildPat wild_var)
-  = Var wild_var
-pat2exp (AsPat _ p)  = pat2exp p
--- pat2exp (SigPat p ty) = pat2exp p
-pat2exp _other = undefined -- impossible
-
-
 expandSyn :: (IsPostTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
 expandSyn (ConTy (SynTyCon _ ps rhs) args)
   = liftM (Just . tau2type) $ subst_type [] (zip ps args) rhs

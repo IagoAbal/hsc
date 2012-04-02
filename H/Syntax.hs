@@ -39,6 +39,9 @@ data Var p = V {
              , skolemVar :: !Bool
              }
 
+varTau :: Var p -> Tau p
+varTau = sigma2tau . varType
+
 mkVar :: Name -> Sigma p -> Var p
 mkVar name sig = V name sig False
 
@@ -552,6 +555,10 @@ data Else p where
 rhsExp :: IsPostTc p => Tau p -> Exp p -> Rhs p
 rhsExp ty e = Rhs (PostTc ty) (UnGuarded e) []
 
+rhsVar :: IsPostTc p => Var p -> Rhs p
+rhsVar x = rhsExp x_tau (Var x)
+  where x_tau = sigma2tau $ varType x
+
 rhs2exp :: Rhs p -> Exp p
 rhs2exp (Rhs _tc_ty (UnGuarded e) binds)
   = mkLet binds e
@@ -668,6 +675,63 @@ mkNILPat ty = ConPat tcNilCon (PostTc [ty]) []
 
 mkCONSPat :: IsPostTc p => Tau p -> Pat p -> Pat p -> Pat p
 mkCONSPat ty p1 p2 = ConPat tcConsCon (PostTc [ty]) [p1,p2]
+
+mkInfixCONSPat :: IsPostTc p => Tau p -> Pat p -> Pat p -> Pat p
+mkInfixCONSPat ty p1 p2 = InfixCONSPat (PostTc ty) p1 p2
+
+-- | Converts a pattern to an expression.
+pat2exp :: IsPostTc p => Pat p -> Exp p
+pat2exp (LitPat lit) = Lit lit
+pat2exp (VarPat x)   = Var x
+pat2exp (InfixCONSPat (PostTc typ) p1 p2)
+  = InfixApp (pat2exp p1) conE (pat2exp p2)
+  where conE = tyApp (Op CONSOp) [typ]
+pat2exp (ConPat con (PostTc typs) ps)
+  = conE `app` map pat2exp ps
+  where conE = tyApp (Con con) typs
+pat2exp (TuplePat ps tup_ty) = Tuple tup_ty $ map pat2exp ps
+pat2exp (ListPat ps list_ty) = List list_ty $ map pat2exp ps
+pat2exp (ParenPat p) = Paren $ pat2exp p
+pat2exp (WildPat wild_var)
+  = Var wild_var
+pat2exp (AsPat _ p)  = pat2exp p
+-- pat2exp (SigPat p ty) = pat2exp p
+pat2exp _other = undefined -- impossible
+
+-- *** Simple patterns
+
+-- | SimplePat = VarPat | LitPat | ConPat | TuplePat
+type SimplePat = Pat
+
+simplifyPats :: [Pat Ti] -> ([SimplePat Ti],[(Var Ti,Exp Ti)])
+simplifyPats pats = let (pats',pats_ss) = unzip $ map simplifyPat pats
+                      in (pats',concat pats_ss)
+                      
+simplifyPat :: Pat Ti -> (SimplePat Ti,[(Var Ti,Exp Ti)])
+simplifyPat p@(VarPat _) = (p,[])
+simplifyPat p@(LitPat _) = (p,[])
+simplifyPat (InfixCONSPat (PostTc typ) p1 p2)
+  = (mkCONSPat typ p1' p2',bs)
+  where ([p1',p2'],bs) = simplifyPats [p1,p2]
+simplifyPat (ConPat con ptctyps ps) = (ConPat con ptctyps ps',bs)
+  where (ps',bs) = simplifyPats ps
+simplifyPat (TuplePat ps ptcty) = (TuplePat ps' ptcty,bs)
+  where (ps',bs) = simplifyPats ps
+simplifyPat (ListPat ps (PostTc list_ty)) =
+    (foldr (mkCONSPat elem_ty) (mkNILPat elem_ty) ps',bs)
+  where ListTy elem_ty = mu_0 list_ty
+        (ps',bs) = simplifyPats ps
+  -- NB: ParenPat is just convenient for pretty-printing
+  -- when we have InfixCONSPat's
+simplifyPat (ParenPat p) = (p',bs)
+  where (p',bs) = simplifyPat p
+simplifyPat (WildPat wild_var) = (VarPat wild_var,[])
+  -- NB: `p' cannot depend on `v' nor vice-versa
+simplifyPat (AsPat v p) = (p',(v,pat2exp p):bs)
+  where (p',bs) = simplifyPat p
+simplifyPat _other = undefined -- impossible
+
+-- ** Alternatives
 
 -- | An /alt/ in a @case@ expression.
 data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
@@ -1113,7 +1177,7 @@ tau2type :: Tau p -> Type c p
 tau2type = unsafeCoerce
 
 sigma2tau :: Sigma p -> Tau p
-sigma2tau (ForallTy _ _) = error "bug sigma2tau"  -- FIX
+sigma2tau (ForallTy _ _) = error "bug sigma2tau"  -- FIXME
 sigma2tau ty             = unsafeCoerce ty
 
 

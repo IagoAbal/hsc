@@ -455,8 +455,6 @@ coElse (Else loc expr)  exp_ty = void $ coExp expr (Check $ tau2sigma exp_ty)
 
 -- * Equations
 
-type SimplePat = Pat
-
 data Equation
   = E {
     eqLoc  :: SrcLoc
@@ -517,33 +515,6 @@ getCon :: Equation -> TcCon Ti
 getCon (E _ (ConPat con _ _:_) _) = con
 getCon _other                     = undefined -- bug
 
-simplifyPats :: [Pat Ti] -> ([SimplePat Ti],[(Var Ti,Exp Ti)])
-simplifyPats pats = let (pats',pats_ss) = unzip $ map go pats
-                      in (pats',concat pats_ss)
-  where go :: Pat Ti -> (SimplePat Ti,[(Var Ti,Exp Ti)])
-        go p@(VarPat _) = (p,[])
-        go p@(LitPat _) = (p,[])
-        go (InfixCONSPat (PostTc typ) p1 p2)
-          = (mkCONSPat typ p1' p2',bs)
-          where ([p1',p2'],bs) = simplifyPats [p1,p2]
-        go (ConPat con ptctyps ps) = (ConPat con ptctyps ps',bs)
-          where (ps',bs) = simplifyPats ps
-        go (TuplePat ps ptcty) = (TuplePat ps' ptcty,bs)
-          where (ps',bs) = simplifyPats ps
-        go (ListPat ps (PostTc list_ty)) =
-            (foldr (mkCONSPat elem_ty) (mkNILPat elem_ty) ps',bs)
-          where ListTy elem_ty = mu_0 list_ty
-                (ps',bs) = simplifyPats ps
-          -- NB: ParenPat is just convenient for pretty-printing
-          -- when we have InfixCONSPat's
-        go (ParenPat p) = go p
-        go (WildPat wild_var) = (VarPat wild_var,[])
-          -- NB: `p' cannot depend on `v' nor vice-versa
-        go (AsPat v p) = (p',(v,pat2exp p):bs)
-          where (p',bs) = go p
---         go (SigPat p _ty) = go p
-
-
 coType :: Type c Ti -> CoM ()
 coType (VarTy _) = return ()
 coType (ConTy _tc tys) = mapM_ coType tys
@@ -592,16 +563,6 @@ coEquations ds qs = do
                   v <- newVar n (dom2type d)
                   ds' <- instDoms (Var v) d ds
                   go (i+1) (v:vs_rev) ds'
---   where get_var :: Int -> [SimplePat Ti] -> CoM (Var Ti)
---         get_var i ps = case getNameForPats ps of
---                            Nothing -> undefined
---                            Just n  -> undefined
---         get_eqs_pats :: [Equation] -> [[SimplePat Ti]]
---         get_eqs_pats = go []
---           where go pss    (E _ [] _:_)    = reverse pss
---                 go pss qs@(E _ (p:_) _:_) = go (ps':pss) qs'
---                   where ps' = map (head . eqPats) qs
---                         qs' = map (\q@E{eqPats} -> q{eqPats = tail eqPats}) qs
 
 co_Equations :: [Var Ti] -> [Equation] -> CoM ()
 co_Equations [] []  = error "coEquations undefined 1" -- FALSE must hold
