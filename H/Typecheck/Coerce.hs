@@ -7,6 +7,7 @@ import H.Typecheck.Utils
 
 import H.Syntax
 import H.Phase
+import H.FreeVars ( bsPat )
 import Pretty
 import qualified H.Prop as P
 import H.Message
@@ -25,6 +26,7 @@ import Data.Char ( isLower )
 import Data.List ( find, inits, nub, (\\) )
 import Data.IntMap ( IntMap )
 import qualified Data.IntMap as IMap
+import qualified Data.Set as Set
 import Data.Sequence ( (|>) )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
@@ -148,7 +150,7 @@ coDecl (DataDecl loc tyname tvs constrs) = do
   let sko_tys = map VarTy sko_tvs
   sko_constrs <- subst_condecls [] (zip tvs sko_tys) constrs
   mapM_ coConDecl sko_constrs
-  where coConDecl (ConDecl loc name doms) = mapM_ coDom doms
+  where coConDecl (ConDecl loc name doms) = coDoms doms
 coDecl (ValDecl bind) = coBind bind
 coDecl (GoalDecl loc gtype gname (PostTc tvs) prop) = do
   sko_tvs <- mapM skoTyVar tvs
@@ -546,25 +548,31 @@ coType :: Type c Ti -> CoM ()
 coType (VarTy _) = return ()
 coType (ConTy _tc tys) = mapM_ coType tys
 coType (PredTy pat tau mb_prop) = do
---   coPat pat (Check tau)
-  coType tau
-  void $ T.mapM (`coExp` (Check boolTy)) mb_prop
-coType (FunTy dom rang) = do
-  coDom dom
-  coType rang
+  withForall qs $ do
+    coType tau
+    void $ T.mapM (`coExp` (Check boolTy)) mb_prop
+  where qs = map mkQVar $ Set.elems $ bsPat pat
+coType (FunTy dom rang) = coDom dom $ coType rang
 coType (ListTy elem_ty) = coType elem_ty
-coType (TupleTy ds) = mapM_ coDom ds
+coType (TupleTy ds) = coDoms ds
 coType (ForallTy tvs tau) = do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_tau <- subst_type [] (zip tvs sko_tys) tau
   coType sko_tau
 
-coDom :: Dom Ti -> CoM ()
-coDom (Dom mb_pat tau mb_prop) = do
---   void $ T.mapM (`coPat` (Check tau)) mb_pat
+
+coDoms :: [Dom Ti] -> CoM ()
+coDoms []     = return ()
+coDoms (d:ds) = coDom d $ coDoms ds
+
+coDom :: Dom Ti -> CoM a -> CoM a
+coDom (Dom mb_pat tau mb_prop) m = do  
   coType tau
-  void $ T.mapM (`coExp` (Check boolTy)) mb_prop
+  withForall qs $ do
+    void $ T.mapM (`coExp` (Check boolTy)) mb_prop
+    m
+  where qs = map mkQVar $ Set.elems $ maybe Set.empty bsPat mb_pat
 
 getEqPat :: Int -> Equation -> SimplePat Ti
 getEqPat n (E _ pats _) = pats !! n
