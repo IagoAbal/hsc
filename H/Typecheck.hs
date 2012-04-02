@@ -449,9 +449,9 @@ tcExp (Paren e) exp_ty = liftM Paren $ tcExp e exp_ty
 --   LeftSection :: Exp p -> Op -> Exp p
 tcExp (LeftSection arg1 op) exp_ty = do
   (op',op_ty) <- inferExpType op
-  split_op_ty@([dom1,dom2],rang) <- unifyFuns 2 op_ty
-  ([arg1'],rang') <- tcArgs [arg1] (dom1 \--> (dom2 \--> rang))
-  (dom2 \--> rang') ~>? exp_ty
+  split_op_ty@([_dom1,_dom2],_rang) <- unifyFuns 2 op_ty
+  ([arg1'],rang') <- tcArgs [arg1] op_ty
+  rang' ~>? exp_ty
   return (LeftSection arg1' op')
 --   RightSection :: Op -> Exp p -> Exp p
 tcExp (RightSection op arg2) exp_ty = do
