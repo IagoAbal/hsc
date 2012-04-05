@@ -14,6 +14,9 @@ import Unique( Uniquable(..), MonadUnique(..) )
 
 import Data.Data ( Data, Typeable )
 import Data.Function ( on )
+import qualified Data.Generics.Uniplate.Data as G
+import Data.IntMap ( IntMap )
+import Data.Sequence ( Seq )
 
 import Unsafe.Coerce ( unsafeCoerce )
 
@@ -28,6 +31,9 @@ data Var
     , skolemVar :: !Bool
     }
     deriving(Typeable,Data)
+
+varTau :: Var -> Tau
+varTau = sigma2tau . varType
 
 mkVar :: Name -> Sigma -> Var
 mkVar name ty = V name ty False
@@ -115,10 +121,15 @@ type TyParams = [TyVar]
 
 -- * Modules
 
-data Module = Module ModuleName [Decl]
+data Module = Module {
+      modName :: ModuleName
+    , modDecls :: [Decl]
+    , modTCCs :: IntMap TCC
+    }
+    deriving(Eq,Typeable,Data)
 
 newtype ModuleName = ModName String
-
+    deriving(Eq,Typeable,Data)
 
 -- * Declarations
 
@@ -128,18 +139,18 @@ data Decl = TypeDecl TyVar TyParams Tau
               -- ^ inductive data type
           | ValDecl Bind
               -- ^ Value declarations
-          | GoalDecl GoalType Var TyParams Prop
+          | GoalDecl GoalType Name TyParams Prop
               -- ^ logical goal (theorem or lemma)
     deriving(Eq,Typeable,Data)
 
 data Bind = FunBind IsRec Var [TyVar] [Var] Rhs -- [Match]
                 -- ^ a function defined by a *set* of equations
                 -- NB: Only uniform definitions are allowed
-          | PatBind Pat Rhs
-                -- ^ pattern binding
+--           | PatBind Pat Rhs
+--                 -- ^ pattern binding
     deriving(Eq,Typeable,Data)
 
-type WhereBinds = [Bind]
+-- type WhereBinds = [Bind]
 
 data IsRec = Rec
            | NonRec
@@ -153,13 +164,15 @@ data GoalType = TheoremGoal
               | LemmaGoal
     deriving(Eq,Typeable,Data)
 
+mkSimpleBind :: Var -> Rhs -> Bind
+mkSimpleBind x rhs = FunBind NonRec x [] [] rhs
 
 -- * Expressions
 
 data Exp = Var Var -- ^ variable
          | Con Con -- ^ data constructor
          | Lit Lit -- ^ literal constant
-         | Undefined
+--          | Undefined
          | PrefixApp OpExp Exp --  ^ prefix application
          | InfixApp Exp OpExp Exp -- ^ infix application
          | App Exp Exp
@@ -171,6 +184,7 @@ data Exp = Var Var -- ^ variable
          | Let [Bind] Exp -- ^ local declarations with @let@
          | TyLam [TyVar] Exp  -- ^ type lambda
          | Ite Tau Prop Exp Exp -- ^ @if@ /exp/ @then@ /exp/ @else@ /exp/
+         | If Tau GuardedRhss -- ^ Generalized @if@ expressions
          -- | @case@ /exp/ @of@ /alts/
          | Case Tau -- ^ the type of the whole case expression
                 Exp
@@ -216,7 +230,14 @@ mkTyLam tvs expr = TyLam tvs expr
 
 -- | The right hand side of a function or pattern binding.
 -- NB: A Rhs has always a Tau type.
-data Rhs = Rhs Tau Exp WhereBinds
+data Rhs = Rhs Tau Exp
+    deriving(Eq,Typeable,Data)
+
+data GuardedRhss = GuardedRhss [GuardedRhs]
+                               (Maybe Exp) -- ^ else
+    deriving(Eq,Typeable,Data)
+
+data GuardedRhs = GuardedRhs Prop Exp
     deriving(Eq,Typeable,Data)
 
 -- | RHS of a lamba-abstraction
@@ -224,7 +245,7 @@ data Rhs = Rhs Tau Exp WhereBinds
 type LamRHS = Rhs
 
 rhsExp :: Tau -> Exp -> Rhs
-rhsExp ty e = Rhs ty e []
+rhsExp = Rhs
 
 -- ** Patterns
 
@@ -244,6 +265,7 @@ data Pat = VarPat Var
   deriving(Eq,Typeable,Data)
 
 -- | A very basic, non-nested pattern
+-- No ParenPat's allowed
 type SPat = Pat
 
 -- isVarPat :: Pat p -> Bool
@@ -268,6 +290,10 @@ pat2exp (ConPat typs con ps)
 pat2exp (TuplePat tup_ty ps) = Tuple tup_ty $ map pat2exp ps
 pat2exp (ParenPat p) = Paren $ pat2exp p
 
+rmParenPat :: Pat -> Pat
+rmParenPat = G.transform f
+  where f (ParenPat p) = p
+        f pat          = pat
 
 -- | An /alt/ in a @case@ expression.
 data Alt = Alt SPat Rhs
@@ -724,3 +750,28 @@ typeKi = TypeKi
 
 mkFunKi :: [Kind] -> Kind -> Kind
 mkFunKi doms rang =  foldr (++>) rang doms
+
+
+-- * TCCs
+
+data TccHypoThing = ForAll [Var]
+                  | LetIn [Bind]
+                  | Facts [Prop]
+    deriving(Eq,Typeable,Data)
+
+type TccPropCtxt = Seq TccHypoThing
+
+data TCC
+  = CoercionTCC {
+      tccSrcCtxt  :: !String
+    , tccPropCtxt :: TccPropCtxt
+    , tccExpr     :: Exp
+    , tccActType  :: Sigma
+    , tccExpType  :: Sigma
+    }
+  | CompletenessTCC {
+      tccSrcCtxt  :: !String
+    , tccPropCtxt :: TccPropCtxt
+    , tccProps    :: Prop
+    }
+    deriving(Eq,Typeable,Data)

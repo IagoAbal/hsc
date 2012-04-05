@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 
 -- | Pretty-printing for Core syntax
 module Core.Syntax.Pretty where
@@ -6,6 +7,8 @@ module Core.Syntax.Pretty where
 import Core.Syntax.AST
 
 import Pretty
+
+import Data.Foldable ( toList )
 
 
 
@@ -33,18 +36,18 @@ ppTyParams = map (\tv -> char '@' <> pretty tv)
 -- * Modules
 
 instance Pretty Module where
-  pretty (Module modName decls) =
+  pretty (Module{modName,modDecls}) =
     topLevel (ppModuleHeader modName)
-       (map pretty decls)
+       (map pretty modDecls)
 
 ppModuleHeader :: ModuleName ->  Doc
-ppModuleHeader modName = mySep [
+ppModuleHeader name = mySep [
   text "module",
-  pretty modName,
+  pretty name,
   text "where"]
 
 instance Pretty ModuleName where
-  pretty (ModName modName) = text modName
+  pretty (ModName name) = text name
 
 
 -- * Declarations
@@ -72,15 +75,15 @@ instance Pretty GoalType where
   pretty LemmaGoal   = text "lemma"
 
 instance Pretty Bind where
-  pretty (FunBind _rec fun typs args (Rhs _tau expr whereDecls))
+  pretty (FunBind _rec fun typs args (Rhs _tau expr))
     =  pretty fun <> colon <> pretty (varType fun)
     $$ myFsep ([pretty fun] ++ ppTyParams typs ++ pp_args
                 ++ [ppRhsExp ValDef expr])
-    $$$ ppWhere whereDecls
+--     $$$ ppWhere whereDecls
     where pp_args = map pretty args
-  pretty (PatBind pat (Rhs _tau expr whereDecls)) =
-    myFsep [pretty pat, ppRhsExp ValDef expr]
-        $$$ ppWhere whereDecls
+--   pretty (PatBind pat (Rhs _tau expr whereDecls)) =
+--     myFsep [pretty pat, ppRhsExp ValDef expr]
+--         $$$ ppWhere whereDecls
 
 --ppMatch :: Var -> Match -> Doc
 --ppMatch fun (Match  ps (Rhs _tau expr whereDecls)) =
@@ -89,9 +92,9 @@ instance Pretty Bind where
 --      where
 --    lhs = prettyBndr fun : map (prettyPrec 2) ps
 
-ppWhere :: WhereBinds -> Doc
-ppWhere [] = empty
-ppWhere l  = nest 2 (text "where" $$$ ppBody whereIndent (map pretty l))
+-- ppWhere :: WhereBinds -> Doc
+-- ppWhere [] = empty
+-- ppWhere l  = nest 2 (text "where" $$$ ppBody whereIndent (map pretty l))
 
 instance Pretty ConDecl where
   pretty (ConDecl name typeList) =
@@ -125,7 +128,7 @@ ppInfixApp op a b
 
 instance Pretty Exp where
   pretty (Lit lit) = pretty lit
-  pretty Undefined = text "_|_"
+--   pretty Undefined = text "_|_"
     -- no other possibility for prefix ops
   pretty (PrefixApp op a) = myFsep [ppOpExp op, pretty a]
   pretty (InfixApp a op b) = ppInfixApp op a b
@@ -141,6 +144,7 @@ instance Pretty Exp where
     myFsep [text "if", pretty cond,
       text "then", pretty thenexp,
       text "else", pretty elsexp]
+  pretty (If _ grhss) = myFsep [text "if", ppGuardedRhss grhss]
   pretty (Case cond _ptcty altList) =
     myFsep [text "case", pretty cond, text "of"]
     $$$ ppBody caseIndent (map pretty altList)
@@ -176,9 +180,9 @@ rhsSepSym CaseAlt = text "->"
 rhsSepSym IfExp   = text "->"
 
 ppRhs :: RhsContext -> Rhs -> Doc
-ppRhs ctx (Rhs _tau expr whereDecls)
+ppRhs ctx (Rhs _tau expr)
   = ppRhsExp ctx expr
-  $$$ ppWhere whereDecls
+--   $$$ ppWhere whereDecls
 
 ppRhsExp :: RhsContext -> Exp -> Doc
 ppRhsExp ctx e = rhsSepSym ctx <+> pretty e
@@ -187,17 +191,18 @@ ppRhsExp ctx e = rhsSepSym ctx <+> pretty e
 --ppGRhs ctx (UnGuarded e)   = rhsSepSym ctx <+> pretty e
 --ppGRhs ctx (Guarded grhss) = ppGuardedRhss ctx grhss
 
---ppGuardedRhss :: RhsContext -> GuardedRhss -> Doc
---ppGuardedRhss ctx (GuardedRhss guardList elserhs)
---  = myVcat $ map (ppGuardedRhs ctx) guardList ++ [ppElse ctx elserhs]
+ppGuardedRhss :: GuardedRhss -> Doc
+ppGuardedRhss (GuardedRhss guardList elserhs)
+ = myVcat $ map ppGuardedRhs guardList ++ [ppElse elserhs]
 
---ppGuardedRhs :: RhsContext -> GuardedRhs -> Doc
---ppGuardedRhs ctx (GuardedRhs guard body) =
---    myFsep [char '|', pretty guard, rhsSepSym ctx, pretty body]
+ppGuardedRhs :: GuardedRhs -> Doc
+ppGuardedRhs (GuardedRhs guard body)
+  = myFsep [char '|', pretty guard, text "->", pretty body]
 
---ppElse :: RhsContext -> Exp -> Doc
---ppElse ctx body
---  = myFsep [char '|', text "else", rhsSepSym ctx, pretty body]
+ppElse :: Maybe Exp -> Doc
+ppElse (Just body)
+  = myFsep [char '|', text "else", text "->", pretty body]
+ppElse Nothing = empty
 
 -- ** Patterns
 
@@ -366,3 +371,26 @@ instance Pretty Kind where
     = parensIf (p > 0) $
         myFsep [prettyPrec 1 k1, text "->", pretty k2]
 
+-- * TCCs
+
+instance Pretty TccHypoThing where
+  pretty (ForAll xs)
+    = myFsep $ text "forall" : map pretty xs
+  pretty (LetIn binds)
+    = text "let" <+> ppBody letIndent (map pretty binds)
+  pretty (Facts props)
+    = vcat $ map pretty props
+
+instance Pretty TCC where
+  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty)
+    = brackets (text srcCtxt)
+    $$ (vcat $ map pretty $ toList propCtxt)
+    $$ text "|------------------------------------------------------ (COERCION)"
+    $$ pretty act_ty
+    $$ text "~~" <+> pretty expr <+> text "~~>"
+    $$ pretty exp_ty
+  pretty (CompletenessTCC srcCtxt propCtxt prop)
+    = brackets (text srcCtxt)
+    $$ (vcat $ map pretty $ toList propCtxt)
+    $$ text "|------------------------------------------------------ (COMPLETENESS)"
+    $$ pretty prop

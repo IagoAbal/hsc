@@ -20,14 +20,14 @@ fvBinds = Set.unions . map fvBind
 fvBind :: Bind -> Set Var
 fvBind (FunBind _rec fun _typs args rhs)
   = fvBndr fun `Set.union` (Set.delete fun $ fvRhs rhs Set.\\ Set.fromList args)
-fvBind (PatBind pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
+-- fvBind (PatBind pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
 
 bsBinds :: [Bind] -> Set Var
 bsBinds = Set.unions . map bsBind
 
 bsBind :: Bind -> Set Var
 bsBind (FunBind _rec fun _typs _args _rhs) = Set.singleton fun
-bsBind (PatBind pat _rhs)                  = bsPat pat
+-- bsBind (PatBind pat _rhs)                  = bsPat pat
 
 fvExps :: [Exp] -> Set Var
 fvExps = Set.unions . map fvExp
@@ -39,7 +39,7 @@ fvExp :: Exp -> Set Var
 fvExp (Var x)   = Set.singleton x
 fvExp (Con _)   = Set.empty          -- ?
 fvExp (Lit _)   = Set.empty
-fvExp Undefined = Set.empty
+-- fvExp Undefined = Set.empty
 fvExp (PrefixApp _op e) = fvExp e
 fvExp (InfixApp e1 _op e2) = fvExps [e1,e2]
 fvExp (App e1 e2) = fvExps [e1,e2]
@@ -49,7 +49,8 @@ fvExp (Lam args rhs)
 fvExp (Let bs body)
   = fvBinds bs `Set.union` (fvExp body Set.\\ bsBinds bs)
 fvExp (TyLam _tvs body) = fvExp body
-fvExp (Ite _ptcty g t e) = fvExps [g,t,e]
+fvExp (Ite _ g t e) = fvExps [g,t,e]
+fvExp (If _ grhss) = fvGuardedRhss grhss
 fvExp (Case ty e alts) = fvExp e `Set.union` fvType ty `Set.union` fvAlts alts
 fvExp (Tuple _ es) = fvExps es
 fvExp (List _ es) = fvExps es
@@ -91,7 +92,17 @@ fvAlt :: Alt -> Set Var
 fvAlt (Alt pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
 
 fvRhs :: Rhs -> Set Var
-fvRhs (Rhs _ expr whr) = fvBinds whr `Set.union` (fvExp expr Set.\\ bsBinds whr)
+fvRhs (Rhs _ expr) = fvExp expr
+
+fvGuardedRhss :: GuardedRhss -> Set Var
+fvGuardedRhss (GuardedRhss grhss elserhs)
+  = Set.unions $ fvElse elserhs : map fvGuardedRhs grhss 
+
+fvGuardedRhs :: GuardedRhs -> Set Var
+fvGuardedRhs (GuardedRhs g e) = fvExps [g,e]
+
+fvElse :: Maybe Exp -> Set Var
+fvElse = fvMaybeExp
 
 fvTypes :: [Type c] -> Set Var
 fvTypes = Set.unions . map fvType

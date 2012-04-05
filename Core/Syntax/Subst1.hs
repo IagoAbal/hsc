@@ -147,10 +147,10 @@ substBind s (FunBind Rec fun typs args rhs) = do
   (args',s_rhs) <- substBndrs s_rhs' args
   rhs' <- substRhs s_rhs rhs  -- recursive bindings
   return (FunBind Rec fun' typs' args' rhs',s')
-substBind s (PatBind pat rhs) = do
-  rhs' <- substRhs s rhs
-  (pat',s') <- substPat s pat
-  return (PatBind pat' rhs',s')
+-- substBind s (PatBind pat rhs) = do
+--   rhs' <- substRhs s rhs
+--   (pat',s') <- substPat s pat
+--   return (PatBind pat' rhs',s')
 --substBind _s _other = undefined -- impossible
 
 substExps :: MonadUnique m => Subst1 -> [Exp] -> m [Exp]
@@ -167,7 +167,7 @@ substExp Subst1{substVarEnv} e@(Var x)
         Nothing -> return e    -- ???
 substExp _s con@(Con _) = return con     -- ? constructors are not substituted...
 substExp _s lit@(Lit _) = return lit
-substExp _s Undefined = return Undefined
+-- substExp _s Undefined = return Undefined
 substExp s (PrefixApp op e) = liftM2 PrefixApp (substOpExp s op) (substExp s e)
 substExp s (InfixApp e1 op e2)
   = liftM3 InfixApp (substExp s e1) (substOpExp s op) (substExp s e2)
@@ -184,6 +184,8 @@ substExp s (Let binds body) = do
   liftM (Let binds') $ substExp s' body
 substExp s (Ite ite_ty g t e)
   = liftM4 Ite (substType s ite_ty) (substExp s g) (substExp s t) (substExp s e)
+substExp s (If if_ty grhss)
+  = liftM2 If (substType s if_ty) (substGuardedRhss s grhss)
 substExp s (Case casety e alts)
   = liftM3 Case (substType s casety) (substExp s e) (substAlts s alts)
 substExp s (Tuple tupty es) = liftM2 Tuple (substType s tupty) (substExps s es)
@@ -202,11 +204,21 @@ substOpExp s (OpExp tys op) = do
   return $ OpExp tys' op
 
 substRhs :: MonadUnique m => Subst1 -> Rhs -> m Rhs
-substRhs s (Rhs rhs_ty expr whr)
+substRhs s (Rhs rhs_ty expr)
   = do rhs_ty' <- substType s rhs_ty
-       (whr',s') <- substBinds s whr
-       expr' <- substExp s' expr
-       return $ Rhs rhs_ty' expr' whr'
+--        (whr',s') <- substBinds s whr
+       expr' <- substExp s expr
+       return $ Rhs rhs_ty' expr'
+
+substGuardedRhss :: MonadUnique m => Subst1 -> GuardedRhss -> m GuardedRhss
+substGuardedRhss s (GuardedRhss pgrhss elserhs)
+  = liftM2 GuardedRhss (mapM (substGuardedRhs s) pgrhss) (substElse s elserhs)
+
+substGuardedRhs :: MonadUnique m => Subst1 -> GuardedRhs -> m GuardedRhs
+substGuardedRhs s (GuardedRhs g e) = liftM2 GuardedRhs (substExp s g) (substExp s e)
+
+substElse :: MonadUnique m => Subst1 -> Maybe Exp -> m (Maybe Exp)
+substElse = substMaybeExp
 
 substPats :: MonadUnique m => Subst1 -> [Pat] -> m ([Pat],Subst1)
 substPats = mapAccumM substPat
