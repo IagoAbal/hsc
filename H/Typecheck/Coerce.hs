@@ -30,8 +30,6 @@ import qualified Data.Set as Set
 import Data.Sequence ( (|>) )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
--- import Data.Maybe ( maybe )
--- import qualified Data.Set as Set
 
 
 type CoM = H CoEnv ModTCCs CoST
@@ -136,14 +134,12 @@ addCompletenessTCC prop = do
 coDecls :: [Decl Ti] -> CoM ()
 coDecls = mapM_ coDecl
 
--- data Decl p where
 coDecl :: Decl Ti -> CoM ()
 coDecl (TypeDecl loc tyname tvs tau) = do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_tau <- subst_type [] (zip tvs sko_tys) tau
   coType sko_tau
---   DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
 coDecl (DataDecl loc tyname tvs constrs) = do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
@@ -177,8 +173,6 @@ coBind (FunBind _rec fun fun_tsig (PostTc tvs) matches)
   fun_tau <- instSigmaType fun_ty sko_tys
 --   traceDoc (text "fun-tau =" <+> pretty fun_tau) $ do
   coMatches sko_matches fun_tau
---   -- WRONG: I have to use co_Equations
---   mapM_ (`coMatch` fun_tau) matches
   where fun_ty = sortOf fun
 
 coTypeSig :: TypeSig Ti -> CoM ()
@@ -349,13 +343,6 @@ coAlts scrut_var alts = do
   qs <- mapM alt2eq alts
   co_Equations [scrut_var] qs
 
--- WRONG
--- coAlt :: Alt Ti -> Tau Ti -> CoM ()
--- coAlt (Alt loc pat rhs) scrut_ty = do
---   void $ coPat pat (Check scrut_ty)
---   coRhs rhs
-
--- data Rhs p = Rhs (GRhs p) (WhereBinds p)
 coRhs :: Rhs Ti -> CoM ()
 coRhs rhs@(Rhs (PostTc rhs_ty) grhs binds) = do
   coBinds binds
@@ -393,65 +380,6 @@ coElse NoElse          _exp_ty = return ()
 coElse (Else loc expr)  exp_ty = void $ coExp expr (Check $ tau2sigma exp_ty)
 
 
--- -- I think it is WRONG because a pat may have type annotations depending on
--- -- previous pats...
--- coPats :: [Pat Ti] -> CoM [Tau Ti]
--- coPats = mapM (flip coPat Infer)
-
--- coPat = undefined
--- coPat :: Pat Ti -> Expected (Tau Ti) -> CoM (Tau Ti)
--- coPat (VarPat x) exp_ty = (sigma2tau (varType x) ->? exp_ty) (Var x)
--- coPat (LitPat lit) exp_ty = (intTy ->? exp_ty) (Lit lit)
--- coPat cons_pat@(InfixCONSPat (PostTc typ) p1 p2) exp_ty = do
---   cons_tau <- instSigmaType cons_ty [typ]
---   res_ty <- coEq [p1,p2] cons_tau
---   (res_ty ->? exp_ty) (pat2exp cons_pat)
---   where cons_ty = sortOf ConsCon
--- coPat con_pat@(ConPat con (PostTc typs) ps) exp_ty = do
---   con_tau <- instSigmaType con_ty typs
---   res_ty <- coEq ps con_tau
---   (res_ty ->? exp_ty) (pat2exp con_pat)
---   where con_ty = sortOf con
--- coPat tup_pat@(TuplePat ps (PostTc tup_ty)) exp_ty = do
---   coTuplePat ps ds
---   (tup_ty ->? exp_ty) (pat2exp tup_pat)
---   where TupleTy ds = mu_0 tup_ty
--- coPat list_pat@(ListPat ps (PostTc list_ty)) exp_ty = do
---   zipWithM_ coPat ps (repeat $ Check elem_ty)
---   (list_ty ->? exp_ty) (pat2exp list_pat)
---   where ListTy elem_ty = mu_0 list_ty
--- coPat (ParenPat p) exp_ty = coPat p exp_ty
--- coPat (WildPat wild_var) exp_ty
---   = (sigma2tau (varType wild_var) ->? exp_ty) (Var wild_var)
--- coPat (AsPat x pat) exp_ty = do
---   void $ coPat pat exp_ty
---   (sigma2tau (varType x) ->? exp_ty) (Var x)
--- -- coPat (SigPat pat tau) exp_ty = do
--- --   coType tau
--- --   void $ coPat pat (Check tau)
--- --   (tau ->? exp_ty) (pat2exp pat)
-
--- coTuplePat :: [Pat Ti] -> [Dom Ti] -> CoM ()
--- coTuplePat []     []     = return ()
--- coTuplePat (p:ps) (d:ds) = do
---   void $ coPat p (Check $ dom2type d)
---     -- FIX Should I generalise patRangeSubst and define instDomsWithPat ?
---   ds_p <- instDoms (pat2exp p) d ds
---   coTuplePat ps ds_p
-
-
--- -- I think it is WRONG because a pat may have type annotations depending on
--- -- previous pats, and because when I call instFunWithPat and I get rang', this
--- -- rang' may depend on pat variables...
--- coEq :: [Pat Ti] -> Tau Ti -> CoM (Tau Ti)
--- coEq []         res_ty = return res_ty
--- coEq (pat:pats) fun_ty = do
---   let FunTy dom rang = mu_0 fun_ty
---   void $ coPat pat (Check $ dom2type dom)
---   rang' <- instFunTyWithPat (dom,rang) pat
---   coEq pats rang'
-
-
 -- * Equations
 
 data Equation
@@ -467,9 +395,6 @@ data EqRHS = NoEqRHS
 coEqRHS :: EqRHS -> CoM ()
 coEqRHS NoEqRHS     = return ()
 coEqRHS (EqRHS rhs) = coRhs rhs
-
--- eqArity :: Equation -> Int
--- eqArity (E _ pats _) = length pats
 
 mkEq :: SrcLoc -> [Pat Ti] -> Rhs Ti -> CoM Equation
 mkEq loc pats rhs = do
@@ -574,10 +499,6 @@ co_Equations (x:xs) qs
   | all isTuple qs = matchTuple x xs qs
   | all isCon   qs = matchCon x xs qs
   | otherwise = throwError $ text "Non-uniform definition/pattern(s)"
--- match sup [] [] def = def
--- match sup [] [q] def = snd q
--- match sup [] (_:_) def = error "Non-uniform: empty-rule failed"
--- match sup us [] def = def
 
 
 subst_eq :: [(Var Ti,Exp Ti)] -> Equation -> CoM Equation
