@@ -43,12 +43,11 @@ emptyTiEnv = TiEnv Map.empty
                               ,(consCon,tcConsCon)])
 
 
-finModule :: UniqSupply -> Module Tc -> IO (Either Message (Module Ti),UniqSupply)
-finModule us (Module loc modname decls)
-  = do (res,us') <- runH decls_ti (SrcContext loc (text "In module" <+> ppQuot modname) False) us emptyTiEnv ()
-       case res of
-            Left err -> return (Left err,us')
-            Right (decls',(),()) -> return (Right $ Module loc modname decls',us')
+finModule :: Module Tc -> TiM (Module Ti)
+finModule (Module loc modname decls)
+  = inContextAt loc (text "In module" <+> ppQuot modname) $ do
+      decls' <- decls_ti
+      return $ Module loc modname decls'
   where decls_ti = finDecls decls
 
 lookupTyCon :: TyCon Tc -> TiM (TyCon Ti)

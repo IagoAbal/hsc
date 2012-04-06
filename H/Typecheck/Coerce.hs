@@ -42,12 +42,11 @@ type ModTCCs = IntMap TCC
 
 data CoST = CoST { tccCount :: !Int }
 
-coModule :: UniqSupply -> Module Ti -> IO (Either Message [TCC],UniqSupply)
-coModule us (Module loc modname decls)
-  = do (res,us') <- runH (coDecls decls) (SrcContext loc (text "In module" <+> ppQuot modname) False) us emptyCoEnv ()
-       case res of
-            Left err -> return (Left err,us')
-            Right ((),(),tccs) -> return (Right tccs,us')
+coModule :: Module Ti -> CoM ModTCCs
+coModule (Module loc modname decls)
+  = liftM snd $ listen $
+      inContextAt loc (text "In module" <+> ppQuot modname) $
+        coDecls decls
 
 emptyCoEnv :: CoEnv
 emptyCoEnv = CoEnv Seq.empty

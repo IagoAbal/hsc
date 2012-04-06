@@ -14,13 +14,15 @@ import Pretty
 
 import Unique
 
+import Control.Applicative ( Applicative(..) )
 import Control.Monad.Error
 import Control.Monad.RWS.Strict
 
 import Data.IORef
 
 newtype H env log st a = H { unH :: RWST (Henv env) log st (ErrorT Message IO) a }
-  deriving (Functor, Monad, MonadIO, MonadFix)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
+
 
 runH :: H env log st a -> SrcContext -> UniqSupply -> env -> st -> IO (Either Message (a,st,log),UniqSupply)
 runH m (SrcContext loc descr isprop) us env st0 = do
@@ -29,6 +31,25 @@ runH m (SrcContext loc descr isprop) us env st0 = do
   res <- runErrorT (runRWST (unH m) henv0 st0)
   us' <- readIORef us_ref
   return (res,us')
+
+bindH :: H env' log' st' a -> env' -> st'
+              -> (a -> st' -> log' -> H env log st b) -> H env log st b
+bindH m env' st0' f = H $ RWST $ \henv0@Henv{henv_us} st0 -> do
+  let henv0' = Henv [] False henv_us env'
+  (x,s,l) <- runRWST (unH m) henv0' st0'
+  runRWST (unH $ f x s l) henv0 st0
+
+bindH_ :: H env' log' st' a -> env' -> st'
+              -> (a -> H env log st b) -> H env log st b
+bindH_ m env' st0' f = bindH m env' st0' (\x _ _ -> f x)
+  
+
+execPrintH :: Pretty a => H env log st a -> SrcContext -> UniqSupply -> env -> st -> IO ()
+execPrintH m ctx us env st = do
+  (res,_) <- runH m ctx us env st
+  case res of
+      Left err      -> putStrLn $ render err
+      Right (x,_,_) -> putStrLn $ prettyPrint x
 
 data Henv env
   = Henv {

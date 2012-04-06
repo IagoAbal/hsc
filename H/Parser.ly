@@ -16,8 +16,10 @@
 >
 > module H.Parser (
 >   parseModule, parseModuleWithMode,
->   ParseMode(..), defaultParseMode, ParseResult(..)) where
+>   ParseMode(..), defaultParseMode, ParseResult(..),
+>   parseH) where
 > 
+> import H.Monad ( H )
 > import H.Syntax
 > import H.SrcLoc
 > import Pretty
@@ -31,6 +33,7 @@
 > import Sorted
 >
 > import Control.Monad ( (>=>) )
+> import Control.Monad.Error ( throwError )
 > }
 
 
@@ -602,4 +605,8 @@ Miscellaneous (mostly renamings)
 > -- | Parse of a string, which should contain a complete H! module.
 > parseModuleWithMode :: ParseMode -> String -> ParseResult (Module Pr)
 > parseModuleWithMode mode = runParserWithMode mode parse >=> applyPreludeFixities
+
+> parseH :: ParseResult a -> H () () () a
+> parseH (ParseOk a) = return a
+> parseH (ParseFailed loc msg) = throwError $ mySep [pretty loc <> char ':', text msg]
 > }

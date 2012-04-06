@@ -35,23 +35,18 @@ import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
 
+rnModule ::Module Pr -> RnM (Module Rn)
+rnModule (Module loc modname decls)
+  = inContextAt loc (text "In module" <+> ppQuot modname) $ do
+      decls' <- decls_rn
+      return $ Module loc modname decls'
+  where decls_rn = renameBndr decls return
 
-rnModule :: UniqSupply -> Module Pr -> IO (Either Message (Module Rn),UniqSupply)
-rnModule us (Module loc modname decls)
-  = do (res,us') <- runH (renameBndr decls return) (SrcContext loc (text "In module" <+> ppQuot modname) False) us Map.empty ()
-       case res of
-            Left err -> return (Left err,us')
-            Right (decls',(),()) -> return (Right $ Module loc modname decls',us')
-
-
--- newtype RnM a = RnM { unRnM :: ReaderT (Map OccName Name) m a }
---     deriving(Functor, Applicative, Monad, MonadUnique, MonadReader (Map OccName Name), MonadContext)
 
 type RnM a = H (Map OccName Name) () () a
 
--- runRnM :: RnM a -> Map OccName Name -> m a
--- runRnM m = runReaderT (unRnM m) 
-
+emptyRnEnv :: Map OccName Name
+emptyRnEnv = Map.empty
 
 
 
