@@ -213,7 +213,7 @@ substExp s (Case e casety alts)
 substExp s (Tuple ptcty es) = liftM2 Tuple (T.mapM (substType s) ptcty) (substExps s es)
 substExp s (List ptcty es) = liftM2 List (T.mapM (substType s) ptcty) (substExps s es)
 substExp s (Paren e) = liftM Paren $ substExp s e
-substExp s (LeftSection e op) = liftM2 LeftSection (substExp s op) (substExp s e)
+substExp s (LeftSection e op) = liftM2 LeftSection (substExp s e) (substExp s op)
 substExp s (RightSection op e) = liftM2 RightSection (substExp s op) (substExp s e)
 substExp s (EnumFromTo e1 en) = liftM2 EnumFromTo (substExp s e1) (substExp s en)
 substExp s (EnumFromThenTo e1 e2 en)
