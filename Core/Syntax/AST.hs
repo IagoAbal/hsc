@@ -218,6 +218,10 @@ splitApp = go []
   where go args (App f a) = go (a:args) f
         go args f         = (f,args)
 
+mkLet :: [Bind] -> Exp -> Exp
+mkLet [] e = e
+mkLet bs e = Let bs e
+
 mkTyApp :: Exp -> [Tau] -> Exp
 mkTyApp expr []  = expr
 mkTyApp expr tys = TyApp expr tys
