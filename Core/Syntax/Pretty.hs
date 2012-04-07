@@ -134,7 +134,7 @@ instance Pretty Exp where
   pretty (InfixApp a op b) = ppInfixApp op a b
   pretty (App a b) = myFsep [pretty a, ppParenExp b]
   pretty (Lam patList rhs) = myFsep $
-    char '\\' : map pretty patList ++ [text "->", ppRhs LamAbs rhs]
+    char '\\' : map pretty patList ++ [ppRhs LamAbs rhs]
   pretty (TyApp e tys) = myFsep $ pretty e : map (\ty -> char '@' <> ppAType ty) tys
   pretty (TyLam tvs body) = myFsep $ char '\\' : map prettyBndr tvs ++ [text "->", pretty body]
   pretty (Let expList letBody) =
@@ -145,7 +145,7 @@ instance Pretty Exp where
       text "then", pretty thenexp,
       text "else", pretty elsexp]
   pretty (If _ grhss) = myFsep [text "if", ppGuardedRhss grhss]
-  pretty (Case cond _ptcty altList) =
+  pretty (Case _ cond altList) =
     myFsep [text "case", pretty cond, text "of"]
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
