@@ -8,8 +8,9 @@ import H.Typecheck.Zonk
 import H.Syntax
 import Pretty
 import H.Phase
+import qualified H.Prop as P
 import H.FreeVars
-import H.Subst1 ( subst_exp, subst_type, subst_doms )
+import H.Subst1 ( subst_exp, subst_mbExp, subst_type, subst_doms )
 import H.TransformPred
 
 import qualified Util.Set as Set
@@ -392,6 +393,18 @@ instDoms e (Dom (Just pat) _ _)     ds
       tpDoms f ds
 instDoms _e _other _ds = undefined -- impossible
 
+instPredTyProp :: MonadUnique m =>
+                    Exp Ti -> Pat Ti -> Tau Ti -> Maybe (Prop Ti) -> m (Maybe (Prop Ti))
+instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
+instPredTyProp  e pat  ty mb_prop
+ | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = subst_mbExp s [] mb_prop
+ | otherwise = do
+    other <- newVar "other" (tau2sigma ty)
+    return $ Just $ Case e (PostTc boolTy)
+                      [Alt Nothing pat (rhsExp boolTy prop)
+                      ,Alt Nothing (VarPat other) (rhsExp boolTy P._False_)
+                      ]
+ where prop = maybe P._True_ id mb_prop
 
 -- Get expressions type
 

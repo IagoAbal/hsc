@@ -418,6 +418,11 @@ data QVar p = QVar {
 mkQVar :: VAR p -> QVar p
 mkQVar var = QVar var Nothing
 
+mkForall :: [VAR p] -> Prop p -> Prop p
+mkForall [] p = p
+mkForall xs p = QP ForallQ (map mkQVar xs) p
+
+
 instance Eq (VAR p) => Eq (QVar p) where
   (==) = (==)  `on` qVarVar
 

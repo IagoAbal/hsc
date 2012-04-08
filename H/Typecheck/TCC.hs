@@ -13,6 +13,7 @@ import H.Monad
 import H.SrcLoc
 import H.SrcContext
 import H.Subst1
+import H.Typecheck.TCC.Coerce ( coerce )
 import H.Typecheck.Utils
 
 import Name
@@ -54,21 +55,23 @@ data TCC
     , tccExpr     :: Exp Ti
     , tccActType  :: Sigma Ti
     , tccExpType  :: Sigma Ti
+    , tccProp     :: Prop Ti
     }
   | CompletenessTCC {
       tccSrcCtxt  :: !Message
     , tccPropCtxt :: TccPropCtxt
-    , tccProps    :: Prop Ti
+    , tccProp     :: Prop Ti
     }
 
 instance Pretty TCC where
-  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty)
+  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
     = brackets srcCtxt
     $$ (vcat $ map pretty $ toList propCtxt)
     $$ text "|------------------------------------------------------ (COERCION)"
     $$ pretty act_ty
     $$ text "~~" <+> pretty expr <+> text "~~>"
     $$ pretty exp_ty
+    $$ (char '<' <+> pretty prop <+> char '>')
   pretty (CompletenessTCC srcCtxt propCtxt prop)
     = brackets srcCtxt
     $$ (vcat $ map pretty $ toList propCtxt)
@@ -160,7 +163,10 @@ addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
     SrcContext{contextDescr} <- getContext
     tccPropCtxt <- asks propCtxt
     tccId <- getNextTCCId
-    addTCCToList tccId $ CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty
+    _POs <- coerce expr act_ty exp_ty
+    let prop = P.conj _POs
+    addTCCToList tccId $
+      CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty prop
   return exp_ty
 
 (->?) :: Tau Ti -> Expected (Tau Ti) -> Exp Ti -> CoM (Tau Ti)

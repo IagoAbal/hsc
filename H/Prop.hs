@@ -28,8 +28,11 @@ mkForall :: [QVar p] -> Prop p -> Prop p
 mkForall [] prop = prop
 mkForall vs prop = QP ForallQ vs prop
 
-hypo :: Prop p -> Prop p -> Prop p
-hypo p = (p .==>.)
+hypo :: IsPostTc p => Prop p -> Prop p -> Prop p
+hypo (Con con) q
+  | con == tcTrueCon = q
+  | con == tcFalseCon = _True_
+hypo p q = p .==>. q
 
 -- | Splits a proposition into conjunctions
 -- e.g. @splitAnd (p1 && p2 && ... && pN) == [p1,p2,...,pN]@
