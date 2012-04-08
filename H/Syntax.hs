@@ -332,7 +332,7 @@ ppMatch fun (Match _pos ps (Rhs _ grhs whereDecls)) =
     myFsep (lhs ++ [ppGRhs ValDef grhs])
     $$$ ppWhere whereDecls
       where
-    lhs = prettyBndr fun : map (prettyPrec 2) ps
+    lhs = pretty fun : map (prettyPrec 2) ps
 
 ppWhere :: PrettyNames p => WhereBinds p -> Doc
 ppWhere [] = empty
