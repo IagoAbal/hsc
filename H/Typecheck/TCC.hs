@@ -134,6 +134,10 @@ is_trivial_coercion act_ty          exp_ty (Lit (IntLit n))
   | act_ty == intTy && exp_ty == natTy && n >= 0 = return True
 is_trivial_coercion (PredTy _ ty _) exp_ty _expr
   | ty == (sigma2tau exp_ty) = return True
+is_trivial_coercion (PredTy (VarPat _) ty1 Nothing) exp_ty expr
+  = is_trivial_coercion (tau2sigma ty1) exp_ty expr
+is_trivial_coercion act_ty (PredTy (VarPat _) ty2 Nothing) expr
+  = is_trivial_coercion act_ty (tau2sigma ty2) expr
 is_trivial_coercion act_ty          exp_ty expr
   | isSynTy act_ty = do
     Just act_ty' <- expandSyn act_ty
