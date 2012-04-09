@@ -206,6 +206,8 @@ data OpExp = OpExp [Tau] Op
 -- | Expressions of boolean type
 type Prop = Exp
 
+type Value = Exp
+
 mkIntLit :: Integer -> Exp
 mkIntLit = Lit . IntLit
 

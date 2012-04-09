@@ -10,6 +10,15 @@ import qualified Data.Generics.Uniplate.Data as G
 import qualified Data.Set as Set
 
 
+val2bool :: Value -> Bool
+val2bool t | t == mkTrue  = True
+           | t == mkFalse = False
+val2bool _other = undefined -- bug
+
+bool2exp :: Bool -> Exp
+bool2exp True = mkTrue
+bool2exp False = mkFalse
+
 cleanup :: Exp -> Exp
 cleanup = G.transform f
   where f (QP _qt xs p)
