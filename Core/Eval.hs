@@ -1,13 +1,19 @@
+{-# LANGUAGE ImplicitParams #-}
 
 module Core.Eval where
 
 import Core.Syntax
 
+import Data.Map ( Map )
+import qualified Data.Map as Map
+
 
 type Value = Exp
 
-eval :: Exp -> Value
-eval t@(Var _) = t
+eval :: (?env :: Map Var Exp) => Exp -> Exp
+eval t@(Var x)
+  | Just e <- Map.lookup x ?env = eval e
+  | otherwise = t
 eval t@(Con _) = t
 eval t@(Lit _) = t
 eval (PrefixApp (OpExp [] (BoolOp NotB)) e) = not_ (eval e)
