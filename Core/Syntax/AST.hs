@@ -206,12 +206,26 @@ data OpExp = OpExp [Tau] Op
 -- | Expressions of boolean type
 type Prop = Exp
 
+mkIntLit :: Integer -> Exp
+mkIntLit = Lit . IntLit
 
--- _True_ :: Prop
--- _True_ = Con tcTrueCon
+mkTrue :: Prop
+mkTrue = Con trueCon
 
--- _False_ :: Prop
--- _False_ = Con tcFalseCon
+mkFalse :: Prop
+mkFalse = Con falseCon
+
+mkNot :: Prop -> Prop
+mkNot p = PrefixApp (OpExp [] (BoolOp NotB)) p
+
+mkNeg :: Exp -> Exp
+mkNeg e = PrefixApp (OpExp [] (IntOp NegI)) e
+
+mkMonoInfixApp :: Op -> Exp -> Exp -> Exp
+mkMonoInfixApp op e1 e2 = InfixApp e1 (OpExp [] op) e2
+
+mkAdd :: Exp -> Exp -> Exp
+mkAdd = mkMonoInfixApp (IntOp AddI)
 
 splitApp :: Exp -> (Exp,[Exp])
 splitApp = go []
