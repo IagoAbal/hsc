@@ -21,6 +21,9 @@ instance Pretty Var where
 instance PrettyBndr Var where
   prettyBndr x = parens $ pretty x <> colon <> pretty (varType x)
 
+instance Show Var where
+  show = render . pretty
+
 instance Pretty TyVar where
   pretty tv@(TyV _ _ False) = pretty $ tyVarName tv
   pretty tv@(TyV _ _ True) = char '\'' <> pretty (tyVarName tv)
@@ -165,6 +168,9 @@ instance Pretty Exp where
     myFsep [pretty e, text ":", pretty ty]
   pretty (QP quant patList body)
     = myFsep $ pretty quant : map pretty patList ++ [text ",", pretty body]
+
+instance Show Exp where
+  show = render . pretty
 
 -- ** RHS
 
