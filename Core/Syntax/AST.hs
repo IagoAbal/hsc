@@ -221,12 +221,6 @@ mkNot p = PrefixApp (OpExp [] (BoolOp NotB)) p
 mkNeg :: Exp -> Exp
 mkNeg e = PrefixApp (OpExp [] (IntOp NegI)) e
 
-mkMonoInfixApp :: Op -> Exp -> Exp -> Exp
-mkMonoInfixApp op e1 e2 = InfixApp e1 (OpExp [] op) e2
-
-mkAdd :: Exp -> Exp -> Exp
-mkAdd = mkMonoInfixApp (IntOp AddI)
-
 splitApp :: Exp -> (Exp,[Exp])
 splitApp = go []
   where go args (App f a) = go (a:args) f
@@ -505,6 +499,9 @@ mkApp f args = foldl App f args
 
 mkInfixApp :: Op -> [Tau] -> Exp -> Exp -> Exp
 mkInfixApp op tys e1 e2 = InfixApp e1 (OpExp tys op) e2
+
+mkMonoInfixApp :: Op -> Exp -> Exp -> Exp
+mkMonoInfixApp op = mkInfixApp op []
 
 (.<.), (.<=.), (.>.), (.>=.) :: Exp -> Exp -> Prop
 x .<. y = mkInfixApp ltOp [] x y
