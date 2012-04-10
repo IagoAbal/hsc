@@ -388,13 +388,14 @@ instance Pretty TccHypoThing where
     = vcat $ map pretty props
 
 instance Pretty TCC where
-  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty)
+  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
     = brackets (text srcCtxt)
     $$ (vcat $ map pretty $ toList propCtxt)
     $$ text "|------------------------------------------------------ (COERCION)"
     $$ pretty act_ty
     $$ text "~~" <+> pretty expr <+> text "~~>"
     $$ pretty exp_ty
+    $$ (char '<' <+> pretty prop <+> char '>')
   pretty (CompletenessTCC srcCtxt propCtxt prop)
     = brackets (text srcCtxt)
     $$ (vcat $ map pretty $ toList propCtxt)

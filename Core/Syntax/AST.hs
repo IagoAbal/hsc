@@ -785,10 +785,11 @@ data TCC
     , tccExpr     :: Exp
     , tccActType  :: Sigma
     , tccExpType  :: Sigma
+    , tccProp     :: Prop
     }
   | CompletenessTCC {
       tccSrcCtxt  :: !String
     , tccPropCtxt :: TccPropCtxt
-    , tccProps    :: Prop
+    , tccProp     :: Prop
     }
     deriving(Eq,Typeable,Data)
