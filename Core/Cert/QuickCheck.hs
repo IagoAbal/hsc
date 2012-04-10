@@ -16,10 +16,10 @@ aBool :: QC.Gen Exp
 aBool = bool2exp <$> QC.arbitrary
 
 anInt :: QC.Gen Exp
-anInt = mkIntLit <$> QC.arbitrary
+anInt = mkInt <$> QC.arbitrary
 
 aNat :: QC.Gen Exp
-aNat = QC.sized $ \n -> mkIntLit . abs <$> QC.arbitrary
+aNat = QC.sized $ \n -> mkInt . abs <$> QC.arbitrary
 
 
 typeGen :: Type c -> QC.Gen Exp

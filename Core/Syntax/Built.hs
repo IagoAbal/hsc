@@ -1,14 +1,19 @@
 
 module Core.Syntax.Built where
 
+
 import Core.Syntax.AST
 import Core.Syntax.FreeVars
 
 import qualified Util.Set as Set
 
+import Data.Foldable ( toList )
 import qualified Data.Generics.Uniplate.Data as G
 import qualified Data.Set as Set
 
+
+
+-- * Expressions
 
 val2bool :: Value -> Bool
 val2bool t | t == mkTrue  = True
@@ -46,3 +51,44 @@ cleanup = G.transform f
         f (InfixApp e1 (OpExp [_] (BoolOp EqB)) e2)
           | e1 == e2 = mkTrue
         f t = t
+
+-- ** Prop
+
+infixr .==>.
+
+(.&&.) :: Prop -> Prop -> Prop
+p .&&. q
+  | p == mkTrue  = q
+  | p == mkFalse = mkFalse
+  | otherwise    = InfixApp p (OpExp [] andOp) q
+
+(.==>.) :: Prop -> Prop -> Prop
+p .==>. q
+  | p == mkTrue  = q
+  | p == mkFalse = mkTrue
+  | otherwise    = InfixApp p (OpExp [] impOp) q
+
+hypo :: Prop -> Prop -> Prop
+hypo = (.==>.)
+
+conj :: [Prop] -> Prop
+conj [] = mkTrue
+conj ps = foldr1 (.&&.) ps
+
+hypos :: [Prop] -> Prop -> Prop
+hypos [] p = p
+hypos hs p = hypo (conj hs) p
+
+-- * TCCs
+
+tcc2prop :: TCC -> Prop
+tcc2prop (CoercionTCC _ ctxt _ _ _ prop)
+  = cleanup $ mkTccCtxtProp ctxt prop
+tcc2prop (CompletenessTCC _ ctxt prop)
+  = cleanup $ mkTccCtxtProp ctxt prop
+
+mkTccCtxtProp :: TccPropCtxt -> Prop -> Prop
+mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
+  where hypoProp (ForAll xs)   = mkForall xs
+        hypoProp (LetIn binds) = mkLet binds
+        hypoProp (Facts hs)    = hypos hs

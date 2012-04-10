@@ -208,38 +208,6 @@ type Prop = Exp
 
 type Value = Exp
 
-mkIntLit :: Integer -> Exp
-mkIntLit = Lit . IntLit
-
-mkTrue :: Prop
-mkTrue = Con trueCon
-
-mkFalse :: Prop
-mkFalse = Con falseCon
-
-mkNot :: Prop -> Prop
-mkNot p = PrefixApp (OpExp [] (BoolOp NotB)) p
-
-mkNeg :: Exp -> Exp
-mkNeg e = PrefixApp (OpExp [] (IntOp NegI)) e
-
-splitApp :: Exp -> (Exp,[Exp])
-splitApp = go []
-  where go args (App f a) = go (a:args) f
-        go args f         = (f,args)
-
-mkLet :: [Bind] -> Exp -> Exp
-mkLet [] e = e
-mkLet bs e = Let bs e
-
-mkTyApp :: Exp -> [Tau] -> Exp
-mkTyApp expr []  = expr
-mkTyApp expr tys = TyApp expr tys
-
-mkTyLam :: [TyVar] -> Exp -> Exp
-mkTyLam [] expr  = expr
-mkTyLam tvs expr = TyLam tvs expr
-
 -- ** Right-hand side
 
 -- | The right hand side of a function or pattern binding.
@@ -496,6 +464,35 @@ lit_0 = Lit (IntLit 0)
 mkInt :: Integer -> Exp
 mkInt = Lit . IntLit
 
+mkTrue :: Prop
+mkTrue = Con trueCon
+
+mkFalse :: Prop
+mkFalse = Con falseCon
+
+mkNot :: Prop -> Prop
+mkNot p = PrefixApp (OpExp [] (BoolOp NotB)) p
+
+mkNeg :: Exp -> Exp
+mkNeg e = PrefixApp (OpExp [] (IntOp NegI)) e
+
+splitApp :: Exp -> (Exp,[Exp])
+splitApp = go []
+  where go args (App f a) = go (a:args) f
+        go args f         = (f,args)
+
+mkLet :: [Bind] -> Exp -> Exp
+mkLet [] e = e
+mkLet bs e = Let bs e
+
+mkTyApp :: Exp -> [Tau] -> Exp
+mkTyApp expr []  = expr
+mkTyApp expr tys = TyApp expr tys
+
+mkTyLam :: [TyVar] -> Exp -> Exp
+mkTyLam [] expr  = expr
+mkTyLam tvs expr = TyLam tvs expr
+
 mkApp :: Exp -> [Exp] -> Exp
 mkApp f args = foldl App f args
 
@@ -520,6 +517,10 @@ x .+. y = mkInfixApp addOp [] x y
 x .-. y = mkInfixApp subOp [] x y
 x .*. y = mkInfixApp mulOp [] x y
 x ./. y = mkInfixApp divOp [] x y
+
+mkForall :: [Var] -> Prop -> Prop
+mkForall [] p = p
+mkForall xs p = QP ForallQ xs p
 
 -- * Types
 

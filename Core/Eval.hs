@@ -21,7 +21,7 @@ eval (PrefixApp (OpExp [] (BoolOp NotB)) e) = not_ (eval e)
         not_ e1 | e1 == mkFalse = mkTrue
         not_ e1                 = mkNot e1
 eval (PrefixApp (OpExp [] (IntOp NegI)) e) = neg_ (eval e)
-  where neg_ (Lit (IntLit n)) = mkIntLit $ -n
+  where neg_ (Lit (IntLit n)) = mkInt $ -n
         neg_ e1               = mkNeg e1
 eval (InfixApp e1 (OpExp [] (BoolOp bop)) e2)
   | bop `elem` [OrB, AndB, ImpB, IffB] = bool_ bop (eval e1) e2
@@ -60,12 +60,12 @@ eval (InfixApp e1 (OpExp [ty] (BoolOp bop)) e2)
           | otherwise  = mkFalse
         cmp_ _ t1 t2 = InfixApp t1 (OpExp [ty] (BoolOp bop)) t2
 eval (InfixApp e1 (OpExp [] (IntOp iop)) e2) = arith_ iop (eval e1) (eval e2)
-  where arith_ AddI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n+m
-        arith_ SubI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n-m
-        arith_ MulI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n*m
-        arith_ DivI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n `div` m
-        arith_ ModI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n `mod` m
-        arith_ ExpI (Lit (IntLit n)) (Lit (IntLit m)) = mkIntLit $ n^m
+  where arith_ AddI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n+m
+        arith_ SubI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n-m
+        arith_ MulI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n*m
+        arith_ DivI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n `div` m
+        arith_ ModI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n `mod` m
+        arith_ ExpI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n^m
         arith_ _ t1 t2 = mkMonoInfixApp (IntOp iop) t1 t2
 eval (App _ _) = undefined
 eval (TyApp _ _) = undefined
