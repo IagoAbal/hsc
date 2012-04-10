@@ -15,6 +15,7 @@ import H.Subst1
   , substPats, substRhs
   , subst_mbExp, subst_type, subst_doms, subst_rhs )
 import H.Syntax
+import H.Typecheck.TCC ( TccHypoThing(..), TccPropCtxt, TCC(..), ModTCCs )
 import H.Typecheck.Utils
   ( tcExprType, tcExprTau, tcRhsType, tcPatsTypes
   , instFunTy, instDoms, instSigmaType
@@ -23,9 +24,11 @@ import H.Typecheck.Utils
 import Control.Applicative ( (<$>), (<*>) )
 import Control.Monad ( forM )
 import Data.Char ( isLower )
+import Data.Foldable ( toList )
 import Data.List ( find, nub )
 import qualified Data.IntMap as IMap
 import qualified Data.Set as Set
+import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
 
 import Pretty
@@ -34,9 +37,11 @@ import Pretty
 type DsgM = H () () ()
 
 
-dsgModule :: Module Ti -> DsgM Core.Module
-dsgModule (Module _ modname decls)
-  = Core.Module (dsgModuleName modname) <$> dsgDecls decls <*> return IMap.empty
+dsgModule :: Module Ti -> ModTCCs -> DsgM Core.Module
+dsgModule (Module _ modname decls) tccs
+  = Core.Module (dsgModuleName modname) <$> dsgDecls decls <*> dsg_tccs tccs
+  where dsg_tccs tccs = IMap.fromList <$>
+                          (mapM (\(i,tcc') -> do tcc <- dsgTCC tcc'; return (i,tcc) ) $ IMap.toList tccs)
 
 dsgModuleName :: ModuleName -> Core.ModuleName
 dsgModuleName (ModName n) = Core.ModName n
@@ -412,6 +417,25 @@ dsgKind :: Kind -> Core.Kind
 dsgKind TypeKi = Core.TypeKi
 dsgKind (FunKi k1 k2) = Core.FunKi (dsgKind k1) (dsgKind k2)
 
+
+dsgTccHypoThing :: TccHypoThing -> DsgM Core.TccHypoThing
+dsgTccHypoThing (ForAll qvs) = Core.ForAll <$> dsgQVars qvs
+dsgTccHypoThing (LetIn binds) = Core.LetIn <$> dsgBinds binds
+dsgTccHypoThing (Facts ps) = Core.Facts <$> dsgExps ps
+
+dsgTccPropCtxt :: TccPropCtxt -> DsgM Core.TccPropCtxt
+dsgTccPropCtxt ctxt = Seq.fromList <$> (mapM dsgTccHypoThing $ toList ctxt)
+
+dsgTCC :: TCC -> DsgM Core.TCC
+dsgTCC (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
+  = Core.CoercionTCC (render srcCtxt)
+      <$> dsgTccPropCtxt propCtxt
+      <*> dsgExp expr <*> dsgType act_ty <*> dsgType exp_ty
+      <*> dsgExp prop
+dsgTCC (CompletenessTCC srcCtxt propCtxt prop)
+  = Core.CompletenessTCC (render srcCtxt)
+      <$> dsgTccPropCtxt propCtxt
+      <*> dsgExp prop
 
 -- * Equations
 
