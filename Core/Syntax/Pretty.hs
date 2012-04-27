@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
 -- | Pretty-printing for Core syntax
@@ -5,10 +6,13 @@ module Core.Syntax.Pretty where
 
 
 import Core.Syntax.AST
+import Core.Syntax.Built
 
 import Pretty
 
 import Data.Foldable ( toList )
+import Data.IntMap ( IntMap )
+import qualified Data.IntMap as IMap
 
 
 
@@ -19,7 +23,7 @@ instance Pretty Var where
   pretty v@(V _ _ True)  = char '!' <> pretty (varName v)
 
 instance PrettyBndr Var where
-  prettyBndr x = parens $ pretty x <> colon <> pretty (varType x)
+  prettyBndr x = pretty x <> colon <> pretty (varType x)
 
 instance Show Var where
   show = render . pretty
@@ -139,7 +143,7 @@ instance Pretty Exp where
   pretty (Lam patList rhs) = myFsep $
     char '\\' : map pretty patList ++ [ppRhs LamAbs rhs]
   pretty (TyApp e tys) = myFsep $ pretty e : map (\ty -> char '@' <> ppAType ty) tys
-  pretty (TyLam tvs body) = myFsep $ char '\\' : map prettyBndr tvs ++ [text "->", pretty body]
+  pretty (TyLam tvs body) = myFsep $ char '\\' : map (parens . prettyBndr) tvs ++ [text "->", pretty body]
   pretty (Let expList letBody) =
     myFsep [text "let" <+> ppBody letIndent (map pretty expList),
       text "in", pretty letBody]
@@ -213,7 +217,7 @@ ppElse Nothing = empty
 -- ** Patterns
 
 instance Pretty Pat where
-  prettyPrec _ (VarPat var) = prettyBndr var
+  prettyPrec _ (VarPat var) = parens $ prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
 --   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
 --     myFsep [pretty a, text "::", pretty b]
@@ -381,23 +385,28 @@ instance Pretty Kind where
 
 instance Pretty TccHypoThing where
   pretty (ForAll xs)
-    = myFsep $ text "forall" : map pretty xs
+    = myFsep $ punctuate comma $ map prettyBndr xs
   pretty (LetIn binds)
     = text "let" <+> ppBody letIndent (map pretty binds)
   pretty (Facts props)
     = vcat $ map pretty props
 
 instance Pretty TCC where
-  pretty (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
-    = brackets (text srcCtxt)
-    $$ (vcat $ map pretty $ toList propCtxt)
-    $$ text "|------------------------------------------------------ (COERCION)"
-    $$ pretty act_ty
-    $$ text "~~" <+> pretty expr <+> text "~~>"
-    $$ pretty exp_ty
-    $$ (char '<' <+> pretty prop <+> char '>')
+  pretty tcc@(CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
+    = text "COERCION TCC"
+    $$ brackets (text srcCtxt)
+    $$ char '>' <+> text "expression:" <+> pretty expr
+    $$ char '>' <+> text "inferred type:" <+> pretty act_ty
+    $$ char '>' <+> text "required type:" <+> pretty exp_ty
+    $$ text "|------------------------------------------------------"
+    $$ pretty (tcc2prop tcc)
   pretty (CompletenessTCC srcCtxt propCtxt prop)
-    = brackets (text srcCtxt)
+    = text "COMPLETENESS TCC"
+    $$ brackets (text srcCtxt)
     $$ (vcat $ map pretty $ toList propCtxt)
-    $$ text "|------------------------------------------------------ (COMPLETENESS)"
+    $$ text "|------------------------------------------------------"
     $$ pretty prop
+
+instance Pretty (IntMap TCC) where
+  pretty tccMap = vcat $ map (blankline . pp_tcc) $ IMap.toList tccMap
+    where pp_tcc (i,tcc) = int i <> char '#' $$ pretty tcc
