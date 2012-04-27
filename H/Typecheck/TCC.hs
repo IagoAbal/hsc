@@ -520,8 +520,11 @@ coDom (Dom mb_pat tau mb_prop) m = do
   coType tau
   withForall qs $ do
     void $ T.mapM (`coExp` (Check boolTy)) mb_prop
-    m
+    with_prop_fact m
   where qs = map mkQVar $ Set.elems $ maybe Set.empty bsPat mb_pat
+        with_prop_fact = case mb_prop of
+                             Nothing -> id
+                             Just p  -> withFacts [p]
 
 getEqPat :: Int -> Equation -> SimplePat Ti
 getEqPat n (E _ pats _) = pats !! n
