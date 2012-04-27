@@ -1138,9 +1138,9 @@ x .<=. y = InfixApp x (Op leOp) y
 x .>. y = InfixApp x (Op gtOp) y
 x .>=. y = InfixApp x (Op geOp) y
 
-(.==.), (./=.) :: Exp p -> Exp p -> Prop p
-x .==. y = InfixApp x (Op eqOp) y
-x ./=. y = InfixApp x (Op neqOp) y
+(.==.), (./=.) :: IsPostTc p => Exp p -> Exp p -> Prop p
+x .==. y = InfixApp x (TyApp (Op eqOp) [intTy]) y
+x ./=. y = InfixApp x (TyApp (Op neqOp) [intTy]) y
 
 (.+.), (.-.), (.*.), (./.) :: Exp p -> Exp p -> Exp p
 x .+. y = InfixApp x (Op addOp) y
