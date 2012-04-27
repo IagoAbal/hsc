@@ -45,4 +45,4 @@ mkProperty (QP ForallQ xs p)
 checkProp :: Prop -> IO ()
 checkProp p
   | supProp p = QC.quickCheck $ mkProperty p
-  | otherwise = print "Sorry, property not supported :-("
+  | otherwise = putStrLn "Sorry, property not supported :-("
