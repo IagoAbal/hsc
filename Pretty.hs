@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -w #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
------------------------------------------------------------------------------
+
+----------------------------------------------------------------------
 -- |
 -- Module      :  H.Pretty
 -- Copyright   :  (c) The GHC Team, Noel Winstanley 1997-2000
@@ -13,8 +13,10 @@
 --
 -- Pretty printer for H!.
 --
------------------------------------------------------------------------------
+----------------------------------------------------------------------
 
+
+-- TODO: Define export list
 module Pretty where
 --   ( -- * Pretty printing
 --     Pretty,
@@ -395,7 +397,10 @@ fullRender :: P.Mode -> Int -> Float -> (P.TextDetails -> a -> a)
 fullRender = fullRenderWithMode defaultMode
 
 
--- * Tracing
+-- * Errors and tracing
+
+errorDoc :: Doc -> a
+errorDoc = error . render
 
 traceDoc :: Doc -> a -> a
 traceDoc = trace . render
