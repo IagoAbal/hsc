@@ -1,30 +1,47 @@
-{-# LANGUAGE MultiParamTypeClasses,
-             PatternGuards,
-             GADTs,
-             NamedFieldPuns,
-             FlexibleContexts,
-             FlexibleInstances,
-             TypeSynonymInstances,
-             GeneralizedNewtypeDeriving,
-             StandaloneDeriving,
-             FunctionalDependencies,
-             UndecidableInstances
-             #-}
+
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+-- |
+-- Module      :  H.Renamer
+-- Copyright   :  (c) Iago Abal, 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- Renamer for H!.
+-- This module implements a post-parsing phase in which every name is
+-- assigned a unique identifier and, additionally, it detects some kind
+-- of errors that are more cumbersome to consider during parsing.
 
 module H.Renamer where
+
+
+#include "bug.h"
 
 import H.Syntax
 import H.FreeVars
 import H.SrcContext
 import H.Phase
-import Pretty
-import H.Message
 import H.Monad
 
 import Util.Monad
 
 import Name
-import Unique
+import Pretty
+import Unique ( getUniq )
 
 import Control.Monad.Error
 import Control.Monad.Reader
@@ -35,20 +52,28 @@ import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
 
-rnModule ::Module Pr -> RnM (Module Rn)
-rnModule (Module loc modname decls)
-  = inContextAt loc (text "In module" <+> ppQuot modname) $ do
-      decls' <- decls_rn
-      return $ Module loc modname decls'
-  where decls_rn = renameBndr decls return
 
+-- * The RnM monad
 
 type RnM a = H (Map OccName Name) () () a
 
 emptyRnEnv :: Map OccName Name
 emptyRnEnv = Map.empty
 
+getName :: OccName -> RnM Name
+getName occ = do
+  mbName <- asks (Map.lookup occ)
+  case mbName of
+      Nothing   ->
+        throwError $  text "Variable" <+> ppQuot occ
+                                      <+> text "is not in scope."
+      Just name -> return name
 
+withMapping :: [(OccName,Name)] -> RnM a -> RnM a
+withMapping maps = local (Map.union (Map.fromList maps))
+
+
+-- * The 'Rename' and 'RenameBndr' classes
 
 class Rename ast where
   rename :: ast Pr -> RnM (ast Rn)
@@ -63,6 +88,11 @@ rnList xs = mapM rename xs
 class RenameBndr b b' | b -> b' where
   renameBndr :: b -> (b' -> RnM a) -> RnM a
 
+instance RenameBndr OccName Name where
+  renameBndr occ f = do
+    name <- mkUsrName occ `liftM` getUniq
+    withMapping [(occ,name)] $
+      f name
 
 instance RenameBndr b b' => RenameBndr [b] [b'] where
   renameBndr []     f = f []
@@ -71,29 +101,17 @@ instance RenameBndr b b' => RenameBndr [b] [b'] where
                           f (b':bs')
 
 
+-- * Modules
 
-getName :: OccName -> RnM Name
-getName occ = do
-  mbName <- asks (Map.lookup occ)
-  case mbName of
-      Nothing   -> throwError $
-                      text "Variable" <+> ppQuot occ <+> text "is not in scope."
-      Just name -> return name
-
-
-withMapping :: [(OccName,Name)] -> RnM a -> RnM a
-withMapping maps
-  = local (Map.union (Map.fromList maps))
-
-instance RenameBndr OccName Name where
-  renameBndr occ f = do
-    name <- mkUsrName occ `liftM` getUniq
-    withMapping [(occ,name)] $
-      f name
+rnModule ::Module Pr -> RnM (Module Rn)
+rnModule (Module loc modname decls)
+  = inContextAt loc (text "In module" <+> ppQuot modname) $ do
+      decls' <- decls_rn
+      return $ Module loc modname decls'
+  where decls_rn = renameBndr decls return
 
 
-
-                        
+-- * Top-level declarations
 
 instance RenameBndr (Decl Pr) (Decl Rn) where
   renameBndr (TypeDecl loc name typarams htype) f
@@ -121,22 +139,10 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
         renameBndr gname $ \gname' -> do
           prop' <- inPropContext $ rename prop
           popContext $ f (GoalDecl loc gtype gname' NoPostTc prop') 
+  renameBndr _other _f = impossible
 
 
--- rnBind :: Bind Pr -> RnM (Bind Rn, Map OccName Name)
--- rnBind = undefined
--- renameBndr (FunBind _rec occ sig matches) f
---   = inContext (text "In the definition of" <+> ppQuot occ) $ do
---       sig' <- rename sig
---       renameBndr occ $ \name -> do
---         matches' <- rnList matches
---         let rec' = checkFunBindRec name matches'
---         f (FunBind rec' name sig' matches')
--- renameBndr (PatBind loc pat rhs) f
---   = inContextAt loc (text "In pattern binding" <+> ppQuot pat) $ do
---       renameBndr pat $ \pat' -> do
---         rhs' <- rename rhs
---         f (PatBind loc pat' rhs')
+-- * Binds
 
 instance RenameBndr (Bind Pr) (Bind Rn) where
   renameBndr (FunBind _rec occ sig NoPostTc matches) f
@@ -144,13 +150,17 @@ instance RenameBndr (Bind Pr) (Bind Rn) where
         sig' <- rename sig
         renameBndr occ $ \name -> do
           matches' <- rnList matches
-          let rec' = checkFunBindRec name matches'
+          let rec' = funbind_rec name matches'
           popContext $ f (FunBind rec' name sig' NoPostTc matches')
+    where funbind_rec x ms
+            | x `Set.member` fvMatches ms = Rec
+            | otherwise                   = NonRec
   renameBndr (PatBind (Just loc) pat rhs) f
     = inPatBindCtxt loc (ppQuot pat) $ do
         rnPat pat $ \pat' -> do
           rhs' <- rename rhs
           popContext $ f (PatBind (Just loc) pat' rhs')
+  renameBndr _other _f = impossible
 
 instance Rename TypeSig where
   rename NoTypeSig = return NoTypeSig
@@ -161,27 +171,31 @@ instance Rename TypeSig where
 instance Rename Match where
   rename (Match (Just loc) pats rhs)
     = inFunMatchCtxt loc $ do
-        checkDupPatBndrs pats
+        checkLinearPat pats
         rnPats pats $ \pats' -> liftM (Match (Just loc) pats') $ rename rhs
-
+  rename _other = impossible
 
 rnConDecl :: ConDecl Pr -> RnM (ConDecl Rn,(OccName,Name))
 rnConDecl (ConDeclIn loc occ tys)
   = inConDeclCtxt loc (ppQuot occ) $ do
-      let doms = map type2dom tys
+      let doms = map mk_dom tys
       doms' <- renameBndr doms return
       renameBndr occ $ \name ->
         return (ConDecl loc name doms',(occ,name))
   where
-      type2dom (PredTy pat ty mbProp) = Dom (Just pat) ty mbProp
-      type2dom ty                     = Dom Nothing ty Nothing
+      mk_dom (PredTy pat ty mbProp) = Dom (Just pat) ty mbProp
+      mk_dom ty                     = Dom Nothing ty Nothing
+rnConDecl _other = impossible
+
+
+-- * Expressions
 
 instance Rename Exp where
   rename (Var occ) = liftM Var $ getName occ
   rename (Con con) = liftM Con $ rename con
   rename (Op op)   = return (Op op)
   rename (Lit lit) = return $ Lit lit
-  rename ElseGuard = undefined  -- bug
+  rename ElseGuard = bug "renaming expression: found 'else' guard"
   rename (PrefixApp (Op op) e) = liftM (PrefixApp (Op op)) $ rename e
   rename (InfixApp e1 (Op op) e2)
     = liftM2 (flip InfixApp (Op op)) (rename e1) (rename e2)
@@ -212,30 +226,45 @@ instance Rename Exp where
     = inCoercExprCtxt loc $
         liftM2 (Coerc loc) (rename e) (rename polyty)
   rename (QP qt qvars body) = do
-    checkQuantifierInPropContext qt
+    check_quantifier_context
     inQPExprCtxt qt qvars $ do
-      checkDupQVars qvars
+      check_duplicate_qvars
       renameBndr qvars $ \qvars' ->
         liftM (QP qt qvars') $ rename body
+    where check_quantifier_context = do
+            ctxt <- getContext
+            when (not $ isPropContext ctxt) $
+              throwError $ quotes (pretty qt)
+                <+> text "formulas cannot appear out of propositional context"
+          check_duplicate_qvars
+            | nub bs == bs = return ()
+            | otherwise    = throwError $ text "Duplicated binder(s)"
+            where bs = map qVarVar qvars
+  rename _other = impossible
 
-checkQuantifierInPropContext :: Quantifier -> RnM ()
-checkQuantifierInPropContext qt = do
-  ctxt <- getContext
-  when (not $ isPropContext ctxt) $
-    throwError $ quotes (pretty qt) <+> text "formulas cannot appear out of propositional context"
 
 instance Rename Con where
   rename (UserCon occ)     = liftM UserCon $ getName occ
   rename (BuiltinCon bcon) = return $ BuiltinCon bcon
+
+instance RenameBndr (QVar Pr) (QVar Rn) where
+  renameBndr (QVar occ mb_ty) f = do
+    name <- renameBndr occ return
+    mb_ty' <- T.mapM rename mb_ty
+    withMapping [(occ,name)] $
+      f (QVar name mb_ty')
+
+-- ** Right hand side
 
 instance Rename Rhs where
   rename (Rhs NoPostTc grhs whr)
     = renameBndr whr $ \whr' -> do
         grhs' <- rename grhs
         return $ Rhs NoPostTc grhs' whr'
+  rename _other = impossible
 
 instance Rename GRhs where
-  rename (UnGuarded exp) = liftM UnGuarded $ rename exp
+  rename (UnGuarded e)   = liftM UnGuarded $ rename e
   rename (Guarded grhss) = liftM Guarded $ rename grhss
 
 instance Rename GuardedRhss where
@@ -244,29 +273,40 @@ instance Rename GuardedRhss where
     return $ GuardedRhss grhss' elserhs
     where
         check :: [GuardedRhs Rn] -> [GuardedRhs Pr] -> RnM ([GuardedRhs Rn],Else Rn)
-        check acc [] = return (reverse acc, NoElse)
-        check acc [GuardedRhs loc ElseGuard exp]
-          = do exp' <- rename exp; return (reverse acc, Else loc exp')
+        check  acc [] = return (reverse acc, NoElse)
+        check  acc [GuardedRhs loc ElseGuard e]
+          = do e' <- rename e; return (reverse acc, Else loc e')
           -- an @else@ guard appearing in an intermediate alternative
           -- wrong!
-        check acc (GuardedRhs loc ElseGuard _:_)
+        check _acc (GuardedRhs _loc ElseGuard _:_)
           = throwError $
               text "An" <+> quotes (text "else") <+> text "guard can only be used for the last alternative"
-        check acc (GuardedRhs loc guard exp:rest)
-          = do grhs' <- liftM2 (GuardedRhs loc) (rename guard) (rename exp)
+        check  acc (GuardedRhs loc g e:rest)
+          = do grhs' <- liftM2 (GuardedRhs loc) (rename g) (rename e)
                check (grhs':acc) rest
+  rename _other = impossible
 
 instance Rename GuardedRhs where
-  rename (GuardedRhs loc guard expr)
+  rename (GuardedRhs loc g e)
     = inGuardedRhsCtxt loc $
-        liftM2 (GuardedRhs loc) (rename guard) (rename expr)
+        liftM2 (GuardedRhs loc) (rename g) (rename e)
+
+-- ** Alternatives
 
 instance Rename Alt where
   rename (Alt (Just loc) pat rhs)
     = inCaseAltCtxt loc pat $ do
-        checkDupPatBndrs [pat]
+        checkLinearPat [pat]
         rnPat pat $ \pat' -> liftM (Alt (Just loc) pat') $ rename rhs
+  rename _other = impossible
 
+-- ** Patterns
+
+checkLinearPat :: [Pat Pr] -> RnM ()
+checkLinearPat pats
+  | nub bs == bs = return ()
+  | otherwise    = throwError $ text "Duplicated binder(s) in pattern(s)"
+  where bs = patsBndrs pats
 
 rn_pats :: [Pat Pr] -> RnM ([Pat Rn],Map OccName Name)
 rn_pats ps = mapAccumM (\acc_map pat -> do
@@ -302,15 +342,11 @@ rn_pat WildPatIn = do
   uniq <- getUniq
   let wild_var = mkSysName (mkOccName VarNS "_x") uniq
   return (WildPat wild_var,Map.empty)
--- rn_pat (SigPat p t) = do
---   (p',p_map) <- rn_pat p
---   t' <- rename t
---   return (SigPat p' t',p_map)
 rn_pat (AsPat occ p) = do
   name <- renameBndr occ return
   (p',p_map) <- rn_pat p
   return (AsPat name p',Map.insert occ name p_map)
-rn_pat _other = undefined -- impossible
+rn_pat _other = impossible
 
 rnPat :: Pat Pr -> (Pat Rn -> RnM a) -> RnM a
 rnPat p f = do
@@ -324,12 +360,17 @@ rnPats ps f = do
     withMapping (Map.toList ps_map) $
       f ps'
 
-instance RenameBndr (QVar Pr) (QVar Rn) where
-  renameBndr (QVar occ mb_ty) f = do
-    name <- renameBndr occ return
-    mb_ty' <- T.mapM rename mb_ty
-    withMapping [(occ,name)] $
-      f (QVar name mb_ty')
+
+-- * Types
+
+checkDupTyParams :: TyParams Pr -> RnM ()
+checkDupTyParams typs
+  | nub typs == typs = return ()
+  | otherwise        = throwError $ text "Duplicated type variable(s)"
+
+instance Rename TyName where
+  rename (UserTyCon occ) = liftM UserTyCon $ getName occ
+  rename (BuiltinTyCon btycon) = return $ BuiltinTyCon btycon
 
 instance Rename (Type c) where
   rename (VarTy occ) = liftM VarTy $ getName occ
@@ -350,7 +391,7 @@ instance Rename (Type c) where
         checkDupTyParams typarams
         renameBndr typarams $ \typarams' ->
           liftM (ForallTy typarams') $ rename ty
-  rename _other = undefined -- impossible
+  rename _other = impossible
 
 instance RenameBndr (Dom Pr) (Dom Rn) where
   renameBndr (Dom Nothing ty Nothing) f = do
@@ -361,34 +402,4 @@ instance RenameBndr (Dom Pr) (Dom Rn) where
     rnPat pat $ \pat' -> do
       mbProp' <- inPropContext $ rnMaybe mbProp
       f (Dom (Just pat') ty' mbProp')
-  renameBndr _other _f = undefined -- impossible
-
-instance Rename TyName where
-  rename (UserTyCon occ) = liftM UserTyCon $ getName occ
-  rename (BuiltinTyCon btycon) = return $ BuiltinTyCon btycon
-
-
-
----
-
-checkDupTyParams :: TyParams Pr -> RnM ()
-checkDupTyParams typs
-  | nub typs == typs = return ()
-  | otherwise        = throwError $ text "Duplicated type variable(s)"
-
-checkDupPatBndrs :: [Pat Pr] -> RnM ()
-checkDupPatBndrs pats
-  | nub bs == bs = return ()
-  | otherwise    = throwError $ text "Duplicated binder(s) in pattern(s)"
-  where bs = patsBndrs pats
-
-checkDupQVars :: [QVar Pr] -> RnM ()
-checkDupQVars qvars
-  | nub bs == bs = return ()
-  | otherwise    = throwError $ text "Duplicated binder(s)"
-  where bs = map qVarVar qvars
-
-checkFunBindRec :: Name -> [Match Rn] -> IsRec Rn
-checkFunBindRec x matches
-  | x `Set.member` fvMatches matches = Rec
-  | otherwise                       = NonRec
+  renameBndr _other _f = impossible
