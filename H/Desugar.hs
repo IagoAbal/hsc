@@ -7,7 +7,7 @@ import Name
 import Sorted
 
 import qualified Core.Syntax as Core
-import H.FreeVars ( bsPat )
+import H.Syntax.FreeVars ( bsPat )
 import H.Monad
 import H.Phase
 import H.Subst1

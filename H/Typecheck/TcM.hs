@@ -9,11 +9,11 @@
 module H.Typecheck.TcM where
 
 import H.Syntax
+import H.Syntax.FreeVars
 import H.Phase
 import Pretty
 import H.Monad
 import qualified H.Subst1 as Subst1
-import H.FreeVars
 
 import Name
 

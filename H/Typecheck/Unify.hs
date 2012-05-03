@@ -8,9 +8,9 @@ import H.Typecheck.Zonk
 import H.Typecheck.Utils
 
 import H.Syntax
+import H.Syntax.FreeVars
 import H.Phase
 import Pretty
-import H.FreeVars
 import H.Prop
 
 import Data.Set ( Set )

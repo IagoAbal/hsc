@@ -16,8 +16,8 @@
 module H.Subst1 where
 
 import H.Syntax
+import H.Syntax.FreeVars
 import H.Phase
-import H.FreeVars
 
 import Util.Monad ( mapAccumM )
 

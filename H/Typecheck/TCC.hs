@@ -5,8 +5,8 @@
 module H.Typecheck.TCC where
 
 import H.Syntax
+import H.Syntax.FreeVars ( bsPat )
 import H.Phase
-import H.FreeVars ( bsPat )
 import qualified H.Prop as P
 import H.Message
 import H.Monad

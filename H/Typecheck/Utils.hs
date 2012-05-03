@@ -6,10 +6,10 @@ import H.Typecheck.TcM
 import H.Typecheck.Zonk
 
 import H.Syntax
+import H.Syntax.FreeVars
 import Pretty
 import H.Phase
 import qualified H.Prop as P
-import H.FreeVars
 import H.Subst1 ( subst_exp, subst_mbExp, subst_type, subst_doms )
 import H.TransformPred
 

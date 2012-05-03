@@ -656,7 +656,7 @@ but if we allow SigPats then the type of a variable may depend on a
 variable introduced by a previous @-pattern making this conversion
 impossible as in
 
-  \p@(x::xs) q:({q1:[Int] | head q1 == head p}) -> p ++ q
+  \p@(x::xs) (q:{q1:[Int] | head q1 == head p}) -> p ++ q
 
 where you cannot simply move 'p' since the type of 'q' depends on it.
 
