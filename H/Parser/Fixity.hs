@@ -19,7 +19,6 @@ module H.Parser.Fixity
     ) where
 
 import H.Syntax
-import H.Phase
 
 import Control.Monad (when, (<=<), liftM, liftM2, liftM3, liftM4)
 import Data.Traversable (mapM)

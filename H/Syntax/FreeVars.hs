@@ -20,7 +20,7 @@
 
 module H.Syntax.FreeVars where
 
-import H.Syntax
+import H.Syntax.AST
 
 import Data.Set ( Set )
 import qualified Data.Set as Set

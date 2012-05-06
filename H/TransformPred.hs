@@ -3,7 +3,6 @@
 module H.TransformPred where
 
 import H.Syntax
-import H.Subst1
 
 import Unique
 
@@ -12,7 +11,7 @@ import Control.Monad
 import qualified Data.Traversable as T
 
 
-tpType :: forall c p m. (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Type c p -> m (Type c p)
+tpType :: forall c p m. (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> Type c p -> m (Type c p)
 tpType f = go
   where apply_f mb_prop = (mb_prop >>= f) <|> mb_prop
         go :: forall c1. Type c1 p -> m (Type c1 p)
@@ -34,7 +33,7 @@ tpType f = go
         go (ForallTy tvs ty) = liftM (ForallTy tvs) $ go ty
         go _other           = undefined -- impossible
 
-tpDoms :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> [Dom p] -> m [Dom p]
+tpDoms :: (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> [Dom p] -> m [Dom p]
 tpDoms _f [] = return []
 tpDoms f (d:ds) = do
   (d',d_s) <- tpDom f d
@@ -42,7 +41,7 @@ tpDoms f (d:ds) = do
   ds' <- tpDoms f ds_d
   return (d':ds')
 
-tpDom :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Dom p -> m (Dom p, [(Var p,Exp p)])
+tpDom :: (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> Dom p -> m (Dom p, [(Var p,Exp p)])
 tpDom f (Dom Nothing ty Nothing) = do
   ty' <- tpType f ty
   return (Dom Nothing ty' Nothing,[])
@@ -55,14 +54,14 @@ tpDom f (Dom (Just pat) ty mb_prop) = do
 tpDom _f _other = undefined -- impossible
 
 
-tpBndr :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Var p -> m (Var p, [(Var p,Exp p)])
+tpBndr :: (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> Var p -> m (Var p, [(Var p,Exp p)])
 tpBndr f x@V{varType} = do
   varType' <- tpType f varType
   let x' = x{varType = varType'}
   return (x',[(x,Var x')])
 
 
-tpPat :: (MonadUnique m, IsPostTc p) => (Prop p -> Maybe (Prop p)) -> Pat p -> m (Pat p, [(Var p,Exp p)])
+tpPat :: (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> Pat p -> m (Pat p, [(Var p,Exp p)])
 tpPat f (VarPat b) = do
   (b',b_s) <- tpBndr f b
   return (VarPat b',b_s)

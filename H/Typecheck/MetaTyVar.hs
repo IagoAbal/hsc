@@ -3,7 +3,6 @@
 module H.Typecheck.MetaTyVar where
 
 import H.Syntax
-import H.Phase
 
 import Data.Set ( Set )
 import qualified Data.Set as Set

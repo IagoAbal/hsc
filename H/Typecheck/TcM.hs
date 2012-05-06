@@ -9,11 +9,9 @@
 module H.Typecheck.TcM where
 
 import H.Syntax
-import H.Syntax.FreeVars
-import H.Phase
 import Pretty
 import H.Monad
-import qualified H.Subst1 as Subst1
+import qualified H.Syntax.Subst1 as Subst1
 
 import Name
 
@@ -105,22 +103,22 @@ getVarScope = liftM (Set.fromList . Map.elems) $ asks tcVarEnv
 getTyVarScope :: TcM (Set TyVar)
 getTyVarScope = liftM (Set.fromList . Map.elems) $ asks tcTyVarEnv
 
-substExp :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Exp Tc -> TcM (Exp Tc)
-substExp var_env tyvar_env exp = do
+substExpTc :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Exp Tc -> TcM (Exp Tc)
+substExpTc var_env tyvar_env expr = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
   let subst1 = Subst1.mkSubst1 var_env tyvar_env var_scope tyvar_scope
-  Subst1.substExp subst1 exp
+  Subst1.substExp subst1 expr
 
-substMatches :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> [Match Tc] -> TcM [Match Tc]
-substMatches var_env tyvar_env matches = do
+substMatchesTc :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> [Match Tc] -> TcM [Match Tc]
+substMatchesTc var_env tyvar_env matches = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
   let subst1 = Subst1.mkSubst1 var_env tyvar_env var_scope tyvar_scope
   Subst1.substMatches subst1 matches
 
-substType :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Type c Tc -> TcM (Type c Tc)
-substType var_env tyvar_env ty = do
+substTypeTc :: [(Var Tc,Exp Tc)] -> [(TyVar,Tau Tc)] -> Type c Tc -> TcM (Type c Tc)
+substTypeTc var_env tyvar_env ty = do
   var_scope <- getVarScope
   tyvar_scope <- getTyVarScope
   let subst1 = Subst1.mkSubst1 var_env tyvar_env var_scope tyvar_scope
@@ -142,22 +140,22 @@ getEnvTypes = liftM (map varType . Set.toList) getVarScope
 instantiate :: Sigma Tc -> TcM (Tau Tc,[Tau Tc])
 instantiate (ForallTy tvs ty) = do
   mtys <- mapM instTyVar tvs
-  ty' <- substType [] (zip tvs mtys) ty
+  ty' <- substTypeTc [] (zip tvs mtys) ty
   return (ty',mtys)
-instantiate ty = return (sigma2tau ty,[])
+instantiate ty = return (type2tau ty,[])
 
 instantiateExp :: Exp Tc -> Sigma Tc -> TcM (Exp Tc,Tau Tc)
-instantiateExp exp ty = do
+instantiateExp expr ty = do
   (ty',tyargs) <- instantiate ty
-  return (tyApp exp tyargs,ty')
+  return (mkTyApp expr tyargs,ty')
 
 skolemise :: Sigma Tc -> TcM ([TyVar], Tau Tc)
 skolemise (ForallTy tvs ty) = do
   tvs_sk <- mapM skoTyVar tvs
   let tys_sk = map VarTy tvs_sk
-  ty' <- substType [] (zip tvs tys_sk) ty
+  ty' <- substTypeTc [] (zip tvs tys_sk) ty
   return (tvs_sk,ty')
-skolemise ty = return ([],sigma2tau ty)
+skolemise ty = return ([],type2tau ty)
 
 readMetaTyVar :: MonadIO m => MetaTyVar -> m (Maybe (Tau Tc))
 readMetaTyVar = liftIO . readIORef . mtvRef

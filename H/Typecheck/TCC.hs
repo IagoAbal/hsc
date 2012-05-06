@@ -5,14 +5,11 @@
 module H.Typecheck.TCC where
 
 import H.Syntax
-import H.Syntax.FreeVars ( bsPat )
-import H.Phase
 import qualified H.Prop as P
 import H.Message
 import H.Monad
 import H.SrcLoc
 import H.SrcContext
-import H.Subst1
 import H.Typecheck.TCC.Coerce ( coerce )
 import H.Typecheck.Utils
 
@@ -133,7 +130,7 @@ is_trivial_coercion act_ty          exp_ty _expr
 is_trivial_coercion act_ty          exp_ty (Lit (IntLit n))
   | act_ty == intTy && exp_ty == natTy && n >= 0 = return True
 is_trivial_coercion (PredTy _ ty _) exp_ty _expr
-  | ty == (sigma2tau exp_ty) = return True
+  | ty == (type2tau exp_ty) = return True
 is_trivial_coercion (PredTy (VarPat _) ty1 Nothing) exp_ty expr
   = is_trivial_coercion (tau2sigma ty1) exp_ty expr
 is_trivial_coercion act_ty (PredTy (VarPat _) ty2 Nothing) expr
@@ -176,7 +173,7 @@ addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
 (->?) :: Tau Ti -> Expected (Tau Ti) -> Exp Ti -> CoM (Tau Ti)
 (->?) act_ty exp_ty expr = do
   res_ty <- (tau2sigma act_ty ~>? fmap tau2sigma exp_ty) expr
-  return $ sigma2tau res_ty
+  return $ type2tau res_ty
 
 addCompletenessTCC :: Prop Ti -> CoM ()
 addCompletenessTCC prop = do
@@ -244,8 +241,8 @@ coMatches matches@(m:_) exp_ty = do
 getCaseLikeCtxt :: Exp Ti -> Sigma Ti -> [Pat Ti] -> CoM (Var Ti,CoM a -> CoM a)
 getCaseLikeCtxt (Var x) _ty _pats = return (x,id)
 getCaseLikeCtxt scrut    ty  pats = do
-  x <- newVar n ty
-  return (x, withForall [mkQVar x] . withFacts [Var x .==. scrut])
+  x <- newVarId n ty
+  return (x, withForall [toQVar x] . withFacts [Var x ==* scrut])
   where n = case getNameForPats pats of
                 Nothing -> "x"
                 Just n1 -> n1
@@ -288,10 +285,10 @@ coExp (Lam (Just loc) pats rhs) (Check exp_ty) = do
   coEquations doms [q]
   return exp_ty
   where arity = length pats
-        (doms,_) = splitFunTyN arity (sigma2tau exp_ty)
+        (doms,_) = splitFunTyN arity (type2tau exp_ty)
 coExp (Lam (Just loc) pats rhs) Infer = do
   pats_tys <- tcPatsTypes pats
-  let doms = zipWith patternDom pats pats_tys
+  let doms = zipWith mkPatDom pats pats_tys
       lam_ty = funTy doms rhs_ty
   q <- mkEq loc pats rhs
   coEquations doms [q]
@@ -314,7 +311,7 @@ coExp (TyLam tvs e) Infer = do
   e' <- subst_exp [] (zip tvs sko_tys) e
   sko_e_ty <- coExp e' Infer
   e_ty <- subst_type [] (zip sko_tvs $ map VarTy tvs) sko_e_ty
-  return (ForallTy tvs $ sigma2tau e_ty)
+  return (ForallTy tvs $ type2tau e_ty)
 coExp e@(Ite (PostTc ite_ty) g e1 e2) exp_ty = do
   coExp g (Check boolTy)
   withFacts [g] $
@@ -349,7 +346,7 @@ coExp e@(RightSection op e2) exp_ty = do
   let FunTy d1 (FunTy d2 res_ty) = op_ty
   coExp e2 (Check $ dom2type d2)
   res_ty' <- instFunTy (d2,res_ty) e2
-  ((d1 \--> res_ty') ~>? exp_ty) e
+  ((d1 @--> res_ty') ~>? exp_ty) e
 coExp e@(EnumFromTo e1 e2) exp_ty = do
   void $ coExp e1 (Check intTy)
   void $ coExp e2 (Check intTy)
@@ -372,7 +369,7 @@ coExp e _exp_ty = traceDoc (text "coExp-impossible?" <+> pretty e) $ undefined
 coApp :: Exp Ti -> Exp Ti -> [Exp Ti] -> Expected (Sigma Ti) -> CoM (Sigma Ti)
 coApp expr fun args exp_res_ty = do
   fun_sig <- coExp fun Infer
-  res_ty <- coArgs args (sigma2tau fun_sig)
+  res_ty <- coArgs args (type2tau fun_sig)
   (tau2sigma res_ty ~>? exp_res_ty) expr
 
 coArgs :: [Exp Ti] -> Tau Ti -> CoM (Tau Ti)
@@ -500,7 +497,7 @@ coType (PredTy pat tau mb_prop) = do
   withForall qs $ do
     coType tau
     void $ T.mapM (`coExp` (Check boolTy)) mb_prop
-  where qs = map mkQVar $ Set.elems $ bsPat pat
+  where qs = map toQVar $ Set.elems $ bsPat pat
 coType (FunTy dom rang) = coDom dom $ coType rang
 coType (ListTy elem_ty) = coType elem_ty
 coType (TupleTy ds) = coDoms ds
@@ -521,7 +518,7 @@ coDom (Dom mb_pat tau mb_prop) m = do
   withForall qs $ do
     void $ T.mapM (`coExp` (Check boolTy)) mb_prop
     with_prop_fact m
-  where qs = map mkQVar $ Set.elems $ maybe Set.empty bsPat mb_pat
+  where qs = map toQVar $ Set.elems $ maybe Set.empty bsPat mb_pat
         with_prop_fact = case mb_prop of
                              Nothing -> id
                              Just p  -> withFacts [p]
@@ -532,7 +529,7 @@ getEqPat n (E _ pats _) = pats !! n
 coEquations :: [Dom Ti] -> [Equation] -> CoM ()
 coEquations ds qs = do
   xs <- pick_variables
-  let qxs = map mkQVar xs
+  let qxs = map toQVar xs
   withForall qxs $
     co_Equations xs qs
   where pick_variables = go 0 [] ds
@@ -541,7 +538,7 @@ coEquations ds qs = do
                   let n = case getNameForPats (map (getEqPat i) qs) of
                               Nothing -> "x" ++ show i
                               Just n1 -> n1
-                  v <- newVar n (dom2type d)
+                  v <- newVarId n (dom2type d)
                   ds' <- instDoms (Var v) d ds
                   go (i+1) (v:vs_rev) ds'
 
@@ -596,22 +593,22 @@ chooseLit lit qs = [q | q <- qs, getLit q == lit]
 
 matchLitClause :: Var Ti -> Integer -> [Var Ti] -> [Equation] -> CoM ()
 matchLitClause x lit xs qs
-  = withFacts [Var x .==. mkInt lit] $
+  = withFacts [Var x ==* mkInt lit] $
       co_Equations xs [ E loc ps rhs | E loc (LitPat _:ps) rhs <- qs]
 
 matchTuple :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchTuple x xs [E loc (p@(TuplePat ps1 _):ps) rhs]
   | all isVarPat ps1 =
-      withForall qxs' $ withFacts [Var x .==. pat2exp p] $
+      withForall qxs' $ withFacts [Var x ==* pat2exp p] $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
-        qxs' = map mkQVar xs'
+        qxs' = map toQVar xs'
 matchTuple x xs qs = do
   let E _ (TuplePat _ (PostTc tup_ty):_) _ = head qs
       TupleTy ds = mu_0 tup_ty
   (tup_exp,xs') <- instTupleWithVars ds
-  let qxs' = map mkQVar xs'
-  withForall qxs' $ withFacts [Var x .==. tup_exp] $
+  let qxs' = map toQVar xs'
+  withForall qxs' $ withFacts [Var x ==* tup_exp] $
     co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(TuplePat ps1 _):ps) rhs <- qs]
 
 matchCon :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
@@ -625,8 +622,8 @@ matchCon x xs qs = do
         typs = let E _ (ConPat _ (PostTc con_typs) _:_) _ = head qs in con_typs
         is_not_con con = do
           (e,ys) <- instWithVars (sortOf con) typs (Con con)
-          let qys = map mkQVar ys
-          return $ P.mkForall qys (Var x ./=. e)
+          let qys = map toQVar ys
+          return $ P.mkForall qys (Var x !=* e)
         addConCompletenessTCC
          | null uncovered_cs = return ()
          | otherwise = do
@@ -637,15 +634,15 @@ matchCon x xs qs = do
 matchClause :: Var Ti -> TcCon Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchClause x con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]
   | all isVarPat ps1 =
-      withForall qxs' $ withFacts [Var x .==. pat2exp p] $
+      withForall qxs' $ withFacts [Var x ==* pat2exp p] $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
-        qxs' = map mkQVar xs'
+        qxs' = map toQVar xs'
 matchClause x con xs qs = do
   let E _ (ConPat _ (PostTc typs) _:_) _ = head qs
   (p_exp,xs') <- instWithVars (sortOf con) typs (Con con)
-  let qxs' = map mkQVar xs'
-  withForall qxs' $ withFacts [Var x .==. p_exp] $
+  let qxs' = map toQVar xs'
+  withForall qxs' $ withFacts [Var x ==* p_exp] $
     co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(ConPat _ _ ps1):ps) rhs <- qs]
 
 choose :: TcCon Ti -> [Equation] -> [Equation]

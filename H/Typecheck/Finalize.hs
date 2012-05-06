@@ -3,7 +3,6 @@
 module H.Typecheck.Finalize where
 
 import H.Syntax
-import H.Phase
 import Pretty
 import H.SrcContext
 import H.Monad

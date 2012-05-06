@@ -22,7 +22,6 @@ module H.Parser.Utils
 
 import H.Syntax
 import H.SrcLoc
-import H.Phase
 import H.Parser.ParseMonad
 import Pretty
 
@@ -37,7 +36,7 @@ import Data.List ( nub )
 
 
 mkFunTy :: Tau Pr -> Tau Pr -> Type c Pr
-mkFunTy (PredTy pat a mbProp) b = dom \--> b
+mkFunTy (PredTy pat a mbProp) b = dom @--> b
   where dom = Dom (Just pat) a mbProp
 mkFunTy a b = a --> b
 

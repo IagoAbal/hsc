@@ -6,11 +6,8 @@ import H.Typecheck.TcM
 import H.Typecheck.Zonk
 
 import H.Syntax
-import H.Syntax.FreeVars
 import Pretty
-import H.Phase
 import qualified H.Prop as P
-import H.Subst1 ( subst_exp, subst_mbExp, subst_type, subst_doms )
 import H.TransformPred
 
 import qualified Util.Set as Set
@@ -48,7 +45,7 @@ quantify mtvs ty = do
   forall_tvs <- mapM (flip newTyVar typeKi) tvs_names
   mapM_ bind (zip mtvs forall_tvs)
   ty' <- zonkType ty
-  return (forall_tvs,forallTy forall_tvs ty')
+  return (forall_tvs,mkForallTy forall_tvs ty')
   where tvs_names = take (length mtvs) $
                       [ [x]          | x <- ['a'..'z'] ] ++
                       [ (x : show i) | i <- [1 :: Integer ..], x <- ['a'..'z']]
@@ -58,7 +55,7 @@ quantify mtvs ty = do
 quantifyExp :: Exp Tc -> [MetaTyVar] -> Tau Tc -> TcM (Exp Tc,Sigma Tc)
 quantifyExp expr mtvs ty = do
   (forall_tvs,pty) <- quantify mtvs ty
-  return (tyLam forall_tvs expr,pty)
+  return (mkTyLam forall_tvs expr,pty)
 
 
 -- * Meta type variables
@@ -155,44 +152,44 @@ propMTV (Coerc _loc e polyty) = propMTV e
 propMTV (QP qt qvars body) = qvarsMTV qvars `Set.union` propMTV body
 propMTV _other = undefined -- impossible
 
-expandSyn :: (IsPostTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
+expandSyn :: (IsTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
 expandSyn (ConTy (SynTyCon _ ps rhs) args)
   = liftM (Just . tau2type) $ subst_type [] (zip ps args) rhs
 expandSyn _other = return  Nothing
 
-instSigmaType :: (MonadUnique m, IsPostTc p) => Sigma p -> [Tau p] -> m (Tau p)
+instSigmaType :: (MonadUnique m, IsTc p) => Sigma p -> [Tau p] -> m (Tau p)
 instSigmaType (ForallTy tvs ty) typs = subst_type [] (zip tvs typs) ty
-instSigmaType ty [] = return $ sigma2tau ty
+instSigmaType ty [] = return $ type2tau ty
 instSigmaType _ty _typs = error "bug instSigmaType"
 
-instWithVars :: forall m p. (MonadUnique m, IsPostTc p, MonadError Doc m) => Sigma p -> [Tau p] -> Exp p -> m (Exp p,[Var p])
+instWithVars :: forall m p. (MonadUnique m, IsTc p, MonadError Doc m) => Sigma p -> [Tau p] -> Exp p -> m (Exp p,[Var p])
 instWithVars sig typs expr = do
   tau <- instSigmaType sig typs
-  (expr',vars_rev) <- go 1 [] (tyApp expr typs) tau
+  (expr',vars_rev) <- go 1 [] (mkTyApp expr typs) tau
   return (expr',reverse vars_rev)
   where go :: Int -> [Var p] -> Exp p -> Tau p -> m (Exp p,[Var p])
         go  i xs e (FunTy d r) = do
-          x <- newVar ("x" ++ show i) (dom2type d)
+          x <- newVarId ("x" ++ show i) (dom2type d)
           let v = Var x
           r' <- instFunTy (d,r) v
           go (i+1) (x:xs) (App e v) r'
         go _i xs e _res_ty     = return (e,xs)
 
 
-instTupleWithVars :: forall m p. (MonadUnique m, IsPostTc p, MonadError Doc m) => [Dom p] -> m (Exp p,[Var p])
+instTupleWithVars :: forall m p. (MonadUnique m, IsTc p, MonadError Doc m) => [Dom p] -> m (Exp p,[Var p])
 instTupleWithVars doms = go 1 [] doms
   where go :: Int -> [Var p] -> [Dom p] -> m (Exp p,[Var p])
         go _i xs_rev []     = return (Tuple (PostTc $ TupleTy doms) (map Var xs), xs)
           where xs = reverse xs_rev
         go  i xs_rev (d:ds) = do
-          x <- newVar ("x" ++ show i) (dom2type d)
+          x <- newVarId ("x" ++ show i) (dom2type d)
           let v = Var x
           ds' <- instDoms v d ds
           go (i+1) (x:xs_rev) ds'
 
 -- * Instantiation of function types
 
-instFunTy :: (IsPostTc p, MonadUnique m, MonadError Doc m) => (Dom p,Range p) -> Exp p -> m (Range p)
+instFunTy :: (IsTc p, MonadUnique m, MonadError Doc m) => (Dom p,Range p) -> Exp p -> m (Range p)
   -- non-dependent arrow
 instFunTy (Dom Nothing _ Nothing,rang) _ = return rang  
 instFunTy (Dom (Just p) _ _,rang) _
@@ -209,7 +206,7 @@ instFunTy (Dom (Just p) _ _,rang) e
       tpType f rang
 instFunTy _other _e = undefined -- impossible
 
-patExpSubst :: forall p. IsPostTc p =>
+patExpSubst :: forall p. IsTc p =>
                 Exp p
               -> Pat p   -- ^ domain pattern
               -> Set (Var p)
@@ -242,7 +239,7 @@ patExpSubst expr pat_dom target_fv = get_subst expr pat_dom
         get_subst e (ParenPat p) = get_subst e p
         get_subst _ _ = Nothing
 
-instFunTyWithPat :: (MonadUnique m, MonadError Doc m, IsPostTc p) => (Dom p,Range p) -> Pat p -> m (Range p)
+instFunTyWithPat :: (MonadUnique m, MonadError Doc m, IsTc p) => (Dom p,Range p) -> Pat p -> m (Range p)
   -- non-dependent arrow
 instFunTyWithPat (Dom Nothing _ Nothing,rang) _lpat = return rang
   -- dependent arrow
@@ -258,7 +255,7 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
 instFunTyWithPat _other _lpat = undefined -- impossible
 
-patPatSubst :: forall m p. (MonadUnique m, IsPostTc p) =>
+patPatSubst :: forall m p. (MonadUnique m, IsTc p) =>
                  Pat p   -- ^ argument pattern
               -> Pat p   -- ^ domain pattern
               -> Set (Var p)
@@ -357,7 +354,7 @@ it is an identifier starting with an underscore.
 -}
 
 -- This could be more fine tuned but it is OK
-letType :: (MonadUnique m, IsPostTc p) => [Bind p] -> Type c p -> m (Type c p)
+letType :: (MonadUnique m, IsTc p) => [Bind p] -> Type c p -> m (Type c p)
 letType binds ty
   | [] <- binds' = return ty
   | otherwise    = tpType f ty
@@ -375,7 +372,7 @@ letType binds ty
                | otherwise = Just $ Let binds' prop
 
 
-instDoms :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> Dom p -> [Dom p] -> m [Dom p]
+instDoms :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> Dom p -> [Dom p] -> m [Dom p]
 instDoms  _e _dom                    [] = return []
   -- non-dependent
 instDoms _e (Dom Nothing _ Nothing) ds = return ds
@@ -399,7 +396,7 @@ instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
 instPredTyProp  e pat  ty mb_prop
  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = subst_mbExp s [] mb_prop
  | otherwise = do
-    other <- newVar "other" (tau2sigma ty)
+    other <- newVarId "other" (tau2sigma ty)
     return $ Just $ Case e (PostTc boolTy)
                       [Alt Nothing pat (rhsExp boolTy prop)
                       ,Alt Nothing (VarPat other) (rhsExp boolTy P._False_)
@@ -408,7 +405,7 @@ instPredTyProp  e pat  ty mb_prop
 
 -- Get expressions type
 
-tcExprType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> m (Sigma p)
+tcExprType :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> m (Sigma p)
 tcExprType (Var x) = return $ sortOf x
 tcExprType (Con con) = return $ sortOf con
 tcExprType (Op op) = return $ sortOf op
@@ -423,13 +420,13 @@ tcExprType (TyApp e tys) = do
   return $ tau2sigma e_tau
 tcExprType (Lam _ pats rhs) = do
   pats_tys <- mapM tcPatType pats
-  let doms = zipWith patternDom pats pats_tys
+  let doms = zipWith mkPatDom pats pats_tys
   return $ funTy doms rhs_ty
   where rhs_ty = tcRhsType rhs
 tcExprType (Let _ e) = tcExprType e
 tcExprType (TyLam tvs e) = do
   e_ty <- tcExprType e
-  return $ forallTy tvs $ sigma2tau e_ty
+  return $ mkForallTy tvs $ type2tau e_ty
 tcExprType (Ite (PostTc ite_ty) _ _ _) = return $ tau2sigma ite_ty
 tcExprType (If (PostTc if_ty) _) = return $ tau2sigma if_ty
 tcExprType (Case _ (PostTc case_ty) _) = return $ tau2sigma case_ty
@@ -441,21 +438,21 @@ tcExprType (RightSection op e2) = do
   op_ty <- tcExprType op
   let FunTy d1 (FunTy d2 res_ty) = op_ty
   res_ty'  <- instFunTy (d2,res_ty) e2
-  return $ d1 \--> res_ty'
+  return $ d1 @--> res_ty'
 tcExprType (EnumFromTo _ _) = return $ ListTy intTy
 tcExprType (EnumFromThenTo _ _ _) = return $ ListTy intTy
 tcExprType (Coerc _ _ sig) = return sig
 tcExprType (QP _ _ _) = return boolTy
 tcExprType _other = undefined -- impossible
 
-tcExprTau :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> m (Tau p)
-tcExprTau = tcExprType >=> return . sigma2tau
+tcExprTau :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> m (Tau p)
+tcExprTau = tcExprType >=> return . type2tau
 
 
-tcAppType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Exp p -> [Exp p] -> m (Tau p)
+tcAppType :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> [Exp p] -> m (Tau p)
 tcAppType fun args1 = do
   fun_sig <- tcExprType fun
-  go args1 (sigma2tau fun_sig)
+  go args1 (type2tau fun_sig)
   where
     go []         res_ty = return res_ty
     go (arg:args) fun_ty = do
@@ -463,18 +460,18 @@ tcAppType fun args1 = do
       go args rang'
       where FunTy dom rang = mu_0 fun_ty
 
-tcEqType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => [Pat p] -> Tau p -> m (Tau p)
+tcEqType :: (MonadUnique m, MonadError Doc m, IsTc p) => [Pat p] -> Tau p -> m (Tau p)
 tcEqType []         res_ty = return res_ty
 tcEqType (pat:pats) fun_ty = do
   let FunTy dom rang = mu_0 fun_ty
   rang' <- instFunTyWithPat (dom,rang) pat
   tcEqType pats rang'
 
-tcPatsTypes :: (MonadUnique m, MonadError Doc m, IsPostTc p) => [Pat p] -> m [Tau p]
+tcPatsTypes :: (MonadUnique m, MonadError Doc m, IsTc p) => [Pat p] -> m [Tau p]
 tcPatsTypes = mapM tcPatType
 
-tcPatType :: (MonadUnique m, MonadError Doc m, IsPostTc p) => Pat p -> m (Tau p)
-tcPatType (VarPat x) = return $ sigma2tau $ varType x
+tcPatType :: (MonadUnique m, MonadError Doc m, IsTc p) => Pat p -> m (Tau p)
+tcPatType (VarPat x) = return $ type2tau $ varType x
 tcPatType (LitPat _) = return intTy
 tcPatType (InfixCONSPat (PostTc elem_ty) _ _) = return $ ListTy elem_ty
 tcPatType (ConPat con (PostTc typs) ps)  = do
@@ -486,11 +483,11 @@ tcPatType (TuplePat _ (PostTc tup_ty)) = return tup_ty
 tcPatType (ListPat _ (PostTc list_ty)) = return list_ty
 tcPatType (ParenPat p) = tcPatType p
 tcPatType (WildPat wild_var)
-  = return $ sigma2tau $ varType wild_var
-tcPatType (AsPat x _) = return $ sigma2tau $ varType x
+  = return $ type2tau $ varType wild_var
+tcPatType (AsPat x _) = return $ type2tau $ varType x
 -- tcPatType (SigPat _ tau) = return tau
 tcPatType _other = undefined -- impossible
 
 
-tcRhsType :: IsPostTc p => Rhs p -> Tau p
+tcRhsType :: IsTc p => Rhs p -> Tau p
 tcRhsType (Rhs (PostTc rhs_ty) _ _) = rhs_ty

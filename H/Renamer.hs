@@ -32,9 +32,7 @@ module H.Renamer where
 #include "bug.h"
 
 import H.Syntax
-import H.Syntax.FreeVars
 import H.SrcContext
-import H.Phase
 import H.Monad
 
 import Util.Monad

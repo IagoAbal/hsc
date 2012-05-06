@@ -7,13 +7,7 @@ import Name
 import Sorted
 
 import qualified Core.Syntax as Core
-import H.Syntax.FreeVars ( bsPat )
 import H.Monad
-import H.Phase
-import H.Subst1
-  ( mkSubst1_FV
-  , substPats, substRhs
-  , subst_mbExp, subst_type, subst_doms, subst_rhs )
 import H.Syntax
 import H.Typecheck.TCC ( TccHypoThing(..), TccPropCtxt, TCC(..), ModTCCs )
 import H.Typecheck.Utils
@@ -109,7 +103,7 @@ dsgBind _other = undefined -- impossible
 
 dsgPatBind :: Pat Ti -> Rhs Ti -> DsgM [Core.Bind]
 dsgPatBind pat rhs = do
-  aux <- newVar "t" ty
+  aux <- newVarId "t" ty
   rhs_C <- dsgRhs rhs
   aux_C <- dsgVar aux
   let aux_bind = Core.mkSimpleBind aux_C rhs_C
@@ -145,7 +139,7 @@ dsgExp (TyApp (Op op) tys) = do
               Core.InfixApp (Core.Var x) opExp (Core.Var y)
   -- any operator here has a tau-type
 dsgExp (Op op) = do
-  let opTy :: Tau Ti = sigma2tau $ typeOf op
+--   let opTy :: Tau Ti = type2tau (typeOf op :: Sigma Ti)
   ([d1,d2],res) <- Core.splitFunTy <$> dsgType opTy
   let ty1 = Core.tau2sigma $ Core.dom2type d1
       ty2 = Core.tau2sigma $ Core.dom2type d2
@@ -153,7 +147,8 @@ dsgExp (Op op) = do
   y <- Core.newVar "y" ty2
   return $ Core.Lam [x,y] $ Core.rhsExp res $
               Core.InfixApp (Core.Var x) opExp (Core.Var y)
-  where opExp = Core.OpExp [] $ dsgOp op
+  where opTy = type2tau (typeOf op :: Sigma Ti)
+        opExp = Core.OpExp [] $ dsgOp op
 dsgExp (Lit lit) = return $ Core.Lit $ dsgLit lit
 dsgExp (PrefixApp (Op op) e) = do
   e_C <- dsgExp e
@@ -171,7 +166,7 @@ dsgExp (App e1 e2) = do
 dsgExp (TyApp e tys) = Core.TyApp <$> dsgExp e <*> dsgTypes tys
 dsgExp (Lam _ pats rhs') = do
   pats_tys <- tcPatsTypes pats
-  let doms = zipWith patternDom pats pats_tys
+  let doms = zipWith mkPatDom pats pats_tys
   q <- mkEq pats rhs'
   (xs,rhs) <- matchEq doms [q]
   return $ Core.Lam xs rhs
@@ -185,7 +180,7 @@ dsgExp (If (PostTc ty) grhss)
 dsgExp (Case scrut (PostTc case_ty) alts) = do
   scrut_ty <- tcExprType scrut
   qs <- mapM alt2eq alts
-  ([aux],Core.Rhs _ body) <- matchEq [type2dom $ sigma2tau scrut_ty] qs
+  ([aux],Core.Rhs _ body) <- matchEq [type2dom scrut_ty] qs
   scrut_C <- dsgExp scrut
   let scrut_rhs = Core.Rhs (Core.varTau aux) scrut_C
   return $ Core.mkLet [Core.mkSimpleBind aux scrut_rhs] body 
@@ -198,8 +193,8 @@ dsgExp (LeftSection e1 opE) = do
   opE_C <- dsgOpExp opE
   app_ty <- tcExprType $ App opE e1
     -- FIXME: A proper "matchFunTy" considering type synonyms as well...
-  let FunTy d r = mu_0 $ sigma2tau app_ty
-  y' <- newVar "y" (dom2type d)
+  let FunTy d r = mu_0 $ type2tau app_ty
+  y' <- newVarId "y" (dom2type d)
   r' <- instFunTy (d,r) (Var y')
   y <- dsgVar y'
   rhs_ty <- dsgType r'
@@ -209,7 +204,7 @@ dsgExp (RightSection opE e2) = do
   opE_C <- dsgOpExp opE
   e2_C <- dsgExp e2
   let FunTy d1 r1 = mu_0 op_ty
-  x' <- newVar "x" (dom2type d1)
+  x' <- newVarId "x" (dom2type d1)
   r1' <- instFunTy (d1,r1) (Var x')
   let FunTy d2 r = mu_0 r1'
   r' <- instFunTy (d2,r) e2
@@ -504,7 +499,7 @@ matchEq ds qs = do
                   let n = case getNameForPats (map (getEqPat i) qs) of
                               Nothing -> "x" ++ show i
                               Just n1 -> n1
-                  v <- newVar n (dom2type d)
+                  v <- newVarId n (dom2type d)
                   ds' <- instDoms (Var v) d ds
                   go (i+1) (v:vs_rev) ds'
 

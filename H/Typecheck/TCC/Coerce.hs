@@ -9,8 +9,6 @@ module H.Typecheck.TCC.Coerce where
 
 
 import H.Syntax
-import H.Phase
-import H.Subst1 ( subst_type )
 import qualified H.Prop as P
 import H.Typecheck.Utils
 
@@ -32,7 +30,7 @@ coerce :: (MonadUnique m, MonadError Doc m) =>
 
 coerce t (ForallTy tvs1 ty1) (ForallTy tvs2 ty2) = do
   let typs = map VarTy tvs2
-      t' = tyApp t typs
+      t' = mkTyApp t typs
   ty1' <- subst_type [] (zip tvs1 typs) ty1
   coerce t' ty1' ty2 
 
@@ -68,10 +66,10 @@ coerce t  ty1 (PredTy pat2 ty2 mb_prop2) = do
   return (ty1_ty2_POs ++ t_prop2_POs)
 
 coerce f (FunTy dom1 rang1) (FunTy dom2 rang2) = do
-  x <- newVar "x" (dom2type dom2)
+  x <- newVarId "x" (dom2type dom2)
   let v_x = Var x
   domain_POs <- map_forall [x] $ coerce v_x (dom2type dom2) (dom2type dom1)
-  let f_x = app f [v_x]
+  let f_x = mkApp f [v_x]
   rang1_x <- instFunTy (dom1,rang1) v_x
   rang2_x <- instFunTy (dom2,rang2) v_x
   range_POs <- liftM (map (P.hypos domain_POs)) $ coerce f_x rang1_x rang2_x
@@ -85,7 +83,7 @@ coerceTypes [] [] = return []
 coerceTypes (ty1:tys1) (ty2:tys2) = do
     -- TO DO: I may define a function for the individual case, like typePred...
     -- forall x
-  t <- newVar "t" (tau2sigma ty1)
+  t <- newVarId "t" (tau2sigma ty1)
   ty1_ty2_POs <- map_forall [t] $ coerce (Var t) ty1 ty2
   tys1_tys2_POs <- coerceTypes tys1 tys2
   return (ty1_ty2_POs ++ tys1_tys2_POs)
@@ -99,7 +97,7 @@ coerceConTys _t = coerceTypes
 
 coerceListTys :: (MonadUnique m, MonadError Doc m) => Exp Ti -> Tau Ti -> Tau Ti -> m [Prop Ti]
 coerceListTys _t ty1 ty2 = do
-  t <- newVar "t" (tau2sigma $ ty1)
+  t <- newVarId "t" (tau2sigma $ ty1)
   map_forall [t] $ coerce (Var t) ty1 ty2
 
 -- We would need 'proj' functions to implement this properly
@@ -107,7 +105,7 @@ coerceTupleTys :: (MonadUnique m, MonadError Doc m) => Exp Ti -> [Dom Ti] -> [Do
 coerceTupleTys _e = go
   where go []       []       = return []
         go (d1:ds1) (d2:ds2) = do
-          x <- newVar "x" (dom2type d1)
+          x <- newVarId "x" (dom2type d1)
           let v_x = Var x
           d1_d2_POs <- map_forall [x] $ coerce v_x (dom2type d1) (dom2type d2)
           ds1_x <- instDoms v_x d1 ds1

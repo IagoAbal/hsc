@@ -8,8 +8,6 @@ import H.Typecheck.Zonk
 import H.Typecheck.Utils
 
 import H.Syntax
-import H.Syntax.FreeVars
-import H.Phase
 import Pretty
 import H.Prop
 
@@ -32,9 +30,9 @@ kappaType ty1 = do
             -> Tau Tc -> Tau Tc
       go _vv ty@(VarTy _)    = ty
       go  vv (ConTy tc args) = ConTy tc $ map (go vv) args
-      go  vv (PredTy pat ty Nothing) = patternTy pat (go vv ty)
+      go  vv (PredTy pat ty Nothing) = mkPatTy pat (go vv ty)
       go  vv (PredTy pat ty (Just prop))
-        = predTy pat (go vv ty) (go_prop vv_prop prop)
+        = mkPredTy pat (go vv ty) (go_prop vv_prop prop)
         where vv_prop = vv `Set.union` bsPat pat
       go vv (FunTy d r) = FunTy d' $ go vv' r
         where (d',vv') = go_dom vv d

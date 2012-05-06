@@ -5,7 +5,6 @@ module H.Typecheck.Zonk where
 import H.Typecheck.TcM
 
 import H.Syntax
-import H.Phase
 
 import Control.Monad
 import Control.Monad.IO.Class

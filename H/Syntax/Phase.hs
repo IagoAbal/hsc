@@ -1,17 +1,19 @@
-{-# LANGUAGE EmptyDataDecls,
-             MultiParamTypeClasses,
-             GADTs,
-             FlexibleContexts,
-             FlexibleInstances,
-             UndecidableInstances
-             #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module H.Phase where
+module H.Syntax.Phase where
+
 
 import Control.Applicative
 import Data.Foldable
 import Data.Monoid
 import Data.Traversable
+
 
 
 -- * Front-end phases

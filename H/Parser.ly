@@ -23,7 +23,6 @@
 > import H.Syntax
 > import H.SrcLoc
 > import Pretty
-> import H.Phase
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer
 > import H.Parser.Utils

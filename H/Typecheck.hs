@@ -9,7 +9,6 @@ import H.Typecheck.Zonk
 import H.Typecheck.Utils
 
 import H.Syntax
-import H.Phase
 import Pretty
 import H.Monad
 import H.Message
@@ -78,7 +77,7 @@ kcType rnpty@(ForallTy ns ty)
   ty'_sk <- extendTyVarEnv (zip ns tvs_sk) $
               checkKind ty typeKi
   ty'_sk_zo <- zonkType ty'_sk
-  ty' <- substType [] (zip tvs_sk vtys) ty'_sk_zo
+  ty' <- substTypeTc [] (zip tvs_sk vtys) ty'_sk_zo
   return (ForallTy tvs ty',typeKi)
   where tvs = map (flip mkTyVar typeKi) ns
         vtys = map VarTy tvs
@@ -153,7 +152,7 @@ tcDecls (goaldecl@(GoalDecl _ _ _ _ _):decls) = do
 kcTypeDecl ::	Decl Rn -> TcM (Decl Tc, [(TyName Rn,TyCon Tc)])
 kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
   = inTypeDeclCtxt loc (ppQuot ty_name) $ do
-      (sig,_) <- kcType $ forallTy ty_params ty_rhs
+      (sig,_) <- kcType $ mkForallTy ty_params ty_rhs
       let (tvs,ty_rhs') = splitSigma sig
           ty_var = mkTyVar ty_name tc_kind
           tycon = SynTyCon {
@@ -162,7 +161,7 @@ kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
                   , synTyConRhs = ty_rhs'
                   }
       return (TypeDecl loc ty_var tvs ty_rhs',[(UserTyCon ty_name,tycon)])
-  where tc_kind = funKi (replicate (length ty_params) typeKi) typeKi
+  where tc_kind = mkFunKi (replicate (length ty_params) typeKi) typeKi
 
 -- DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
 kcDataDecl :: Decl Rn -> TcM (Decl Tc,[(TyName Rn,TyCon Tc)],[(Con Rn,TcCon Tc)])
@@ -178,17 +177,17 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
                                   mapM (tc_constr tvs) constrs
     }
     return (DataDecl loc ty_var tvs constrs',tycon_env,cons_env)
-  where ty_kind = funKi (replicate (length typarams) typeKi) typeKi
+  where ty_kind = mkFunKi (replicate (length typarams) typeKi) typeKi
         ty_var = mkTyVar ty_name ty_kind
-        con_res_ty = appTyIn (UserTyCon ty_name) (map VarTy typarams)
+        con_res_ty = mkAppTyIn (UserTyCon ty_name) (map VarTy typarams)
 --         ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))
         tc_constr ty_tvs (ConDecl loc con_name doms)
           = inConDeclCtxt loc (ppQuot con_name) $ do
-          (con_ty,_) <- kcType (forallTy typarams $ funTy doms con_res_ty)
+          (con_ty,_) <- kcType (mkForallTy typarams $ funTy doms con_res_ty)
           let (con_tvs,con_tau) = splitSigma con_ty
-              con = mkVar con_name con_ty
-          con_tau' <- substType [] (zip con_tvs (map VarTy ty_tvs)) con_tau
+              con = mkVarId con_name con_ty
+          con_tau' <- substTypeTc [] (zip con_tvs (map VarTy ty_tvs)) con_tau
           let (doms',_) = splitFunTy con_tau
           return (ConDecl loc con doms',(UserCon con_name,UserCon con))
 
@@ -235,31 +234,31 @@ tc_bind prev_binds (FunBind NonRec fun (TypeSig loc pty) NoPostTc matches)
   (skol_tvs,sk_ty) <- skolemise pty'
   matches' <- tcMatches matches (Check sk_ty)
   matches'_z <- zonkMatches matches'
-  matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'_z
-  let fun' = mkVar fun pty'
+  matches'' <- substMatchesTc [] (zip skol_tvs $ map VarTy poly_tvs) matches'_z
+  let fun' = mkVarId fun pty'
   return (FunBind NonRec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
 tc_bind prev_binds (FunBind NonRec fun NoTypeSig NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
   (matches',tau_fun_ty) <- inferMatches matches
   (poly_tvs,fun_ty) <- generalise tau_fun_ty
-  let fun' = mkVar fun fun_ty
+  let fun' = mkVarId fun fun_ty
   return (FunBind NonRec fun' NoTypeSig (PostTc poly_tvs) matches',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun (TypeSig loc pty) NoPostTc matches)
   = inFunBindCtxt (ppQuot fun) $ do
   (pty',_) <- kcType pty
   let poly_tvs = quantifiedTyVars pty'
-      fun' = mkVar fun pty'
+      fun' = mkVarId fun pty'
   (skol_tvs,skol_ty) <- skolemise pty'
   matches' <- extendVarEnv [(fun,fun')] $
                 tcMatches matches (Check skol_ty)
   matches'_zo <- zonkMatches matches'
-  matches'' <- substMatches [] (zip skol_tvs $ map VarTy poly_tvs) matches'_zo
+  matches'' <- substMatchesTc [] (zip skol_tvs $ map VarTy poly_tvs) matches'_zo
   return (FunBind Rec fun' (TypeSig loc pty') (PostTc poly_tvs) matches'',[(fun,fun')])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@[Match _ pats _])
   = inFunBindCtxt (ppQuot fun) $ do
   (pats',pats_tys,_) <- inferPats pats
   res_ty <- newMetaTy "t" typeKi
-  let tau_fun_ty = funTy (zipWith patternDom pats' pats_tys) res_ty
+  let tau_fun_ty = funTy (zipWith mkPatDom pats' pats_tys) res_ty
   (fun_tc,poly_tvs,matches_tc) <- inferRecFun fun tau_fun_ty matches
   return (FunBind Rec fun_tc NoTypeSig (PostTc poly_tvs) matches_tc,[(fun,fun_tc)])
 tc_bind prev_binds (FunBind Rec fun NoTypeSig NoPostTc matches@(Match _ pats _:_))
@@ -275,13 +274,13 @@ inferRecFun fun_rn fun_pre_tau matches_rn = do
   matches_tc' <- extendVarEnv [(fun_rn,fun')] $
                    tcMatches matches_rn (Check fun_pre_tau)
   (poly_tvs,fun_ty) <- generalise fun_pre_tau
-  let fun_tc = mkVar fun_rn fun_ty
+  let fun_tc = mkVarId fun_rn fun_ty
   matches_tc <- if null poly_tvs
                   then return matches_tc'
-                  else let fun_inst = tyApp (Var fun_tc) (map VarTy poly_tvs)
-                         in substMatches [(fun_tc,fun_inst)] [] matches_tc'
+                  else let fun_inst = mkTyApp (Var fun_tc) (map VarTy poly_tvs)
+                         in substMatchesTc [(fun_tc,fun_inst)] [] matches_tc'
   return (fun_tc,poly_tvs,matches_tc)
-  where fun' = mkVar fun_rn (tau2sigma fun_pre_tau)
+  where fun' = mkVarId fun_rn (tau2sigma fun_pre_tau)
 
 inferMatches :: [Match Rn] -> TcM ([Match Tc],Tau Tc)
 inferMatches matches = do
@@ -300,7 +299,7 @@ tcMatches [Match (Just loc) pats rhs] (Infer ref)
   (pats',pats_tys,pats_env) <- inferPats pats
   (rhs',rhs_ty) <- extendVarEnv pats_env $
                      inferRhs rhs
-  let doms = zipWith patternDom pats' pats_tys
+  let doms = zipWith mkPatDom pats' pats_tys
   liftIO $ writeIORef ref (funTy doms rhs_ty)
   return [Match (Just loc) pats' rhs']
 tcMatches (m:ms) (Infer ref) = do
@@ -388,7 +387,7 @@ tcExp (Lam (Just loc) pats rhs) (Infer ref)
   (pats',pats_tys,pats_env) <- inferPats pats
   (rhs',rhs_ty) <- extendVarEnv pats_env $
                      inferRhs rhs
-  let doms = zipWith patternDom pats' pats_tys
+  let doms = zipWith mkPatDom pats' pats_tys
   liftIO $ writeIORef ref (funTy doms rhs_ty)
   return (Lam (Just loc) pats' rhs')
 --   Let :: [Bind p] -> Exp p -> Exp p
@@ -456,8 +455,8 @@ tcExp (LeftSection arg1 op) exp_ty = do
 tcExp (RightSection op arg2) exp_ty = do
   (op',op_ty) <- inferExpType op
   split_op_ty@([dom1,dom2],rang) <- unifyFuns 2 op_ty
-  ([arg2'],rang') <- tcArgs [arg2] (dom2 \--> rang)
-  (dom1 \--> rang') ~>? exp_ty
+  ([arg2'],rang') <- tcArgs [arg2] (dom2 @--> rang)
+  (dom1 @--> rang') ~>? exp_ty
   return (RightSection op' arg2')
 --   EnumFromTo :: Exp p -> Exp p -> Exp p
 tcExp (EnumFromTo e1 e2) exp_ty = do
@@ -616,11 +615,11 @@ tcElse (Else loc e) exp_ty  = liftM (Else loc) $ checkExpType e exp_ty
 
 tcBndr :: Name -> Expected (Tau Tc) -> TcM (Var Tc,[(Name,Var Tc)])
 tcBndr n (Check ty) = return (v,[(n,v)])
-  where v = mkVar n (tau2sigma ty)
+  where v = mkVarId n (tau2sigma ty)
 tcBndr n (Infer ref) = do
   mty <- newMetaTy "a" typeKi
   liftIO $ writeIORef ref mty
-  let v = mkVar n (tau2sigma mty)
+  let v = mkVarId n (tau2sigma mty)
   return (v,[(n,v)])
 
 checkPat :: Pat Rn -> Tau Tc -> TcM (Pat Tc,[(Name,Var Tc)])
@@ -752,8 +751,8 @@ checkSigma exp polyty = do
     -- reconstruction
   exp'_z <- zonkExp exp'
   let polyty_tvs = quantifiedTyVars polyty
-  exp'' <- substExp [] (zip skol_tvs $ map VarTy polyty_tvs) exp'_z
-  return (tyLam polyty_tvs exp'')
+  exp'' <- substExpTc [] (zip skol_tvs $ map VarTy polyty_tvs) exp'_z
+  return (mkTyLam polyty_tvs exp'')
 
 
 -- * Subsumption checking
