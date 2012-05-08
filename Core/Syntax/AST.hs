@@ -226,8 +226,8 @@ data GuardedRhs = GuardedRhs Prop Exp
 -- Invariant: no guards nor `where' bindings
 type LamRHS = Rhs
 
-rhsExp :: Tau -> Exp -> Rhs
-rhsExp = Rhs
+mkExpRhs :: Tau -> Exp -> Rhs
+mkExpRhs = Rhs
 
 -- ** Patterns
 
@@ -305,12 +305,12 @@ instance Sorted BuiltinCon Sigma where
   sortOf TrueCon  = boolTy
   sortOf NilCon   = mkForallTy [a_tv] $ ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -1001
+          a_uniq = -11
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf ConsCon  = mkForallTy [a_tv] $ a --> ListTy a --> ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -1002
+          a_uniq = -12
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
 
@@ -380,12 +380,12 @@ instance Sorted BoolOp Sigma where
   sortOf IffB = boolTy --> boolTy --> boolTy
   sortOf EqB  = mkForallTy [a_tv] $ a --> a --> boolTy
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -2001
+          a_uniq = -21
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf NeqB  = mkForallTy [a_tv] $ a --> a --> boolTy
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -2002
+          a_uniq = -22
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf LtB = intTy --> intTy --> boolTy
@@ -432,13 +432,13 @@ instance Sorted IntOp Sigma where
                   |-> intTy
     where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
-          m_uniq = -3002
+          m_uniq = -31
   sortOf ModI = intTy
                   --> mkDomVar m intTy (Var m ./=. lit_0)
                   |-> intTy
     where m = mkVar m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
-          m_uniq = -3102
+          m_uniq = -32
   sortOf ExpI = intTy --> intTy --> intTy
 
 negOp, addOp, subOp, mulOp, divOp, modOp, expOp :: Op
@@ -688,7 +688,7 @@ natTyCon  = SynTyCon {
             }
   where n = mkVar n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
-        n_uniq = -4001
+        n_uniq = -41
 listTyCon = AlgTyCon {
               tyConName   = BuiltinTyCon ListTyCon
 --             , tyConParams = []

@@ -2,6 +2,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 
+-- |
+-- Module      :  H.Syntax.IsTc
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+
 module H.Syntax.IsTc
   where
 

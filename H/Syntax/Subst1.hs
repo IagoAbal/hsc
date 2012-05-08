@@ -1,19 +1,31 @@
-{-# LANGUAGE KindSignatures,
-             FlexibleInstances,
-             TypeSynonymInstances,
-             NamedFieldPuns,
-             PatternGuards,
-             GADTs,
-             TypeOperators,
-             TypeFamilies,
-             UndecidableInstances,
-             ScopedTypeVariables
-             #-}
 
--- | One-shot substitution
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+
+-- |
+-- Module      :  H.Syntax.Subst1
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- One-shot substitution
 -- It allows several *independent* substitutions to be performed in parallel.
--- TO DO: Use GHC-like UniqSupply and implicit parameters to avoid the monadic stuff
+
 module H.Syntax.Subst1 where
+
 
 import H.Syntax.AST
 import H.Syntax.Expr ( mkVarId )
@@ -33,6 +45,9 @@ import qualified Data.Map as Map
 import Data.Set( Set )
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
+
+#include "bug.h"
+
 
 
 -- * One-shot substition
@@ -142,7 +157,7 @@ substConDecls s = mapM (substConDecl s)
 
 substConDecl :: (MonadUnique m, IsTc p) => Subst1 p -> ConDecl p -> m (ConDecl p)
 substConDecl s (ConDecl loc con args) = liftM (ConDecl loc con . fst) $ substDoms s args
-substConDecl _s _other = undefined -- impossible
+substConDecl _s _other = impossible
 
 substBinds :: (MonadUnique m, IsTc p) => Subst1 p -> [Bind p] -> m ([Bind p],Subst1 p)
 substBinds = mapAccumM substBind
@@ -164,7 +179,7 @@ substBind s (PatBind loc pat rhs) = do
   rhs' <- substRhs s rhs
   (pat',s') <- substPat s pat
   return (PatBind loc pat' rhs',s')
-substBind _s _other = undefined -- impossible
+substBind _s _other = impossible
 
 substTypeSig :: (MonadUnique m, IsTc p) => Subst1 p -> TypeSig p -> m (TypeSig p)
 substTypeSig _s NoTypeSig           = return NoTypeSig
@@ -224,7 +239,7 @@ substExp s (EnumFromThenTo e1 e2 en)
 substExp s (Coerc loc e polyty) = liftM2 (Coerc loc) (substExp s e) (substType s polyty)
 substExp s (QP q qvars body) = do (qvars',s') <- substQVars s qvars
                                   liftM (QP q qvars') $ substExp s' body
-substExp _s _other = undefined -- impossible
+substExp _s _other = impossible
 
 substRhs :: (MonadUnique m, IsTc p) => Subst1 p -> Rhs p -> m (Rhs  p)
 substRhs s (Rhs rhs_ty grhs whr)
@@ -240,7 +255,7 @@ substGRhs s (Guarded grhss) = liftM Guarded (substGuardedRhss s grhss)
 substGuardedRhss :: (MonadUnique m, IsTc p) => Subst1 p -> GuardedRhss p -> m (GuardedRhss  p)
 substGuardedRhss s (GuardedRhss pgrhss elserhs)
   = liftM2 GuardedRhss (mapM (substGuardedRhs s) pgrhss) (substElse s elserhs)
-substGuardedRhss _s _other = undefined -- impossible
+substGuardedRhss _s _other = impossible
 
 substGuardedRhs :: (MonadUnique m, IsTc p) => Subst1 p -> GuardedRhs  p -> m (GuardedRhs  p)
 substGuardedRhs s (GuardedRhs loc g e) = liftM2 (GuardedRhs loc) (substExp s g) (substExp s e)
@@ -282,10 +297,7 @@ substPat s (WildPat wild_var) = do
 substPat s (AsPat v p) = do (p',s') <- substPat s p
                             (v',s'') <- substBndr s' v
                             return (AsPat v' p',s'')
--- substPat s (SigPat p ty) = do
---   (p',s') <- substPat s p
---   ty' <- substType s ty
---   return (SigPat p' ty',s')
+substPat _s _other = impossible
 
 {- NOTE [SubstBndr.AsPat]
 Since the renamer ensures that, for 'v@pat', 'v' is fresh w.r.t. FV('pat')
@@ -337,7 +349,7 @@ substType _s mty@(MetaTy _mtv) = return mty
 substType s (ForallTy tvs ty) = do
   (tvs',s') <- substTyBndrs s tvs
   liftM (ForallTy tvs') $ substType s' ty
-substType _s _other = undefined -- impossible
+substType _s _other = impossible
 
 substDoms :: (MonadUnique m, IsTc p) => Subst1 p -> [Dom p] -> m ([Dom p],Subst1 p)
 substDoms = mapAccumM substDom
@@ -351,7 +363,7 @@ substDom s (Dom (Just pat) ty mbprop) = do
   (pat',s') <- substPat s pat
   mbprop' <- substMaybeExp s' mbprop
   return (Dom (Just pat') ty' mbprop',s')
-substDom _s _other = undefined -- impossible
+substDom _s _other = impossible
 
 substPostTcType :: (MonadUnique m, IsTc p) => Subst1 p -> PostTcType p -> m (PostTcType p)
 substPostTcType _s NoPostTc    = return NoPostTc

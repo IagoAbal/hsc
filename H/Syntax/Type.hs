@@ -4,8 +4,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- |
+-- Module      :  H.Syntax.Type
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
 
 module H.Syntax.Type
   where
@@ -36,6 +46,7 @@ typeOf = sortOf
 kindOf :: Sorted a Kind => a -> Kind
 kindOf = sortOf
 
+
 -- * Variables
 
 mkTyVar :: Name -> Kind -> TyVar
@@ -53,7 +64,7 @@ cloneTyVar (TyV name ki isSk) = do
   name' <- newNameFrom name
   return $ TyV name' ki isSk
 
--- ** Skolemise variables
+-- ** Skolemization
 
 skoTyVar :: MonadUnique m => TyVar -> m TyVar
 skoTyVar (TyV name kind False) = do
@@ -63,7 +74,7 @@ skoTyVar _other
   = bug "skoTyVar: already a skolem type variable"
 
 
--- * Conversions
+-- ** Conversions
 
 type2tau :: Type c p -> Tau p
 type2tau (ForallTy _ _) = bug "type2tau: not a tau type"
@@ -88,7 +99,7 @@ type2dom (ForallTy _ _) = bug "type2dom: not a tau type"
 type2dom ty             = Dom Nothing (type2tau ty) Nothing
 
 
--- * Queries
+-- * Types
 
 isVarTy :: Type c p -> Bool
 isVarTy (VarTy _) = True
@@ -135,19 +146,6 @@ isMetaTy :: Type c Tc -> Bool
 isMetaTy (MetaTy _) = True
 isMetaTy _other     = False
 
-
--- * Predicate types
-
--- | Removes outermost predicate-types
-mu_0 :: Tau p -> Tau p
-mu_0 (PredTy _ ty _) = mu_0 ty
-mu_0 ty              = ty
-
-
--- * Smart constructors
-
--- ** Types
-
 mkAppTyIn :: (Lt p Tc, TyCON p ~ TyName p) => TyName p -> [Tau p] -> Type c p
 mkAppTyIn tc args = tau2type $ foldl AppTyIn (ConTyIn tc) args
 
@@ -166,6 +164,8 @@ mkForallTy :: TyParams p -> Tau p -> Sigma p
 mkForallTy []   tau = tau2sigma tau
 mkForallTy typs tau = ForallTy typs tau
 
+-- ** Subset types
+
 mkPatTy :: Pat p -> Tau p -> Type c p
 mkPatTy WildPatIn   ty = tau2type ty
 mkPatTy (WildPat _) ty = tau2type ty
@@ -175,6 +175,11 @@ mkPatTy pat         ty = PredTy pat ty Nothing
 mkPredTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p
 mkPredTy pat ty Nothing = mkPatTy pat ty
 mkPredTy pat ty mb_prop = PredTy pat ty mb_prop
+
+-- | Removes outermost predicate-types
+mu_0 :: Tau p -> Tau p
+mu_0 (PredTy _ ty _) = mu_0 ty
+mu_0 ty              = ty
 
 -- ** Domains
 
@@ -199,7 +204,8 @@ instTyVar (TyV name kind False) = do
   name' <- newNameFrom name
   ref <- liftIO $ newIORef Nothing
   return $ MetaTy $ MetaTyV name' kind ref
-instTyVar _other = undefined
+instTyVar _other
+  = bug "instTyVar: cannot instantiate a skolem type variable"
 
 newMetaTyVar :: (MonadUnique m, MonadIO m) => String -> Kind -> m MetaTyVar
 newMetaTyVar str kind = do
@@ -240,17 +246,14 @@ natTyName  = BuiltinTyCon NatTyCon
 unitTyCon, boolTyCon, intTyCon, natTyCon, listTyCon :: IsTc p => TyCon p
 unitTyCon = AlgTyCon {
               tyConName = unitTyName
---             , tyConParams = []
             , tyConCons = [unitCon]
             }
 boolTyCon = AlgTyCon {
               tyConName   = boolTyName
---             , tyConParams = []
             , tyConCons = [falseCon,trueCon]
             }
 intTyCon  = AlgTyCon {
               tyConName   = intTyName
---             , tyConParams = []
             , tyConCons = []  -- special case, infinite constructors!
             }
 natTyCon  = SynTyCon {
@@ -260,10 +263,9 @@ natTyCon  = SynTyCon {
             }
   where n = mkVarId n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq
-        n_uniq = -4001
+        n_uniq = -41
 listTyCon = AlgTyCon {
               tyConName   = BuiltinTyCon ListTyCon
---             , tyConParams = []
             , tyConCons = [nilCon,consCon]
             }
 
@@ -272,6 +274,7 @@ unitTy = ConTy unitTyCon []
 boolTy = ConTy boolTyCon []
 intTy  = ConTy intTyCon []
 natTy  = ConTy natTyCon []
+
 
 -- * Kinds
 

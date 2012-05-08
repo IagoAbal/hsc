@@ -107,9 +107,9 @@ dsgPatBind pat rhs = do
   rhs_C <- dsgRhs rhs
   aux_C <- dsgVar aux
   let aux_bind = Core.mkSimpleBind aux_C rhs_C
-      pb_case x = rhsExp (varTau x) $
+      pb_case x = mkExpRhs (varTau x) $
                     Case (Var aux) (PostTc $ varTau x)
-                        [Alt Nothing pat (rhsVar x)]
+                        [Alt Nothing pat (mkVarRhs x)]
       pat_xs = Set.elems $ bsPat pat
   xs_binds <- forM pat_xs
                 (\x -> Core.mkSimpleBind <$> dsgVar x <*> (dsgRhs $ pb_case x))
@@ -135,7 +135,7 @@ dsgExp (TyApp (Op op) tys) = do
       opExp = Core.OpExp tysC $ dsgOp op
   x <- Core.newVar "x" ty1
   y <- Core.newVar "y" ty2
-  return $ Core.Lam [x,y] $ Core.rhsExp res $
+  return $ Core.Lam [x,y] $ Core.mkExpRhs res $
               Core.InfixApp (Core.Var x) opExp (Core.Var y)
   -- any operator here has a tau-type
 dsgExp (Op op) = do
@@ -145,7 +145,7 @@ dsgExp (Op op) = do
       ty2 = Core.tau2sigma $ Core.dom2type d2
   x <- Core.newVar "x" ty1
   y <- Core.newVar "y" ty2
-  return $ Core.Lam [x,y] $ Core.rhsExp res $
+  return $ Core.Lam [x,y] $ Core.mkExpRhs res $
               Core.InfixApp (Core.Var x) opExp (Core.Var y)
   where opTy = type2tau (typeOf op :: Sigma Ti)
         opExp = Core.OpExp [] $ dsgOp op
@@ -548,7 +548,7 @@ matchLit x xs qs = do
   alts <- sequence [ matchLitClause lit xs (chooseLit lit qs) | lit <- lits ]
   let rhs_ty = eqsType qs
       rhs_exp = Core.Case rhs_ty (Core.Var x) alts
-      rhs = Core.rhsExp rhs_ty rhs_exp
+      rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
   where lits = nub $ map getLit qs
 
@@ -572,7 +572,7 @@ matchTuple x xs qs = do
   let alts = [Core.Alt (Core.TuplePat tup_ty (map Core.VarPat ys)) alt_rhs]
       rhs_ty = eqsType qs
       rhs_exp = Core.Case rhs_ty (Core.Var x) alts
-      rhs = Core.rhsExp rhs_ty rhs_exp
+      rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
 
 matchCon :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
@@ -580,7 +580,7 @@ matchCon x xs qs = do
   alts <- sequence [ matchClause c xs (choose c qs) | c <- cs ]
   let rhs_ty = eqsType qs
       rhs_exp = Core.Case rhs_ty (Core.Var x) alts
-      rhs = Core.rhsExp rhs_ty rhs_exp
+      rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
   where cs = nub $ map getCon qs
 

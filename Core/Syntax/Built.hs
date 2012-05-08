@@ -1,4 +1,23 @@
 
+{- TODO: Remove unconstrained terms
+
+In
+
+  forall x0 _x xs ,
+    x0 == (::) @'a _x xs ==> 1 + length @'a xs >= 0
+
+is equivalent to
+
+  forall xs , 1 + length @'a xs >= 0
+
+since x0 is an unconstrained variable. The former is likely to give
+some headaches to QuickCheck while generating values satisfying the
+antecedent of the implication. The latter should be easily tested by
+QuickCheck and can be also tested efficiently by a SMT solver encoding
+'length' as an uninterpreted function.
+
+-}
+
 module Core.Syntax.Built where
 
 

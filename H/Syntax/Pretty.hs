@@ -3,6 +3,17 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- |
+-- Module      :  H.Syntax.Pretty
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- H! pretty printing.
+
 module H.Syntax.Pretty
   where
 

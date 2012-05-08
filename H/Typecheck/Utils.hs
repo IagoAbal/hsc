@@ -202,7 +202,7 @@ instFunTy (Dom (Just p) _ _,rang) e
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty p)
       e_ty <- tcExprTau e
       let f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
-                 | otherwise = Just $ Let [PatBind Nothing p (rhsExp e_ty e)] prop
+                 | otherwise = Just $ Let [PatBind Nothing p (mkExpRhs e_ty e)] prop
       tpType f rang
 instFunTy _other _e = undefined -- impossible
 
@@ -248,7 +248,7 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
     throwError (text "Pattern" <+> pretty lpat <+> text "is not compatible with the expected pattern" <+> pretty dpat)
   (s,bs) <- patPatSubst lpat dpat (fvType rang)
   binds <- sequence [ do e_ty <- tcExprTau e
-                         return $ PatBind Nothing p (rhsExp e_ty e)
+                         return $ PatBind Nothing p (mkExpRhs e_ty e)
                     | (p,e) <- bs
                     ]
   rang' <- subst_type s [] rang >>= letType binds
@@ -386,7 +386,7 @@ instDoms e (Dom (Just pat) _ _)     ds
         throwError (text "Expression" <+> pretty e <+> text "does not match pattern" <+> pretty pat)
       e_ty <- tcExprTau e
       let f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
-                 | otherwise = Just $ Let [PatBind Nothing pat (rhsExp e_ty e)] prop
+                 | otherwise = Just $ Let [PatBind Nothing pat (mkExpRhs e_ty e)] prop
       tpDoms f ds
 instDoms _e _other _ds = undefined -- impossible
 
@@ -398,8 +398,8 @@ instPredTyProp  e pat  ty mb_prop
  | otherwise = do
     other <- newVarId "other" (tau2sigma ty)
     return $ Just $ Case e (PostTc boolTy)
-                      [Alt Nothing pat (rhsExp boolTy prop)
-                      ,Alt Nothing (VarPat other) (rhsExp boolTy P._False_)
+                      [Alt Nothing pat (mkExpRhs boolTy prop)
+                      ,Alt Nothing (VarPat other) (mkExpRhs boolTy P._False_)
                       ]
  where prop = maybe P._True_ id mb_prop
 

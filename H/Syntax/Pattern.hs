@@ -1,5 +1,16 @@
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
+
+-- |
+-- Module      :  H.Syntax.Pattern
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
 
 module H.Syntax.Pattern where
 
@@ -16,6 +27,9 @@ import H.Syntax.Type ( tau2sigma, mu_0 )
 import Name
 import Unique ( Uniq )
 
+#include "bug.h"
+
+
 
 isVarPat :: Pat p -> Bool
 isVarPat (VarPat _) = True
@@ -29,6 +43,25 @@ mkCONSPat ty p1 p2 = ConPat tcConsCon (PostTc [ty]) [p1,p2]
 
 mkInfixCONSPat :: IsTc p => Tau p -> Pat p -> Pat p -> Pat p
 mkInfixCONSPat ty p1 p2 = InfixCONSPat (PostTc ty) p1 p2
+
+patBndrs :: Pat p -> [VAR p]
+patBndrs (VarPat var) = [var]
+patBndrs (LitPat _lit) = []
+patBndrs (InfixCONSPat _ p1 p2) = patBndrs p1 ++ patBndrs p2
+patBndrs (ConPat _con _ ps) = patsBndrs ps
+patBndrs (TuplePat ps _) = patsBndrs ps
+patBndrs (ListPat ps _) = patsBndrs ps
+patBndrs (ParenPat p) = patBndrs p
+patBndrs WildPatIn    = []
+patBndrs (WildPat var)  = [var]
+patBndrs (AsPat v p)  = v : patBndrs p
+
+patsBndrs :: [Pat p] -> [VAR p]
+patsBndrs = concatMap patBndrs
+
+instWildPat :: Uniq -> Tau p -> Var p
+instWildPat uniq tau
+  = mkSkolemVar (mkSysName (mkOccName VarNS "x") uniq) (tau2sigma tau)
 
 -- | Converts a pattern to an expression.
 pat2exp :: IsTc p => Pat p -> Exp p
@@ -46,63 +79,10 @@ pat2exp (ParenPat p) = Paren $ pat2exp p
 pat2exp (WildPat wild_var)
   = Var wild_var
 pat2exp (AsPat _ p)  = pat2exp p
--- pat2exp (SigPat p ty) = pat2exp p
-pat2exp _other = undefined -- impossible
-
--- *** Simple patterns
-
--- | SimplePat = VarPat | LitPat | ConPat | TuplePat
-type SimplePat = Pat
-
-simplifyPats :: [Pat Ti] -> ([SimplePat Ti],[(Var Ti,Exp Ti)])
-simplifyPats pats = let (pats',pats_ss) = unzip $ map simplifyPat pats
-                      in (pats',concat pats_ss)
-                      
-simplifyPat :: Pat Ti -> (SimplePat Ti,[(Var Ti,Exp Ti)])
-simplifyPat p@(VarPat _) = (p,[])
-simplifyPat p@(LitPat _) = (p,[])
-simplifyPat (InfixCONSPat (PostTc typ) p1 p2)
-  = (mkCONSPat typ p1' p2',bs)
-  where ([p1',p2'],bs) = simplifyPats [p1,p2]
-simplifyPat (ConPat con ptctyps ps) = (ConPat con ptctyps ps',bs)
-  where (ps',bs) = simplifyPats ps
-simplifyPat (TuplePat ps ptcty) = (TuplePat ps' ptcty,bs)
-  where (ps',bs) = simplifyPats ps
-simplifyPat (ListPat ps (PostTc list_ty)) =
-    (foldr (mkCONSPat elem_ty) (mkNILPat elem_ty) ps',bs)
-  where ListTy elem_ty = mu_0 list_ty
-        (ps',bs) = simplifyPats ps
-  -- NB: ParenPat is just convenient for pretty-printing
-  -- when we have InfixCONSPat's
-simplifyPat (ParenPat p) = (p',bs)
-  where (p',bs) = simplifyPat p
-simplifyPat (WildPat wild_var) = (VarPat wild_var,[])
-  -- NB: `p' cannot depend on `v' nor vice-versa
-simplifyPat (AsPat v p) = (p',(v,pat2exp p):bs)
-  where (p',bs) = simplifyPat p
-simplifyPat _other = undefined -- impossible
+pat2exp _other = impossible
 
 
-patBndrs :: Pat p -> [VAR p]
-patBndrs (VarPat var) = [var]
-patBndrs (LitPat _lit) = []
-patBndrs (InfixCONSPat _ p1 p2) = patBndrs p1 ++ patBndrs p2
-patBndrs (ConPat _con _ ps) = patsBndrs ps
-patBndrs (TuplePat ps _) = patsBndrs ps
-patBndrs (ListPat ps _) = patsBndrs ps
-patBndrs (ParenPat p) = patBndrs p
-patBndrs WildPatIn    = []
-patBndrs (WildPat var)  = [var]
-patBndrs (AsPat v p)  = v : patBndrs p
--- patBndrs (SigPat p _t) = patBndrs p
-
-patsBndrs :: [Pat p] -> [VAR p]
-patsBndrs = concatMap patBndrs
-
-
-instWildPat :: Uniq -> Tau p -> Var p
-instWildPat uniq tau
-  = mkSkolemVar (mkSysName (mkOccName VarNS "x") uniq) (tau2sigma tau)
+-- * Matching
 
 -- | Check if an arbitrary expression could be matched against some
 -- given pattern. This is an undecidable problem and hence the purpose of
@@ -193,3 +173,37 @@ matchablePats p            (AsPat _ p')  = matchablePats p p'
 -- matchablePats (SigPat p _) p'            = matchablePats p p'
 -- matchablePats p            (SigPat p' _) = matchablePats p p'
 matchablePats _p           _p'           = False
+
+
+-- * Simple patterns
+
+-- | @SimplePat = VarPat | LitPat | ConPat | TuplePat@
+type SimplePat = Pat
+
+simplifyPats :: [Pat Ti] -> ([SimplePat Ti],[(Var Ti,Exp Ti)])
+simplifyPats pats = let (pats',pats_ss) = unzip $ map simplifyPat pats
+                      in (pats',concat pats_ss)
+                      
+simplifyPat :: Pat Ti -> (SimplePat Ti,[(Var Ti,Exp Ti)])
+simplifyPat p@(VarPat _) = (p,[])
+simplifyPat p@(LitPat _) = (p,[])
+simplifyPat (InfixCONSPat (PostTc typ) p1 p2)
+  = (mkCONSPat typ p1' p2',bs)
+  where ([p1',p2'],bs) = simplifyPats [p1,p2]
+simplifyPat (ConPat con ptctyps ps) = (ConPat con ptctyps ps',bs)
+  where (ps',bs) = simplifyPats ps
+simplifyPat (TuplePat ps ptcty) = (TuplePat ps' ptcty,bs)
+  where (ps',bs) = simplifyPats ps
+simplifyPat (ListPat ps (PostTc list_ty)) =
+    (foldr (mkCONSPat elem_ty) (mkNILPat elem_ty) ps',bs)
+  where ListTy elem_ty = mu_0 list_ty
+        (ps',bs) = simplifyPats ps
+  -- NB: ParenPat is just convenient for pretty-printing
+  -- when we have InfixCONSPat's
+simplifyPat (ParenPat p) = (p',bs)
+  where (p',bs) = simplifyPat p
+simplifyPat (WildPat wild_var) = (VarPat wild_var,[])
+  -- NB: `p' cannot depend on `v' nor vice-versa
+simplifyPat (AsPat v p) = (p',(v,pat2exp p):bs)
+  where (p',bs) = simplifyPat p
+simplifyPat _other = impossible

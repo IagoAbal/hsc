@@ -7,9 +7,21 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
--- | Abstract syntax of H!
+-- |
+-- Module      :  H.Syntax.AST
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- Abstract syntax of H!
+
+-- TODO: Play with new DataKind extension
 module H.Syntax.AST
   where
+
 
 import H.Syntax.Phase
 import H.SrcLoc
@@ -22,9 +34,26 @@ import Data.IORef( IORef )
 import Data.Function ( on )
 
 
+
 -- * Variables and names
 
-  -- | A typed 'Name'
+type family VAR phase
+type instance VAR Pr = OccName
+type instance VAR Rn = Name
+type instance VAR Tc = Var Tc
+type instance VAR Ti = Var Ti
+
+type NAME phase = VAR phase
+
+type family GoalNAME phase
+type instance GoalNAME Pr = OccName
+type instance GoalNAME Rn = Name
+type instance GoalNAME Tc = Name
+type instance GoalNAME Ti = Name
+
+
+  -- | Term variables
+  -- Essentially a typed 'Name'
 data Var p = V {
                varName   :: !Name
              , varType   :: Sigma p
@@ -47,7 +76,17 @@ instance Sorted (Var p) (Sigma p) where
   sortOf = varType
 
 
-  -- | Essentially a kinded 'Name'
+type family TyVAR phase
+type instance TyVAR Pr = OccName
+type instance TyVAR Rn = Name
+type instance TyVAR Tc = TyVar
+type instance TyVAR Ti = TyVar
+
+type UTyNAME phase = TyVAR phase
+
+
+  -- | Type variables
+  -- Essentially a kinded 'Name'
 data TyVar = TyV {
                tyVarName   :: !Name
              , tyVarKind   :: !Kind
@@ -71,41 +110,6 @@ instance Sorted TyVar Kind where
   sortOf = tyVarKind
 
 
-type family VAR phase
-type instance VAR Pr = OccName
-type instance VAR Rn = Name
-type instance VAR Tc = Var Tc
-type instance VAR Ti = Var Ti
-
-type NAME phase = VAR phase
-
-type family CON phase
-type instance CON Pr = Con Pr
-type instance CON Rn = Con Rn
-type instance CON Tc = TcCon Tc
-type instance CON Ti = TcCon Ti
-
-type family TyVAR phase
-type instance TyVAR Pr = OccName
-type instance TyVAR Rn = Name
-type instance TyVAR Tc = TyVar
-type instance TyVAR Ti = TyVar
-
-type UTyNAME phase = TyVAR phase
-
-type family TyCON phase
-type instance TyCON Pr = TyName Pr
-type instance TyCON Rn = TyName Rn
-type instance TyCON Tc = TyCon Tc
-type instance TyCON Ti = TyCon Ti
-
-type family GoalNAME phase
-type instance GoalNAME Pr = OccName
-type instance GoalNAME Rn = Name
-type instance GoalNAME Tc = Name
-type instance GoalNAME Ti = Name
-
-
 -- * Parameters
 
 type Params p = [Pat p]
@@ -119,8 +123,8 @@ but a trivial workaround is to use a @-pattern
        the inferred type for l@(x::xs) is {l:[Int]| P l}
 -}
 
-  -- Only type parameters of kind 'type' are supported
-  -- so any kind annotation is pointless.
+  -- NB: Now only type parameters of kind 'type' are supported so
+  --     any kind annotation is pointless.
 type TyParams p = [TyVAR p]
 
 type PostTcTyParams p = PostTc p [TyVar]
@@ -128,48 +132,53 @@ type PostTcTyParams p = PostTc p [TyVar]
 
 -- * Modules
 
-data Module p = Module SrcLoc ModuleName [Decl p]
-
-
 newtype ModuleName = ModName String
+
+data Module p = Module !SrcLoc !ModuleName [Decl p]
+
+{- Note [Modules]
+For now, H! declarations are not mutually recursive. The dependencies
+introduced by predicate types are potentially hard to handle. We hope to
+overtake this problem in future versions.
+-}
 
 
 -- * Declarations
 
 data Decl p where
-  -- | type synonym
-  -- NB: You can only specify synonyns for monotypes, the RHS cannot be a polytype.
-  TypeDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> Tau p -> Decl p
-  -- | inductive data type
-  DataDecl ::	SrcLoc -> UTyNAME p -> TyParams p -> [ConDecl p] -> Decl p
-     -- "Type signatures anywhere" as allowed by Haskell introduce many problems due to
-     -- dependent typing. I could it more flexible but for now I think it does not worth it.
---   -- | type signature
---   TypeSig :: SrcLoc -> NAME Pr -> PolyType Pr -> Decl Pr
+  -- | Type synonym
+  -- NB: You can only specify synonyms for mono-types.
+  TypeDecl ::	!SrcLoc -> !(UTyNAME p) -> TyParams p -> Tau p -> Decl p
+  -- | Inductive data type
+  DataDecl ::	!SrcLoc -> !(UTyNAME p) -> TyParams p -> [ConDecl p] -> Decl p
   -- | Value declarations
   ValDecl :: Bind p -> Decl p
-  -- | logical goal: a theorem or a lemma
-  GoalDecl :: SrcLoc -> GoalType -> GoalNAME p
+  -- | Logical goal (theorem/lemma)
+  GoalDecl :: !SrcLoc -> !GoalType -> !(GoalNAME p)
             -> PostTcTyParams p
-              -- ^ if a goal depends on some arbitrary type
-              -- that is inferred during type checking;
-              -- note that the logical 'forall' does not allow
+              -- ^ If a goal depends on some arbitrary types,
+              -- those types will be inferred during type checking.
+              -- Note that the logical quantifiers do not allow
               -- to quantify over types.
             -> Prop p -> Decl p
 
 
 -- * Binds
+-- In H! type signatures have to be declared just before the corresponding
+-- bind.
 
-data Bind p = FunBind (IsRec p) (NAME p) (TypeSig p) (PostTcTyParams p) [Match p]
-                  -- ^ a function defined by a *set* of equations
-                  -- NB: Only uniform definitions are allowed
+data Bind p = FunBind !(IsRec p) !(NAME p) !(TypeSig p) (PostTcTyParams p) [Match p]
+                  -- ^ A function defined by a *set* of equations
+                  -- NB: Only uniform definitions are allowed, hence the order
+                  --     of equations does not matter.
                   -- NB: @f = ...@ is considered a FunBind because that allows
-                  --     the annotation with a polymorphic type.
-            | PatBind (Maybe SrcLoc) (Pat p) (Rhs p)
-                  -- ^ pattern binding
+                  --     'f' to be polymorphic.
+            | PatBind !(Maybe SrcLoc) (Pat p) (Rhs p)
+                  -- ^ Pattern binding
+                  -- NB: These definitions cannot be polymorphic.
 
 data TypeSig p = NoTypeSig
-               | TypeSig SrcLoc (Sigma p)
+               | TypeSig !SrcLoc (Sigma p)
 
 type WhereBinds p = [Bind p]
 
@@ -185,16 +194,17 @@ data IsRec p where
 -- Constructor arguments are parsed as simple types and then converted
 -- to @Dom@ during renaming.
 data ConDecl p where
-  ConDeclIn :: SrcLoc -> NAME Pr -> [Tau Pr] -> ConDecl Pr
-  ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
+  ConDeclIn :: !SrcLoc -> !(NAME Pr) -> [Tau Pr] -> ConDecl Pr
+  ConDecl :: Ge p Rn => !SrcLoc -> !(NAME p) -> [Dom p] -> ConDecl p
 
 -- | Clauses of a function binding.
 data Match p
-	 = Match (Maybe SrcLoc) [Pat p] (Rhs p)
+	 = Match !(Maybe SrcLoc) [Pat p] (Rhs p)
 
 matchArity :: Match p -> Int
 matchArity (Match _ pats _) = length pats
 
+-- | Type of a logical goal
 data GoalType = TheoremGoal
               | LemmaGoal
   deriving Eq
@@ -204,13 +214,13 @@ data GoalType = TheoremGoal
 
 data Exp p where
   -- | variable
-  Var :: VAR p -> Exp p
+  Var :: !(VAR p) -> Exp p
   -- | data constructor
-  Con :: CON p -> Exp p
+  Con :: !(CON p) -> Exp p
   -- | operator
-  Op  :: Op -> Exp p
+  Op  :: !Op -> Exp p
   -- | literal constant
-  Lit :: Lit -> Exp p
+  Lit :: !Lit -> Exp p
   -- | @else@ guard expression
   -- It is used to facilitate parsing of case expressions
   -- but then removed during renaming
@@ -224,9 +234,9 @@ data Exp p where
   -- | type application
   TyApp :: Ge p Tc => Exp p -> [Tau p] -> Exp p
   -- | lambda expression
-  Lam :: Maybe SrcLoc -> [Pat p] -> LamRHS p -> Exp p
+  Lam :: !(Maybe SrcLoc) -> [Pat p] -> LamRHS p -> Exp p
   -- | local declarations with @let@
-  -- NB: Mutually recursive bindings are not supported
+  -- NB: Mutually recursive bindings are still not supported.
   Let :: [Bind p] -> Exp p -> Exp p
   -- | type lambda
   TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
@@ -244,6 +254,7 @@ data Exp p where
   -- | list expression
   List :: PostTcType p -> [Exp p] -> Exp p
   -- | parenthesized expression
+  -- This makes pretty-printing easier.
   Paren :: Exp p -> Exp p
   -- | left section @(@/exp/ /qop/@)@
   LeftSection :: Exp p -> OpExp p -> Exp p
@@ -254,9 +265,21 @@ data Exp p where
   -- ^ bounded arithmetic sequence, with first two elements given
   EnumFromThenTo :: Exp p -> Exp p -> Exp p -> Exp p
   -- | explicit type coercion
-  Coerc :: SrcLoc -> Exp p -> Sigma p -> Exp p
+  Coerc :: !SrcLoc -> Exp p -> Sigma p -> Exp p
   -- | logic quantifier
-  QP :: Quantifier -> [QVar p] -> Prop p -> Prop p
+  QP :: !Quantifier -> [QVar p] -> Prop p -> Prop p
+
+-- | Literals.
+data Lit = IntLit Integer
+    deriving Eq
+
+-- | An /alt/ in a @case@ expression.
+data Alt p = Alt !(Maybe SrcLoc) (Pat p) (Rhs p)
+
+-- | Logical quantifiers.
+data Quantifier = ForallQ   -- ^ forall
+                | ExistsQ   -- ^ exists
+    deriving Eq
 
 -- | An Op or a TyApp on an Op
 type OpExp = Exp
@@ -264,25 +287,20 @@ type OpExp = Exp
 -- | Expressions of boolean type
 type Prop = Exp
 
--- | Annotated variable
+-- | Logically quantified variable
 data QVar p = QVar {
                 qVarVar :: VAR p         -- ^ the variable itself
               , qVarSig :: Maybe (Tau p) -- ^ optional type signature
               }
 
--- ** Literals
-
-data Lit = IntLit Integer
-    deriving Eq
-
 -- ** Right-hand side
 
--- | The right hand side of a function or pattern binding.
+-- | A (possibly guarded) right hand side.
 -- NB: A Rhs has always a Tau type.
 data Rhs p = Rhs (PostTcType p) (GRhs p) (WhereBinds p)
 
 -- | RHS of a lamba-abstraction
--- Invariant: no guards nor `where' bindings
+-- Invariant: no guards nor `where' bindings.
 type LamRHS = Rhs
 
 data GRhs p
@@ -298,7 +316,7 @@ data GuardedRhss p where
 -- | A guarded right hand side @|@ /exp/ @=@ /exp/ or @|@ /exp/ @->@ /exp/.
 -- The first expression is boolean-valued.
 data GuardedRhs p
-	 = GuardedRhs SrcLoc (Prop p) (Exp p)
+	 = GuardedRhs !SrcLoc (Prop p) (Exp p)
 
 -- | @else@ clause
 data Else p where
@@ -307,82 +325,33 @@ data Else p where
 
 {- [Guards]
 In H! guarded expressions are more restricted than in Haskell.
+
 First, a set of guards has to be exhaustive, which may cause the
-generation of a coverage TCC. This TCC is omitted if there is an
+generation of a coverage TCC. Such TCC is not generated if there is an
 'else' clause.
+
 Second, guards cannot overlap which will lead to the generation of the
 corresponding TCC. This may look like a kick-in-the-ass but it is
 convenient when writing critical software.
+
+  E.g. The following function definition
+
+    f : Nat -> Nat
+    f x | x == 0 = ...
+        | x >= 0 = ...
+
+  is not correct since @x == 0@ and @x >= 0@ are not disjoint.
 -}
-
--- ** Logical quantifiers
-
-data Quantifier = ForallQ
-                | ExistsQ
-    deriving Eq
-
-
--- * Patterns
-
--- | A pattern, to be matched against a value.
--- NB: Only uniform patterns are supported.
-data Pat p where
-  -- | variable
-  VarPat :: VAR p -> Pat p
-  -- | literal constant
-  LitPat :: Lit -> Pat p
-  -- | Infix @::@ (cons) pattern
-  InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
-  -- | data constructor and argument
-  ConPat :: CON p -> PostTcTypes p -> [Pat p] -> Pat p
-  -- | tuple pattern
-  TuplePat :: [Pat p] -> PostTcType p -> Pat p
-  -- | list pattern
-  ListPat :: [Pat p] -> PostTcType p -> Pat p
-  -- | parenthesized pattern
-  ParenPat :: Pat p -> Pat p
-  -- | wildcard pattern (@_@)
-  -- For convenience, those are converted into variables after renaming.
-  WildPatIn :: Pat Pr
-  WildPat :: Ge p Rn => VAR p -> Pat p
-  -- ^ as-pattern (@\@@)
-  AsPat :: VAR p -> Pat p -> Pat p
-
-{- Note [SigPat]
-SigPats are banned to simplify things. For instance, we would expect
-that an @-pattern can be eliminated by introducing a let-expression in
-the RHS as in
-
-  \l@(x::xs) -> x::l
-  ===
-  \(x::xs) -> let l = x::xs in x::l
-
-but if we allow SigPats then the type of a variable may depend on a
-variable introduced by a previous @-pattern making this conversion
-impossible as in
-
-  \p@(x::xs) (q:{q1:[Int] | head q1 == head p}) -> p ++ q
-
-where you cannot simply move 'p' since the type of 'q' depends on it.
-
-Also note that the main problem is caused by instantiation of
-pattern-types... for normal expressions we could translate @-patterns
-as specificed in the Haskell Report. 
-
-Future work:
-  a) Careful handling of @-patterns, potentially complicating
-     functions for stuff like dependent-arrow instantiation.
-  b) Syntactically restrict type annotations in patterns.
--}
-
-
--- * Alternatives
-
--- | An /alt/ in a @case@ expression.
-data Alt p = Alt (Maybe SrcLoc) (Pat p) (Rhs p)
 
 
 -- * Data constructors
+
+type family CON phase
+type instance CON Pr = Con Pr
+type instance CON Rn = Con Rn
+type instance CON Tc = TcCon Tc
+type instance CON Ti = TcCon Ti
+
 
 data Con p = UserCon (NAME p)
            | BuiltinCon BuiltinCon
@@ -400,7 +369,11 @@ data BuiltinCon = UnitCon
 
 data TcCon p = TcCon {
     tcConCon :: Con p
+      -- ^ the data constructor itself
   , tcConTy  :: TyCon p
+      -- ^ the corresponding type constructor
+      -- NB: Used when checking for incomplete pattern matching, since
+      --     the type constructor keeps track of all its data constructors.
   }
 
 instance Eq (NAME p) => Eq (TcCon p) where
@@ -442,16 +415,77 @@ data IntOp = NegI   -- ^ negation @-@ /exp/
     deriving(Eq,Ord)
 
 
+-- * Patterns
+
+-- | A pattern, to be matched against a value.
+-- NB: Only uniform patterns are supported. We believe this is convenient
+--     for critical software development and it also makes pattern-matching
+--     compilation a lot easier.
+data Pat p where
+  -- | variable
+  VarPat :: !(VAR p) -> Pat p
+  -- | literal constant
+  LitPat :: !Lit -> Pat p
+  -- | Infix @::@ (cons) pattern
+  InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
+  -- | data constructor and argument
+  ConPat :: !(CON p) -> PostTcTypes p -> [Pat p] -> Pat p
+  -- | tuple pattern
+  TuplePat :: [Pat p] -> PostTcType p -> Pat p
+  -- | list pattern
+  ListPat :: [Pat p] -> PostTcType p -> Pat p
+  -- | parenthesized pattern
+  -- This makes pretty-printing easier.
+  ParenPat :: Pat p -> Pat p
+  -- | wildcard pattern (@_@)
+  -- For convenience, those are converted into variables after renaming.
+  WildPatIn :: Pat Pr
+  WildPat :: Ge p Rn => !(VAR p) -> Pat p
+  -- ^ as-pattern (@\@@)
+  AsPat :: !(VAR p) -> Pat p -> Pat p
+
+{- Note [Pattern signatures aka SigPat]
+SigPats are banned to simplify things. For instance, we would expect
+that an @-pattern can be eliminated by introducing a let-expression in
+the RHS as in
+
+  \l@(x::xs) -> x::l
+  ===
+  \(x::xs) -> let l = x::xs in x::l
+
+but if we allow SigPats then the type of a variable may depend on a
+variable introduced by a previous @-pattern making this conversion
+impossible as in
+
+  \p@(x::xs) (q:{q1:[Int] | head q1 == head p}) -> p ++ q
+
+where you cannot simply move 'p' since the type of 'q' depends on it.
+
+Also note that the main problem is caused by instantiation of
+pattern-types... for normal expressions we could translate @-patterns
+as specificed in the Haskell Report. 
+
+Future work:
+  a) Careful handling of @-patterns, potentially complicating
+     functions for stuff like dependent-arrow instantiation.
+  b) Syntactically restrict type annotations in patterns.
+-}
+
+
 -- * Types
 
 data Type c p where
   -- | type variable
-  VarTy :: TyVAR p -> Type c p
+  VarTy :: !(TyVAR p) -> Type c p
   -- | named type or type constructor
-  ConTyIn :: Lt p Tc => TyCON p -> Type c p
+  ConTyIn :: Lt p Tc => !(TyCON p) -> Type c p
   -- | application of a type constructor
   AppTyIn :: Lt p Tc => Tau p -> Tau p -> Type c p
-  ConTy :: Ge p Tc => TyCON p -> [Tau p] -> Type c p
+  -- | saturated application of a type constructor
+  -- NB: This type system is based on System F, not in System Fw.
+  -- INV: The type constructor is not '[]', a case which is handled
+  --      by 'ListTy'.
+  ConTy :: Ge p Tc => !(TyCON p) -> [Tau p] -> Type c p
   -- | subset type
   PredTy :: Pat p -> Tau p -> Maybe (Prop p) -> Type c p
   -- | function type
@@ -463,14 +497,15 @@ data Type c p where
   -- | parenthised type
   ParenTy :: Tau Pr -> Type c Pr 
   -- | meta type variable
-  MetaTy :: MetaTyVar -> Type c Tc
+  MetaTy :: !MetaTyVar -> Type c Tc
   -- | rank-1 polymorphic type
   ForallTy :: TyParams p -> Tau p -> Sigma p
-
 
 type Sigma = Type SIGMA
 type Tau   = Type TAU
 
+  -- Even more conservative than purely syntactic equality.
+  -- NB: If there are no subset types then it turns to be syntactic equality.
 instance (Eq (TyVAR p), Eq (TyCON p)) => Eq (Type c p) where
   VarTy a == VarTy b = a == b
   ConTyIn tc1 == ConTyIn tc2 = tc1 == tc2
@@ -504,47 +539,7 @@ type Range = Tau
 type PostTcType p = PostTc p (Tau p)
 type PostTcTypes p = PostTc p [Tau p]
 
-
--- * Type constructors
-
-data TyName p = UserTyCon (UTyNAME p)
-              | BuiltinTyCon BuiltinTyCon
-
-deriving instance Eq (UTyNAME p) => Eq (TyName p)
-deriving instance Ord (UTyNAME p) => Ord (TyName p)
-
-  -- Should I include ListTyCon ?
-  -- right now list is a built-in type (not a built-in type constructor)
-  -- but just because list type has special syntax and in this way
-  -- pretty-printing is slightly easier.
-data BuiltinTyCon = UnitTyCon
-                  | BoolTyCon
-                  | IntTyCon
-                  | NatTyCon    -- ^ @{n:Int|n >= 0}@
-                  | ListTyCon
-    deriving (Eq,Ord)
-
-
-data TyCon p
-  = AlgTyCon {
-      tyConName   :: TyName p
-    , tyConCons   :: [Con p]
---     , tyConParams :: [TyVar]
-    }
-  | SynTyCon {
-      tyConName   :: TyName p
-    , tyConParams :: [TyVar]
-    , synTyConRhs :: Tau p
-    }
-
-instance Eq (TyName p) => Eq (TyCon p) where
-  (==) = (==) `on` tyConName
-
-instance Ord (TyName p) => Ord (TyCon p) where
-  compare = compare `on` tyConName
-
-
--- * Meta type variables
+-- ** Meta type variables
 
 data MetaTyVar = MetaTyV {
                     -- a 'Uniq' would suffice but a 'Name' allows
@@ -562,6 +557,51 @@ instance Ord MetaTyVar where
 
 instance Named MetaTyVar where
   nameOf = mtvName
+
+
+-- * Type constructors
+
+type family TyCON phase
+type instance TyCON Pr = TyName Pr
+type instance TyCON Rn = TyName Rn
+type instance TyCON Tc = TyCon Tc
+type instance TyCON Ti = TyCon Ti
+
+
+data TyName p = UserTyCon (UTyNAME p)
+              | BuiltinTyCon BuiltinTyCon
+
+deriving instance Eq (UTyNAME p) => Eq (TyName p)
+deriving instance Ord (UTyNAME p) => Ord (TyName p)
+
+  -- TODO: Should I include ListTyCon ?
+  -- right now list is a built-in type (not a built-in type constructor)
+  -- but just because list type has special syntax and in this way
+  -- pretty-printing is slightly easier.
+data BuiltinTyCon = UnitTyCon
+                  | BoolTyCon
+                  | IntTyCon
+                  | NatTyCon    -- ^ @{n:Int|n >= 0}@
+                  | ListTyCon
+    deriving (Eq,Ord)
+
+
+data TyCon p
+  = AlgTyCon {
+      tyConName   :: TyName p
+    , tyConCons   :: [Con p]
+    }
+  | SynTyCon {
+      tyConName   :: TyName p
+    , tyConParams :: [TyVar]
+    , synTyConRhs :: Tau p
+    }
+
+instance Eq (TyName p) => Eq (TyCon p) where
+  (==) = (==) `on` tyConName
+
+instance Ord (TyName p) => Ord (TyCon p) where
+  compare = compare `on` tyConName
 
 
 -- * Kinds

@@ -5,9 +5,19 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
+-- |
+-- Module      :  H.Syntax.Expr
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
 
 module H.Syntax.Expr
   where
+
 
 import H.Syntax.AST
 import H.Syntax.IsTc
@@ -17,6 +27,7 @@ import H.Syntax.Type
 import Name
 import Sorted
 import Unique( MonadUnique(..) )
+
 
 
 -- * Variables
@@ -48,7 +59,12 @@ toQVar :: VAR p -> QVar p
 toQVar var = QVar var Nothing
 
 
--- * Queries
+-- * Expressions
+
+type IntExp = Exp
+
+instance IsTc p => Sorted Lit (Type c p) where
+  sortOf (IntLit _) = intTy
 
 isElseGuard :: Exp Pr -> Bool
 isElseGuard ElseGuard = True
@@ -58,9 +74,6 @@ splitApp :: Exp p -> (Exp p,[Exp p])
 splitApp = go []
   where go args (App f a) = go (a:args) f
         go args f         = (f,args)
-
-
--- * Smart constructors
 
 mkInt :: Integer -> Exp p
 mkInt = Lit . IntLit
@@ -77,11 +90,15 @@ x .<=. y = InfixApp x (Op leOp) y
 x .>. y = InfixApp x (Op gtOp) y
 x .>=. y = InfixApp x (Op geOp) y
 
-(==*), (!=*) :: IsTc p => Exp p -> Exp p -> Prop p
-x ==* y = InfixApp x (TyApp (Op eqOp) [intTy]) y
-x !=* y = InfixApp x (TyApp (Op neqOp) [intTy]) y
+eq, neq :: IsTc p => Tau p -> Exp p -> Exp p -> Prop p
+eq ty x y = InfixApp x (TyApp (Op eqOp) [ty]) y
+neq ty x y = InfixApp x (TyApp (Op neqOp) [ty]) y
 
-(.+.), (.-.), (.*.), (./.) :: Exp p -> Exp p -> Exp p
+(==*), (!=*) :: IsTc p => IntExp p -> IntExp p -> Prop p
+x ==* y = eq intTy x y
+x !=* y = neq intTy x y
+
+(.+.), (.-.), (.*.), (./.) :: IntExp p -> IntExp p -> IntExp p
 x .+. y = InfixApp x (Op addOp) y
 x .-. y = InfixApp x (Op subOp) y
 x .*. y = InfixApp x (Op mulOp) y
@@ -103,6 +120,24 @@ mkForall :: [VAR p] -> Prop p -> Prop p
 mkForall [] prop = prop
 mkForall xs prop = QP ForallQ (map toQVar xs) prop
 
+-- ** Right hand side
+
+mkExpRhs :: IsTc p => Tau p -> Exp p -> Rhs p
+mkExpRhs ty e = Rhs (PostTc ty) (UnGuarded e) []
+
+mkVarRhs :: IsTc p => Var p -> Rhs p
+mkVarRhs x = mkExpRhs (varTau x) (Var x)
+
+rhs2exp :: Rhs p -> Exp p
+rhs2exp (Rhs _tc_ty (UnGuarded e) binds)
+  = mkLet binds e
+rhs2exp (Rhs  tc_ty (Guarded grhss) binds)
+  = mkLet binds $ If tc_ty grhss
+
+grhs2exp :: IsTc p => Tau p -> GRhs p -> Exp p
+grhs2exp _ty (UnGuarded e)   = e
+grhs2exp  ty (Guarded grhss) = If (PostTc ty) grhss
+
 
 -- * Data constructors
 
@@ -112,12 +147,12 @@ instance IsTc p => Sorted BuiltinCon (Sigma p) where
   sortOf TrueCon  = boolTy
   sortOf NilCon   = mkForallTy [a_tv] $ ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -1001
+          a_uniq = -11
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf ConsCon  = mkForallTy [a_tv] $ a --> ListTy a --> ListTy a
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -1002
+          a_uniq = -12
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
 
@@ -127,6 +162,7 @@ instance IsTc p => Sorted (Con p) (Sigma p) where
 
 instance IsTc p => Sorted (TcCon p) (Sigma p) where
   sortOf = sortOf . tcConCon
+
 
 unitCon, trueCon, falseCon, nilCon, consCon :: Con p
 unitCon  = BuiltinCon UnitCon
@@ -158,12 +194,12 @@ instance IsTc p => Sorted BoolOp (Sigma p) where
   sortOf IffB = boolTy --> boolTy --> boolTy
   sortOf EqB  = mkForallTy [a_tv] $ a --> a --> boolTy
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -2001
+          a_uniq = -21
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf NeqB  = mkForallTy [a_tv] $ a --> a --> boolTy
     where a_nm = mkUsrName (mkOccName TyVarNS "a") a_uniq
-          a_uniq = -2002
+          a_uniq = -22
           a_tv = TyV a_nm typeKi False
           a = VarTy a_tv
   sortOf LtB = intTy --> intTy --> boolTy
@@ -171,11 +207,13 @@ instance IsTc p => Sorted BoolOp (Sigma p) where
   sortOf GtB = intTy --> intTy --> boolTy
   sortOf GeB = intTy --> intTy --> boolTy
 
-  -- / and % could be more specific but that would introduce a mutually recursive
-  -- dependency between both of them: that should be OK since they are built-in, but
-  -- since the language does not allow you to do that.. we don't allow that as well.
-  -- We *may* provide some assumed theorems, for instance
-  -- theorem div_mod = forall n m, (n/m) * m + (n%m) == n
+  -- NB: / and % could be more specific but that would introduce a mutually 
+  --     recursive dependency between both. This dependency may be OK since 
+  --     they are built-in, but since the language does not allow you to do
+  --     that.. we don't allow that as well.
+  --     We *may* provide some assumed theorems, for instance
+  --        @theorem div_mod = forall n m, (n/m) * m + (n%m) == n@
+  --     as well as some useful type judgements once we add support for them.
 instance IsTc p => Sorted IntOp (Sigma p) where
   sortOf NegI = intTy --> intTy
   sortOf AddI = intTy --> intTy --> intTy
@@ -186,13 +224,13 @@ instance IsTc p => Sorted IntOp (Sigma p) where
                   @--> intTy
     where m = mkVarId m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
-          m_uniq = -3002
+          m_uniq = -31
   sortOf ModI = intTy
                   --> mkDomVar m intTy (Var m !=* zero)
                   @--> intTy
     where m = mkVarId m_nm intTy
           m_nm = mkSysName (mkOccName VarNS "m") m_uniq
-          m_uniq = -3102
+          m_uniq = -32
   sortOf ExpI = intTy --> intTy --> intTy
 
 
@@ -218,23 +256,3 @@ mulOp = IntOp MulI
 divOp = IntOp DivI
 modOp = IntOp ModI
 expOp = IntOp ExpI
-
-
--- * Right hand side
-
-rhsExp :: IsTc p => Tau p -> Exp p -> Rhs p
-rhsExp ty e = Rhs (PostTc ty) (UnGuarded e) []
-
-rhsVar :: IsTc p => Var p -> Rhs p
-rhsVar x = rhsExp x_tau (Var x)
-  where x_tau = varTau x
-
-rhs2exp :: Rhs p -> Exp p
-rhs2exp (Rhs _tc_ty (UnGuarded e) binds)
-  = mkLet binds e
-rhs2exp (Rhs  tc_ty (Guarded grhss) binds)
-  = mkLet binds $ If tc_ty grhss
-
-grhs2exp :: IsTc p => Tau p -> GRhs p -> Exp p
-grhs2exp _ty (UnGuarded e)   = e
-grhs2exp  ty (Guarded grhss) = If (PostTc ty) grhss
