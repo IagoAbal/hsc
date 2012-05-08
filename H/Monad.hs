@@ -69,8 +69,7 @@ instance Monoid log => MonadReader env (H env log st) where
 instance Monoid log => MonadUnique (H env log st) where
   getUniq = H $ do us_ref <- asks henv_us
                    us <- liftIO $ readIORef us_ref
-                   let uniq = next us
-                   let us' = rest us
+                   let (uniq,us') = next us
                    liftIO $ writeIORef us_ref us'
                    return uniq
 

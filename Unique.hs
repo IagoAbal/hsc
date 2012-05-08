@@ -1,19 +1,29 @@
 
-{-# LANGUAGE MultiParamTypeClasses,
-             GeneralizedNewtypeDeriving, 
-             FlexibleContexts
-             #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
--- | Generation of unique values
+-- |
+-- Module      :  H.Unique
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+--
+-- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- Uniques generation.
+
 module Unique
   ( Uniq
   , Uniquable(..)
-  , UniqSupply, newSupply, next, pick, rest
+  , UniqSupply, newSupply, next, split
   , MonadUnique(..)
   , UniqueT(..), evalUniqueT, runUniqueT
   , Unique(..), evalUnique, runUnique
   )
   where
+
 
 import Control.Monad.Identity
 import Control.Monad.Reader
@@ -21,33 +31,30 @@ import Control.Monad.State.Strict
 import Control.Monad.Trans.Maybe
 
 
--- * Unique values
 
 type Uniq = Int
 
 
--- * Uniquable class
--- Types whose inhabitants are uniquely identified.
-
+-- | Types whose inhabitants are uniquely identified.
 class Uniquable a where
   uniqOf :: a -> Uniq
 
 
 -- * Unique supply
 
-newtype UniqSupply = UniqSupply { next :: Uniq }
+data UniqSupply = UniqSupply { _inc :: !Int, _first :: !Uniq }
 
 mkSupply :: Uniq -> UniqSupply
-mkSupply = UniqSupply
+mkSupply = UniqSupply 1
 
 newSupply :: UniqSupply
 newSupply = mkSupply 0
 
-pick :: UniqSupply -> (Uniq,UniqSupply)
-pick (UniqSupply x) = (x,mkSupply (x+1))
+next :: UniqSupply -> (Uniq,UniqSupply)
+next (UniqSupply inc x) = (x,UniqSupply inc (x+inc))
 
-rest :: UniqSupply -> UniqSupply
-rest (UniqSupply x) = mkSupply (x+1)
+split :: UniqSupply -> (UniqSupply,UniqSupply)
+split (UniqSupply i x) = (UniqSupply (2*i) x, UniqSupply (2*i) (x+1))
 
 
 -- * MonadUnique
@@ -55,9 +62,6 @@ rest (UniqSupply x) = mkSupply (x+1)
 
 class Monad m => MonadUnique m where
   getUniq :: m Uniq
-
-
--- MonadUnique instances for some monad stacks based on lifting.
 
 instance MonadUnique m => MonadUnique (ReaderT r m) where
   getUniq = lift getUniq
@@ -79,8 +83,8 @@ runUniqueT = runStateT . unUniqueT
 
 
 instance Monad m => MonadUnique (UniqueT m) where
-    getUniq = UniqueT $ do uniq <- gets next
-                           modify rest
+    getUniq = UniqueT $ do (uniq,us') <- gets next
+                           put us'
                            return uniq
 
 
