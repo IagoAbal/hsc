@@ -170,7 +170,7 @@ shift/reduce-conflict, so we don't handle this case here, but in bodyaux.
 > : srcloc 'type' tyconid typarams '=' type     { TypeDecl $1 $3 $4 $6 }
 > | srcloc 'data' tyconid typarams '=' constrs  { DataDecl $1 $3 $4 $6 }
 > | valdecl                                   { $1 }
-> | srcloc goaltype goalname '=' exp          { GoalDecl $1 $2 $3 NoPostTc $5 }
+> | srcloc goaltype goalname '=' exp          { GoalDecl $1 $2 $3 None $5 }
 
 > goaltype :: { GoalType }
 > : 'theorem' { TheoremGoal }
@@ -279,16 +279,16 @@ Value definitions
 > bind :: { Bind Pr }
 > : funsig semis funbind            {% funWithSig $1 $3 }
 > | funbind                         { $1 }
-> | srcloc pat rhs wherebinds       { PatBind (Just $1) $2 (Rhs NoPostTc $3 $4) }
+> | srcloc pat rhs wherebinds       { PatBind (Just $1) $2 (Rhs None $3 $4) }
 
 > funsig :: { (SrcLoc,NAME Pr,Sigma Pr) }
 > : srcloc varid ':' polytype { ($1,$2,$4) }
 
 > funbind :: { Bind Pr }
 > : srcloc varid apats rhs wherebinds
->         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) $3 (Rhs NoPostTc $4 $5)] }
+>         { FunBind Rec $2 NoTypeSig None [Match (Just $1) $3 (Rhs None $4 $5)] }
 > | srcloc varid rhs wherebinds
->         { FunBind Rec $2 NoTypeSig NoPostTc [Match (Just $1) [] (Rhs NoPostTc $3 $4)] }
+>         { FunBind Rec $2 NoTypeSig None [Match (Just $1) [] (Rhs None $3 $4)] }
 
 > binds :: { [Bind Pr] }
 > : valdecllist     { getParsedBinds $1 }
@@ -344,10 +344,10 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | exp10b      { $1 }
 
 > exp10a :: { Exp Pr }
-> : '\\' srcloc apats '->' exp  { Lam (Just $2) $3 (Rhs NoPostTc (UnGuarded $5) []) }
+> : '\\' srcloc apats '->' exp  { Lam (Just $2) $3 (Rhs None (UnGuarded $5) []) }
 > | 'let' binds 'in' exp { Let $2 $4 }
-> | 'if' exp 'then' exp 'else' exp { Ite NoPostTc $2 $4 $6 }
-> | 'if' gdpats    { If NoPostTc (GuardedRhssIn $2) }
+> | 'if' exp 'then' exp 'else' exp { Ite None $2 $4 $6 }
+> | 'if' gdpats    { If None (GuardedRhssIn $2) }
 > | quantifier qvars ',' exp  { QP $1 $2 $4 }
 
 > quantifier :: { Quantifier }
@@ -355,7 +355,7 @@ the exp0 productions to distinguish these from the others (exp0a).
 > | 'forall'  { ForallQ }
 
 > exp10b :: { Exp Pr }
-> : 'case' exp 'of' altslist  { Case $2 NoPostTc $4 }
+> : 'case' exp 'of' altslist  { Case None $2 $4 }
 > | '~' fexp      { PrefixApp (Op notOp) $2 }
 > | '-' fexp      { PrefixApp (Op negOp) $2 }
 > | fexp        { $1 }
@@ -382,7 +382,7 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 > | literal     { Lit $1 }
 > | '(' exp ')'     { Paren $2 }
 > | '(' op ')'      { Op $2 }
-> | '(' texps ')'     { Tuple NoPostTc $2 }
+> | '(' texps ')'     { Tuple None $2 }
 > | '[' list ']'         { $2 }
 > | '(' exp0b op ')'    { LeftSection $2 (Op $3)  }
 > | '(' op exp0 ')'   { RightSection (Op $2) $3 }
@@ -407,11 +407,11 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
   > : pat1 ':' type   { SigPat $1 $3 }
 
 > pat1 :: { Pat Pr }
-> : fpat '::' pat1    { InfixCONSPat NoPostTc $1 $3 }
+> : fpat '::' pat1    { InfixCONSPat None $1 $3 }
 > | fpat      { $1 }
 
 > fpat :: { Pat Pr }
-> : con apats   { ConPat $1 NoPostTc $2 }
+> : con apats   { ConPat None $1 $2 }
 > | apat        { $1 }
 
 > apat :: { Pat Pr }
@@ -420,14 +420,14 @@ parses equivalently to ((e) op x).  Thus e must be an exp0b.
 
 > apat1 :: { Pat Pr }
 > : var       { VarPat $1 }
-> | con        { ConPat $1 NoPostTc [] }
+> | con        { ConPat None $1 [] }
 > | literal     { LitPat $1 }
 
  > | '(' pat ':' type ')'     { SigPat $2 $4 }
 
 > | '(' pat ')'     { ParenPat $2 }
-> | '(' tpats ')'     { TuplePat $2 NoPostTc }
-> | '[' lpats ']'     { ListPat $2 NoPostTc }
+> | '(' tpats ')'     { TuplePat None $2 }
+> | '[' lpats ']'     { ListPat None $2 }
 > | '_'             { WildPatIn }
 
 > tpats :: { [Pat Pr] }
@@ -455,8 +455,8 @@ The rules below are little bit contorted to keep lexps left-recursive while
 avoiding another shift/reduce-conflict.
 
 > list :: { Exp Pr }
-> : exp       { List NoPostTc [$1] }
-> | lexps       { List NoPostTc $1 }
+> : exp       { List None [$1] }
+> | lexps       { List None $1 }
 > | exp '..' exp      { EnumFromTo $1 $3 }
 > | exp ',' exp '..' exp    { EnumFromThenTo $1 $3 $5 }
 
@@ -479,7 +479,7 @@ Case alternatives
 > | alt       { [$1] }
 
 > alt :: { Alt Pr }
-> : srcloc pat altrhs { Alt (Just $1) $2 (Rhs NoPostTc $3 []) }
+> : srcloc pat altrhs { Alt (Just $1) $2 (Rhs None $3 []) }
 
 > altrhs :: { GRhs Pr }
 > : '->' exp      { UnGuarded $2 }

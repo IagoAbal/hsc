@@ -19,7 +19,6 @@ import Control.Monad
 import Control.Monad.Error
 import Data.Set ( Set )
 import qualified Data.Set as Set
-import qualified Data.Foldable as F
 
 
 getFreeTyVars :: [Type c Tc] -> TcM (Set TyVar)
@@ -27,15 +26,15 @@ getFreeTyVars :: [Type c Tc] -> TcM (Set TyVar)
 -- (no duplicates) of free type variables
 getFreeTyVars ptys = do
   ptys' <- mapM zonkType ptys
-  return (typesFTV ptys')
+  return (ftvOf ptys')
 
 
-getMetaTyVars :: [Type c Tc] -> TcM (Set MetaTyVar)
+getMetaTyVars :: [Type c Tc] -> TcM [MetaTyVar]
 -- This function takes account of zonking, and returns a set
 -- (no duplicates) of unbound meta-type variables
 getMetaTyVars ptys = do
   ptys' <- mapM zonkType ptys
-  return (typesMTV ptys')
+  return (gmtvOf ptys')
 
 
 quantify :: [MetaTyVar] -> Tau Tc -> TcM ([TyVar],Sigma Tc)
@@ -57,100 +56,6 @@ quantifyExp expr mtvs ty = do
   (forall_tvs,pty) <- quantify mtvs ty
   return (mkTyLam forall_tvs expr,pty)
 
-
--- * Meta type variables
--- FIX return type must be a list because the order "matters", for example,
--- map type is being inferred as (b -> a) -> [b] -> [a] whilst we would like to
--- see (a -> b) -> [a] -> [b].
--- NOTE
--- We don't want a proper MTV computation, for instance, we don't want
--- to go "inside" predicates to get MTVs, because typeMTV is used
--- to generalise a type, suppose the following
--- {x:?a|(\y:?b -> True) x} -> Int
--- we don't want to generalise ?b !!!
-
-patsMTV :: [Pat Tc] -> Set MetaTyVar
-patsMTV = Set.unions . map patMTV
-
-patMTV :: Pat Tc -> Set MetaTyVar
-  -- I think we don't need to get MTVs from x type for the typeMTV case, but
-  -- it does not hurt, and I think we really need this for the propMTV case.
-patMTV (VarPat x) = typeMTV $ varType x
-patMTV (LitPat _) = Set.empty
-patMTV (InfixCONSPat ptcty p1 p2) = patsMTV [p1,p2] `Set.union` (F.foldMap typeMTV ptcty)
-patMTV (ConPat _con ptctys ps) = patsMTV ps  `Set.union` (F.foldMap typesMTV ptctys)
-patMTV (TuplePat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
-patMTV (ListPat ps ptcty) = patsMTV ps `Set.union` (F.foldMap typeMTV ptcty)
-patMTV (ParenPat p) = patMTV p
-patMTV (WildPat wild_var) = typeMTV $ varType wild_var
-patMTV (AsPat _x p)  = patMTV p
--- patMTV (SigPat p ty) = patMTV p `Set.union` typeMTV ty
-
-qvarsMTV :: [QVar Tc] -> Set MetaTyVar
-qvarsMTV = Set.unions . map qvarMTV
-
-qvarMTV :: QVar Tc -> Set MetaTyVar
-  -- I think we don't need to get MTVs from x type for the typeMTV case, but
-  -- it does not hurt, and I think we really need this for the propMTV case.
-qvarMTV (QVar x mb_ty) = typeMTV (varType x) `Set.union` (F.foldMap typeMTV mb_ty)
-
-typesMTV :: [Type c Tc] -> Set MetaTyVar
-typesMTV = Set.unions . map typeMTV
-
-typeMTV :: Type c Tc -> Set MetaTyVar
-typeMTV (VarTy _) = Set.empty
-typeMTV (ConTy _ args) = typesMTV args
-typeMTV (PredTy pat ty _)  = patMTV pat `Set.union` typeMTV ty
-typeMTV (FunTy dom rang) = domMTV dom `Set.union` typeMTV rang
-typeMTV (ListTy ty) = typeMTV ty
-typeMTV (TupleTy ds) = domsMTV ds
-typeMTV (MetaTy mtv) = Set.singleton mtv
-typeMTV (ForallTy _tvs ty) = typeMTV ty
-typeMTV _other = undefined -- impossible
-
-domsMTV :: [Dom Tc] -> Set MetaTyVar
-domsMTV = Set.unions . map domMTV
-
-domMTV :: Dom Tc -> Set MetaTyVar
-domMTV (Dom Nothing ty Nothing) = typeMTV ty
-domMTV (Dom (Just pat) ty _) = patMTV pat `Set.union` typeMTV ty
-domMTV _other = undefined -- impossible
-
-propsMTV :: [Prop Tc] -> Set MetaTyVar
-propsMTV = Set.unions . map propMTV
-
--- used for GoalDecl, that's why I named it propMTV and not expMTV...
--- It just look for forall-patterns
--- now it is limited, dirty... but it suffices... I will extend it
--- in future after thinking on it a little more.
-propMTV :: Prop Tc -> Set MetaTyVar
-propMTV (Var _)   = Set.empty
-propMTV (Con _)   = Set.empty
-propMTV (Op _)    = Set.empty
-propMTV (Lit _)   = Set.empty
-propMTV (PrefixApp _op e) = propMTV e
-propMTV (InfixApp e1 _op e2) = propsMTV [e1,e2]
-propMTV (App e1 e2) = propsMTV [e1,e2]
-propMTV (TyApp e tys) = propMTV e
-propMTV (Lam _loc _pats (Rhs _ (UnGuarded body) _))
-  = propMTV body
-  -- we don't go inside bindings...
-propMTV (Let _bs body)
-  = propMTV body
-propMTV (TyLam tvs body) = propMTV body
-propMTV (Ite _ g t e) = Set.empty
-propMTV (If _ grhss) = Set.empty
-propMTV (Case e _ptcty alts) = propMTV e
-propMTV (Tuple _ es) = propsMTV es
-propMTV (List _ es) = propsMTV es
-propMTV (Paren e) = propMTV e
-propMTV (LeftSection e _op) = propMTV e
-propMTV (RightSection _op e) = propMTV e
-propMTV (EnumFromTo e1 e2) = propsMTV [e1,e2]
-propMTV (EnumFromThenTo e1 e2 e3) = propsMTV [e1,e2,e3]
-propMTV (Coerc _loc e polyty) = propMTV e
-propMTV (QP qt qvars body) = qvarsMTV qvars `Set.union` propMTV body
-propMTV _other = undefined -- impossible
 
 expandSyn :: (IsTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
 expandSyn (ConTy (SynTyCon _ ps rhs) args)
@@ -179,7 +84,7 @@ instWithVars sig typs expr = do
 instTupleWithVars :: forall m p. (MonadUnique m, IsTc p, MonadError Doc m) => [Dom p] -> m (Exp p,[Var p])
 instTupleWithVars doms = go 1 [] doms
   where go :: Int -> [Var p] -> [Dom p] -> m (Exp p,[Var p])
-        go _i xs_rev []     = return (Tuple (PostTc $ TupleTy doms) (map Var xs), xs)
+        go _i xs_rev []     = return (Tuple (TupleTy doms) (map Var xs), xs)
           where xs = reverse xs_rev
         go  i xs_rev (d:ds) = do
           x <- newVarId ("x" ++ show i) (dom2type d)
@@ -216,7 +121,7 @@ patExpSubst expr pat_dom target_fv = get_subst expr pat_dom
         get_subst _ (WildPat _) = Just []
         get_subst e (VarPat x) | not (x `Set.member` target_fv) = Just []
                                | otherwise = Just [(x,e)]
-        get_subst e (ConPat con' _ ps)
+        get_subst e (ConPat _ con' ps)
           | (f,args) <- splitApp e
           , Just con <- get_con f
           , con == con' = liftM concat $ zipWithM get_subst args ps
@@ -229,9 +134,9 @@ patExpSubst expr pat_dom target_fv = get_subst expr pat_dom
           = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
         get_subst (InfixApp e1 (TyApp (Op CONSOp) _) e2) (InfixCONSPat _ p1 p2)
           = liftM concat $ sequence [get_subst e1 p1, get_subst e2 p2]
-        get_subst (Tuple _ es) (TuplePat ps _)
+        get_subst (Tuple _ es) (TuplePat _ ps)
           | length es == length ps = liftM concat $ zipWithM get_subst es ps
-        get_subst (List _ es) (ListPat ps _)
+        get_subst (List _ es) (ListPat _ ps)
           | length es == length ps = liftM concat $ zipWithM get_subst es ps
 --         get_subst e (SigPat p _) = get_subst e p
         get_subst e (AsPat x p) = liftM ((x,e):) $ get_subst e p
@@ -281,18 +186,18 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
                get_subst (s',bs') q2 p2
         get_subst (s,bs) (ConPat con _ qs) (ConPat con' _ ps)
           | con == con' = fold_get_subst (s,bs) qs ps
-        get_subst acc    (TuplePat qs _) (TuplePat ps _)
+        get_subst acc    (TuplePat _ qs) (TuplePat _ ps)
           = fold_get_subst acc qs ps
-        get_subst (s,bs) (ListPat qs _) (ListPat ps _)
+        get_subst (s,bs) (ListPat _ qs) (ListPat _ ps)
           = fold_get_subst (s,bs) qs ps
-        get_subst acc (ListPat [] _) (ConPat _ _ []) = return acc
-        get_subst acc (ConPat _ _ []) (ListPat [] _) = return acc
-        get_subst acc (ListPat (q:qs) ptcty) (InfixCONSPat _ p1 p2) = do
+        get_subst acc (ListPat _ []) (ConPat _ _ []) = return acc
+        get_subst acc (ConPat _ _ []) (ListPat _ []) = return acc
+        get_subst acc (ListPat ty (q:qs)) (InfixCONSPat _ p1 p2) = do
           acc' <- get_subst acc q p1
-          get_subst acc' (ListPat qs ptcty) p2
-        get_subst acc (InfixCONSPat _ q1 q2) (ListPat (p:ps) ptcty) = do
+          get_subst acc' (ListPat ty qs) p2
+        get_subst acc (InfixCONSPat _ q1 q2) (ListPat ty (p:ps)) = do
           acc' <- get_subst acc q1 p
-          get_subst acc' q2 (ListPat ps ptcty)
+          get_subst acc' q2 (ListPat ty ps)
         get_subst (s,bs) q           (AsPat x p)
           | not (Set.member x fvs) = get_subst (s,bs) q p
         get_subst (s,bs) (AsPat y q) (AsPat x p) = get_subst ((x,Var y):s,bs) q p
@@ -300,8 +205,6 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
           =  get_subst ((x,e):s,bs) q p
           where e = pat2exp q
         get_subst acc (AsPat _y q) p           = get_subst acc q p
---         get_subst acc (SigPat q _) p            = get_subst acc q p
---         get_subst acc q            (SigPat p _) = get_subst acc q p
         get_subst acc (ParenPat q) p            = get_subst acc q p
         get_subst acc q            (ParenPat p) = get_subst acc q p
           -- just check preconditions... change it by an earlier assert
@@ -397,7 +300,7 @@ instPredTyProp  e pat  ty mb_prop
  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = subst_mbExp s [] mb_prop
  | otherwise = do
     other <- newVarId "other" (tau2sigma ty)
-    return $ Just $ Case e (PostTc boolTy)
+    return $ Just $ Case boolTy e
                       [Alt Nothing pat (mkExpRhs boolTy prop)
                       ,Alt Nothing (VarPat other) (mkExpRhs boolTy P._False_)
                       ]
@@ -427,11 +330,11 @@ tcExprType (Let _ e) = tcExprType e
 tcExprType (TyLam tvs e) = do
   e_ty <- tcExprType e
   return $ mkForallTy tvs $ type2tau e_ty
-tcExprType (Ite (PostTc ite_ty) _ _ _) = return $ tau2sigma ite_ty
-tcExprType (If (PostTc if_ty) _) = return $ tau2sigma if_ty
-tcExprType (Case _ (PostTc case_ty) _) = return $ tau2sigma case_ty
-tcExprType (Tuple (PostTc tup_ty) _) = return $ tau2sigma tup_ty
-tcExprType (List (PostTc list_ty) _) = return $ tau2sigma list_ty
+tcExprType (Ite ite_ty _ _ _) = return $ tau2sigma ite_ty
+tcExprType (If if_ty _) = return $ tau2sigma if_ty
+tcExprType (Case case_ty _ _) = return $ tau2sigma case_ty
+tcExprType (Tuple tup_ty _) = return $ tau2sigma tup_ty
+tcExprType (List list_ty _) = return $ tau2sigma list_ty
 tcExprType (Paren e) = tcExprType e
 tcExprType (LeftSection e1 op) = liftM tau2sigma $ tcAppType op [e1]
 tcExprType (RightSection op e2) = do
@@ -473,14 +376,14 @@ tcPatsTypes = mapM tcPatType
 tcPatType :: (MonadUnique m, MonadError Doc m, IsTc p) => Pat p -> m (Tau p)
 tcPatType (VarPat x) = return $ type2tau $ varType x
 tcPatType (LitPat _) = return intTy
-tcPatType (InfixCONSPat (PostTc elem_ty) _ _) = return $ ListTy elem_ty
-tcPatType (ConPat con (PostTc typs) ps)  = do
+tcPatType (InfixCONSPat elem_ty _ _) = return $ ListTy elem_ty
+tcPatType (ConPat typs con ps)  = do
   con_tau <- instSigmaType con_ty typs
   res_ty <- tcEqType ps con_tau
   return res_ty
   where con_ty = sortOf con
-tcPatType (TuplePat _ (PostTc tup_ty)) = return tup_ty
-tcPatType (ListPat _ (PostTc list_ty)) = return list_ty
+tcPatType (TuplePat tup_ty _) = return tup_ty
+tcPatType (ListPat list_ty _) = return list_ty
 tcPatType (ParenPat p) = tcPatType p
 tcPatType (WildPat wild_var)
   = return $ type2tau $ varType wild_var
@@ -490,4 +393,4 @@ tcPatType _other = undefined -- impossible
 
 
 tcRhsType :: IsTc p => Rhs p -> Tau p
-tcRhsType (Rhs (PostTc rhs_ty) _ _) = rhs_ty
+tcRhsType (Rhs rhs_ty _ _) = rhs_ty

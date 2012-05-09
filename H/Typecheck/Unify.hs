@@ -3,7 +3,6 @@
 module H.Typecheck.Unify where
 
 import H.Typecheck.TcM
-import H.Typecheck.MetaTyVar
 import H.Typecheck.Zonk
 import H.Typecheck.Utils
 
@@ -164,7 +163,7 @@ unifyVar dir mtv ty = do
       Nothing  -> do
 --         ty_z <- zonkType ty
 --         traceDoc (text "unifyVar by unifyUnboundVar") $ do
-        unifyUnboundVar dir mtv ty (mtvType ty)
+        unifyUnboundVar dir mtv ty (mtvOf ty)
       Just ty1 -> flipByDirection dir unifyKappa ty1 ty
 
 unifyUnboundVar :: Direction -> MetaTyVar -> Tau Tc -> Set MetaTyVar -> TcM ()

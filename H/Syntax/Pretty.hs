@@ -1,6 +1,8 @@
 
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 -- |
@@ -23,20 +25,22 @@ import H.Syntax.Phase
 import Pretty
 
 
+instance Pretty (None p) where
+  pretty = const empty
 
 -- * Pretty-names class
 
 class (Pretty (VAR p), PrettyBndr (VAR p), Pretty (CON p),
       Pretty (TyVAR p), PrettyBndr (TyVAR p), Pretty (TyCON p),
-      Pretty(GoalNAME p)) => PrettyNames p where
+      Pretty (GoalNAME p),
+      Pretty (TcTyPARAMs p)) => PrettyNames p where
 
 instance PrettyNames Pr where
 instance PrettyNames Rn where
 instance PrettyNames Tc where
 instance PrettyNames Ti where
 
-
--- * Variables
+-- * Variables and parameters
 
 instance Pretty (Var p) where
   pretty v@(V _ _ False) = pretty $ varName v
@@ -51,6 +55,10 @@ instance Pretty TyVar where
 
 instance PrettyBndr TyVar where
   prettyBndr tv = parens $ pretty tv <> colon <> pretty (tyVarKind tv)
+
+  -- type params
+instance Pretty [TyVar] where
+  pretty typs = vcat $ map (\tv -> char '@' <> pretty tv) typs
 
 
 -- * Modules
@@ -84,16 +92,10 @@ instance PrettyNames p => Pretty (Decl p) where
       ++ map prettyBndr nameList)
       <+> myVcat (zipWith (<+>) (equals : repeat (char '|'))
                (map pretty constrList))
---   pretty (TypeSig pos name polyType)
---     = blankline $
---       mySep [pretty name, text ":", pretty polyType]
   pretty (ValDecl bind) = blankline $ pretty bind
-  pretty (GoalDecl _pos goaltype gname ptctyps prop)
+  pretty (GoalDecl _pos goaltype gname typs prop)
     = blankline $
-        myFsep $ [pretty goaltype, pretty gname] ++ pp_typs ++ [equals, pretty prop]
-    where pp_typs = case ptctyps of
-                        NoPostTc    -> []
-                        PostTc typs -> map (\tv -> char '@' <> pretty tv) typs
+        myFsep $ [pretty goaltype, pretty gname, pretty typs, equals, pretty prop]
 
 instance PrettyNames p => Pretty (ConDecl p) where
   pretty (ConDeclIn _pos name typeList) =
@@ -180,8 +182,8 @@ instance PrettyNames p => Pretty (Exp p) where
       text "then", pretty thenexp,
       text "else", pretty elsexp]
   pretty (If _ grhss) = myFsep [text "if", ppGuardedRhss IfExp grhss]
-  pretty (Case cond _ptcty altList) =
-    myFsep [text "case", pretty cond, text "of"]
+  pretty (Case _ty scrut altList) =
+    myFsep [text "case", pretty scrut, text "of"]
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
   pretty (Var var) = pretty var
@@ -271,11 +273,11 @@ instance PrettyNames p => Pretty (Pat p) where
   prettyPrec _ (LitPat lit) = pretty lit
   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
     myFsep [pretty a, text "::", pretty b]
-  prettyPrec _ (ConPat con _ []) = pretty con
-  prettyPrec p (ConPat con _ ps) = parensIf (p > 1) $
+  prettyPrec _ (ConPat _tys con []) = pretty con
+  prettyPrec p (ConPat _tys con ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
-  prettyPrec _ (TuplePat ps _) = parenList . map pretty $ ps
-  prettyPrec _ (ListPat ps _) =
+  prettyPrec _ (TuplePat _ty ps) = parenList . map pretty $ ps
+  prettyPrec _ (ListPat _ty ps) =
     bracketList . punctuate comma . map pretty $ ps
   prettyPrec _ (ParenPat p) = parens . pretty $ p
   -- special case that would otherwise be buggy
@@ -283,8 +285,6 @@ instance PrettyNames p => Pretty (Pat p) where
     hcat [prettyBndr var, char '@', pretty pat]
   prettyPrec _ WildPatIn     = char '_'
   prettyPrec _ (WildPat var) = pretty var
---   prettyPrec _ (SigPat pat ty) =
---     parens $ myFsep [pretty pat, text ":", pretty ty]
 
 
 -- * Alternatives

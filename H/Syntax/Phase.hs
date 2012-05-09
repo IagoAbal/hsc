@@ -19,12 +19,6 @@
 module H.Syntax.Phase where
 
 
-import Control.Applicative
-import Data.Foldable
-import Data.Monoid
-import Data.Traversable
-
-
 
 -- * Front-end phases
 
@@ -32,6 +26,9 @@ data Pr   -- ^ Parsing
 data Rn   -- ^ Renaming
 data Tc   -- ^ Type checking
 data Ti   -- ^ Type inference
+
+type family PhaseOf t
+type instance PhaseOf [t] = PhaseOf t
 
 -- ** Order between phases
 
@@ -63,29 +60,8 @@ instance Lt b a => Gt a b where
 class Ge a b where
 instance Le b a => Ge a b where
 
+-- * None
 
--- * PostTc
+data None p = None
 
--- | Something that it is only known after typechecking.
--- A common usage would be @PostTc p (Type p)@ to denote a type hole to be
--- filled by the typechecker.
-data PostTc p a where
-  NoPostTc :: Lt p Tc => PostTc p a
-  PostTc   :: Ge p Tc => a -> PostTc p a
-
-instance Eq a => Eq (PostTc p a) where
-  NoPostTc   == NoPostTc   = True
-  (PostTc x) == (PostTc y) = x == y
-  _other1    == _other2    = False
-
-instance Functor (PostTc p) where
-  fmap _f NoPostTc   = NoPostTc
-  fmap  f (PostTc x) = PostTc (f x)
-
-instance Foldable (PostTc p) where
-  foldMap _f NoPostTc  = mempty
-  foldMap f (PostTc x) = f x
-
-instance Traversable (PostTc p) where
-  traverse _f NoPostTc   = pure NoPostTc
-  traverse  f (PostTc x) = PostTc <$> f x
+type instance PhaseOf (None p) = p

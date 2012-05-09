@@ -1,4 +1,5 @@
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -27,6 +28,8 @@ import H.Syntax.Type
 import Name
 import Sorted
 import Unique( MonadUnique(..) )
+
+#include "bug.h"
 
 
 
@@ -122,8 +125,12 @@ mkForall xs prop = QP ForallQ (map toQVar xs) prop
 
 -- ** Right hand side
 
+lamRhs :: Rhs p -> Exp p
+lamRhs (Rhs _ty (UnGuarded e) []) = e
+lamRhs _other                     = bug "lamRhs: not a lambda-RHS"
+
 mkExpRhs :: IsTc p => Tau p -> Exp p -> Rhs p
-mkExpRhs ty e = Rhs (PostTc ty) (UnGuarded e) []
+mkExpRhs ty e = Rhs ty (UnGuarded e) []
 
 mkVarRhs :: IsTc p => Var p -> Rhs p
 mkVarRhs x = mkExpRhs (varTau x) (Var x)
@@ -136,7 +143,7 @@ rhs2exp (Rhs  tc_ty (Guarded grhss) binds)
 
 grhs2exp :: IsTc p => Tau p -> GRhs p -> Exp p
 grhs2exp _ty (UnGuarded e)   = e
-grhs2exp  ty (Guarded grhss) = If (PostTc ty) grhss
+grhs2exp  ty (Guarded grhss) = If ty grhss
 
 
 -- * Data constructors

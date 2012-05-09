@@ -198,7 +198,7 @@ coDecl (DataDecl loc tyname tvs constrs) = do
   mapM_ coConDecl sko_constrs
   where coConDecl (ConDecl loc name doms) = coDoms doms
 coDecl (ValDecl bind) = coBind bind
-coDecl (GoalDecl loc gtype gname (PostTc tvs) prop) = do
+coDecl (GoalDecl loc gtype gname tvs prop) = do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_prop <- subst_exp [] (zip tvs sko_tys) prop
@@ -208,12 +208,12 @@ coBinds :: [Bind Ti] -> CoM ()
 coBinds = mapM_ coBind
 
 coBind :: Bind Ti -> CoM ()
-coBind (PatBind (Just loc) pat rhs@(Rhs (PostTc rhs_ty) _ _)) = do
+coBind (PatBind (Just loc) pat rhs@(Rhs rhs_ty _ _)) = do
   coRhs rhs
   (x,rhs_ctxt) <- getCaseLikeCtxt (rhs2exp rhs) (tau2sigma rhs_ty) [pat]
   rhs_ctxt $
     co_Equations [x] [patbin2eq loc pat]
-coBind (FunBind _rec fun fun_tsig (PostTc tvs) matches)
+coBind (FunBind _rec fun fun_tsig tvs matches)
   = inFunBindCtxt (ppQuot fun) $ do
 --   traceDoc (text "coBind-FunBind " <+> pretty fun <+> char ':' <+> pretty fun_ty <+> text "==============") $ do
   coTypeSig fun_tsig
@@ -312,29 +312,29 @@ coExp (TyLam tvs e) Infer = do
   sko_e_ty <- coExp e' Infer
   e_ty <- subst_type [] (zip sko_tvs $ map VarTy tvs) sko_e_ty
   return (ForallTy tvs $ type2tau e_ty)
-coExp e@(Ite (PostTc ite_ty) g e1 e2) exp_ty = do
+coExp e@(Ite ite_ty g e1 e2) exp_ty = do
   coExp g (Check boolTy)
   withFacts [g] $
     coExp e1 (Check $ tau2sigma ite_ty)
   withFacts [P.notP g] $
     coExp e2 (Check $ tau2sigma ite_ty)
   (tau2sigma ite_ty ~>? exp_ty) e
-coExp e@(If (PostTc if_ty) grhss) exp_ty = do
+coExp e@(If if_ty grhss) exp_ty = do
   coGuardedRhss grhss if_ty
   (tau2sigma if_ty ~>? exp_ty) e
   -- Remember that case_ty is only a 'cached' value
   -- and it matches with the rhs_ty of all alternatives
-coExp (Case scrut (PostTc case_ty) alts) exp_ty = do
+coExp (Case case_ty scrut alts) exp_ty = do
   scrut_ty <- coExp scrut Infer
   (x,scrut_ctxt) <- getCaseLikeCtxt scrut scrut_ty [ pat | Alt _ pat _ <- alts ]
   scrut_ctxt $
     coAlts x alts
   return $ tau2sigma case_ty
-coExp e@(Tuple (PostTc tup_ty) es) exp_ty = do
+coExp e@(Tuple tup_ty es) exp_ty = do
   let TupleTy ds = tup_ty
   coTuple es ds
   (tau2sigma tup_ty ~>? exp_ty) e
-coExp e@(List (PostTc list_ty) es) exp_ty = do
+coExp e@(List list_ty es) exp_ty = do
   let ListTy elem_ty = mu_0 list_ty
   zipWithM_ coExp es (repeat $ Check $ tau2sigma elem_ty)
   (tau2sigma list_ty ~>? exp_ty) e
@@ -395,7 +395,7 @@ coAlts scrut_var alts = do
   co_Equations [scrut_var] qs
 
 coRhs :: Rhs Ti -> CoM ()
-coRhs rhs@(Rhs (PostTc rhs_ty) grhs binds) = do
+coRhs rhs@(Rhs rhs_ty grhs binds) = do
   coBinds binds
   withLetIn binds $
     coGRhs grhs rhs_ty
@@ -487,7 +487,7 @@ isCon (E _ (ConPat _ _ _:_) _) = True
 isCon _other                   = False
 
 getCon :: Equation -> TcCon Ti
-getCon (E _ (ConPat con _ _:_) _) = con
+getCon (E _ (ConPat _ con _:_) _) = con
 getCon _other                     = undefined -- bug
 
 coType :: Type c Ti -> CoM ()
@@ -597,19 +597,19 @@ matchLitClause x lit xs qs
       co_Equations xs [ E loc ps rhs | E loc (LitPat _:ps) rhs <- qs]
 
 matchTuple :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
-matchTuple x xs [E loc (p@(TuplePat ps1 _):ps) rhs]
+matchTuple x xs [E loc (p@(TuplePat _ ps1):ps) rhs]
   | all isVarPat ps1 =
       withForall qxs' $ withFacts [Var x ==* pat2exp p] $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
         qxs' = map toQVar xs'
 matchTuple x xs qs = do
-  let E _ (TuplePat _ (PostTc tup_ty):_) _ = head qs
+  let E _ (TuplePat tup_ty _:_) _ = head qs
       TupleTy ds = mu_0 tup_ty
   (tup_exp,xs') <- instTupleWithVars ds
   let qxs' = map toQVar xs'
   withForall qxs' $ withFacts [Var x ==* tup_exp] $
-    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(TuplePat ps1 _):ps) rhs <- qs]
+    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(TuplePat _ ps1):ps) rhs <- qs]
 
 matchCon :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchCon x xs qs = do
@@ -619,7 +619,7 @@ matchCon x xs qs = do
         ty_con = tcConTy $ getCon $ head qs
         all_cs = [ TcCon c ty_con | c <- tyConCons ty_con ]
         uncovered_cs = all_cs \\ cs
-        typs = let E _ (ConPat _ (PostTc con_typs) _:_) _ = head qs in con_typs
+        typs = let E _ (ConPat con_typs _ _:_) _ = head qs in con_typs
         is_not_con con = do
           (e,ys) <- instWithVars (sortOf con) typs (Con con)
           let qys = map toQVar ys
@@ -639,7 +639,7 @@ matchClause x con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
         qxs' = map toQVar xs'
 matchClause x con xs qs = do
-  let E _ (ConPat _ (PostTc typs) _:_) _ = head qs
+  let E _ (ConPat typs _ _:_) _ = head qs
   (p_exp,xs') <- instWithVars (sortOf con) typs (Con con)
   let qxs' = map toQVar xs'
   withForall qxs' $ withFacts [Var x ==* p_exp] $

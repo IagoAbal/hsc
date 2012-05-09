@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 -- |
--- Module      :  H.Syntax.FreeVars
+-- Module      :  H.Syntax.FV
 -- Copyright   :  (c) Iago Abal 2011-2012
 -- License     :  BSD3
 --
@@ -12,13 +12,13 @@
 -- Stability   :  experimental
 -- Portability :  portable
 --
--- FV, BV and FTV
+-- FV and BV
 -- Note that types inferred during type-checking are not considered for
 -- this purpose. This should be OK for now but it would be nice to
 -- fix this in the future, since a type predicate may contain references
 -- to global variables that won't be detected otherwise.
 
-module H.Syntax.FreeVars where
+module H.Syntax.FV where
 
 import H.Syntax.AST
 
@@ -30,9 +30,7 @@ import Data.Foldable
 
 
 
--- * Free variables
-
--- ** Binds
+-- * Binds
 
 fvBind :: Ord (VAR p) => Bind p -> Set (VAR p)
 fvBind (FunBind _rec fun sig _typs matches)
@@ -42,6 +40,13 @@ fvBind (PatBind _loc pat rhs) = fvPat pat `Set.union` fvRhs rhs
 
 fvBinds :: Ord (VAR p) => [Bind p] -> Set (VAR p)
 fvBinds = foldMap fvBind
+
+bsBind :: Ord (VAR p) => Bind p -> Set (VAR p)
+bsBind (FunBind _rec fun _sig _ptctyps _matches) = Set.singleton fun
+bsBind (PatBind _loc pat _rhs)                   = bsPat pat
+
+bsBinds :: Ord (VAR p) => [Bind p] -> Set (VAR p)
+bsBinds = foldMap bsBind
 
 fvTypeSig :: Ord (VAR p) => TypeSig p -> Set (VAR p)
 fvTypeSig NoTypeSig         = Set.empty
@@ -54,7 +59,8 @@ fvMatch (Match _loc pats rhs)
 fvMatches :: Ord (VAR p) => [Match p] -> Set (VAR p)
 fvMatches = foldMap fvMatch
 
--- ** Expressions
+
+-- * Expressions
 
 fvExp :: Ord (VAR p) => Exp p -> Set (VAR p)
 fvExp (Var x)    = Set.singleton x
@@ -73,7 +79,7 @@ fvExp (Let bs body)
 fvExp (TyLam _tvs e)       = fvExp e
 fvExp (Ite _ty g e1 e2)    = fvExps [g,e1,e2]
 fvExp (If _ty grhss)       = fvGuardedRhss grhss
-fvExp (Case e _ty alts)    = fvExp e `Set.union` fvAlts alts
+fvExp (Case _ty scrut alts) = fvExp scrut `Set.union` fvAlts alts
 fvExp (Tuple _ty es)       = fvExps es
 fvExp (List _ty es)        = fvExps es
 fvExp (Paren e)            = fvExp e
@@ -91,37 +97,23 @@ fvExps = foldMap fvExp
 fvMaybeExp :: Ord (VAR p) => Maybe (Exp p) -> Set (VAR p)
 fvMaybeExp = maybe Set.empty fvExp
 
+fvAlt :: Ord (VAR p) => Alt p -> Set (VAR p)
+fvAlt (Alt _loc pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
+
+fvAlts :: Ord (VAR p) => [Alt p] -> Set (VAR p)
+fvAlts = foldMap fvAlt
+
 fvQVar :: Ord (VAR p) => QVar p -> Set (VAR p)
 fvQVar (QVar _x mb_ty) = foldMap fvType mb_ty
 
 fvQVars :: Ord (VAR p) => [QVar p] -> Set (VAR p)
 fvQVars = foldMap fvQVar
 
--- ** Patterns and alternatives
+bsQVar :: Ord (VAR p) => QVar p -> Set (VAR p)
+bsQVar (QVar x _mb_ty) = Set.singleton x
 
-fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
-  -- TODO: I think it should be 'fvPolyType $ varType x' but that would
-  -- require to fix the algorithm to work just with 'Var p';
-  -- other way would be to use type-classes... but it may have problems.
-fvPat (VarPat _) = Set.empty
-fvPat (LitPat _) = Set.empty
-fvPat (InfixCONSPat _ p1 p2) = fvPats [p1,p2]
-fvPat (ConPat _con _ ps) = fvPats ps
-fvPat (TuplePat ps _) = fvPats ps
-fvPat (ListPat ps _)  = fvPats ps
-fvPat (ParenPat p)    = fvPat p
-fvPat WildPatIn       = Set.empty
-fvPat (WildPat _)     = Set.empty
-fvPat (AsPat _x p)    = fvPat p
-
-fvPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
-fvPats = foldMap fvPat
-
-fvAlt :: Ord (VAR p) => Alt p -> Set (VAR p)
-fvAlt (Alt _loc pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
-
-fvAlts :: Ord (VAR p) => [Alt p] -> Set (VAR p)
-fvAlts = foldMap fvAlt
+bsQVars :: Ord (VAR p) => [QVar p] -> Set (VAR p)
+bsQVars = foldMap bsQVar
 
 -- ** Right hand side
 
@@ -145,7 +137,44 @@ fvElse :: Ord (VAR p) => Else p -> Set (VAR p)
 fvElse NoElse        = Set.empty
 fvElse (Else _loc e) = fvExp e
 
--- ** Types
+
+-- * Patterns
+
+fvPat :: Ord (VAR p) => Pat p -> Set (VAR p)
+  -- TODO: I think it should be 'fvPolyType $ varType x' but that would
+  -- require to fix the algorithm to work just with 'Var p';
+  -- other way would be to use type-classes... but it may have problems.
+fvPat (VarPat _) = Set.empty
+fvPat (LitPat _) = Set.empty
+fvPat (InfixCONSPat _ p1 p2) = fvPats [p1,p2]
+fvPat (ConPat _ _con ps) = fvPats ps
+fvPat (TuplePat _ ps) = fvPats ps
+fvPat (ListPat _ ps)  = fvPats ps
+fvPat (ParenPat p)    = fvPat p
+fvPat WildPatIn       = Set.empty
+fvPat (WildPat _)     = Set.empty
+fvPat (AsPat _x p)    = fvPat p
+
+fvPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
+fvPats = foldMap fvPat
+
+bsPat :: Ord (VAR p) => Pat p -> Set (VAR p)
+bsPat (VarPat x) = Set.singleton x
+bsPat (LitPat _) = Set.empty
+bsPat (InfixCONSPat _ p1 p2) = bsPats [p1,p2]
+bsPat (ConPat _ _con ps) = bsPats ps
+bsPat (TuplePat _ ps) = bsPats ps
+bsPat (ListPat _ ps) = bsPats ps
+bsPat (ParenPat p) = bsPat p
+bsPat WildPatIn      = Set.empty
+bsPat (WildPat wild_var)      = Set.singleton wild_var
+bsPat (AsPat x p)  = Set.insert x $ bsPat p
+
+bsPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
+bsPats = foldMap bsPat
+
+
+-- * Types
 
 fvTypes :: Ord (VAR p) => [Type c p] -> Set (VAR p)
 fvTypes = foldMap fvType
@@ -175,86 +204,5 @@ fvDom (Dom (Just pat) ty mbprop)
   = fvType ty `Set.union` (fvMaybeExp mbprop Set.\\ bsPat pat)
 fvDom _other = impossible
 
-
--- * Bound variables
-
-bsBinds :: Ord (VAR p) => [Bind p] -> Set (VAR p)
-bsBinds = foldMap bsBind
-
-bsBind :: Ord (VAR p) => Bind p -> Set (VAR p)
-bsBind (FunBind _rec fun _sig _ptctyps _matches) = Set.singleton fun
-bsBind (PatBind _loc pat _rhs)                   = bsPat pat
-
-bsPats :: Ord (VAR p) => [Pat p] -> Set (VAR p)
-bsPats = foldMap bsPat
-
-bsPat :: Ord (VAR p) => Pat p -> Set (VAR p)
-bsPat (VarPat x) = Set.singleton x
-bsPat (LitPat _) = Set.empty
-bsPat (InfixCONSPat _ p1 p2) = bsPats [p1,p2]
-bsPat (ConPat _con _ ps) = bsPats ps
-bsPat (TuplePat ps _) = bsPats ps
-bsPat (ListPat ps _) = bsPats ps
-bsPat (ParenPat p) = bsPat p
-bsPat WildPatIn      = Set.empty
-bsPat (WildPat wild_var)      = Set.singleton wild_var
-bsPat (AsPat x p)  = Set.insert x $ bsPat p
--- bsPat (SigPat p _ty) = bsPat p
-
-bsQVars :: Ord (VAR p) => [QVar p] -> Set (VAR p)
-bsQVars = foldMap bsQVar
-
-bsQVar :: Ord (VAR p) => QVar p -> Set (VAR p)
-bsQVar (QVar x _mb_ty) = Set.singleton x
-
 bsDom :: Ord (VAR p) => Dom p -> Set (VAR p)
 bsDom (Dom mbpat _ty _mbprop) = maybe Set.empty bsPat mbpat
-
-
--- * Free type variables
--- This is an incomplete implementation, but it suffices for checkSigma.
--- We should go inside type predicates looking for free type variables.
-
-patsFTV :: Ord (TyVAR p) => [Pat p] -> Set (TyVAR p)
-patsFTV = foldMap patFTV
-
-patFTV :: Ord (TyVAR p) => Pat p -> Set (TyVAR p)
-  -- same than for fvPat-VarPat
-  -- but I think here that could be easier, because fvPat is used by the renamer,
-  -- but patFTV is only used after renaming... so make these functions specific to
-  -- VAR p ~ Var p could be OK.
-patFTV (VarPat _) = Set.empty
-patFTV (LitPat _) = Set.empty
-patFTV (InfixCONSPat _ p1 p2) = patsFTV [p1,p2]
-patFTV (ConPat _con ptctys ps) = patsFTV ps `Set.union` (foldMap typesFTV ptctys)
-patFTV (TuplePat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
-patFTV (ListPat ps ptcty) = patsFTV ps `Set.union` (foldMap typeFTV ptcty)
-patFTV (ParenPat p) = patFTV p
-patFTV WildPatIn     = Set.empty
-patFTV (WildPat _)   = Set.empty    -- same than for VarPat
-patFTV (AsPat _x p)  = patFTV p
--- patFTV (SigPat p ty) = patFTV p `Set.union` typeFTV ty
-
-typesFTV :: Ord (TyVAR p) => [Type c p] -> Set (TyVAR p)
-typesFTV = foldMap typeFTV
-
-typeFTV :: Ord (TyVAR p) => Type c p -> Set (TyVAR p)
-typeFTV (VarTy tv) = Set.singleton tv
-typeFTV (ConTyIn _) = Set.empty           -- go into TyCON ?
-typeFTV (AppTyIn t a) = typesFTV [t,a]
-typeFTV (ConTy _ args) = typesFTV args    -- go into TyCON ?
-typeFTV (PredTy pat ty _)  = patFTV pat `Set.union` typeFTV ty
-typeFTV (FunTy d r) = domFTV d `Set.union` typeFTV r
-typeFTV (ListTy ty) = typeFTV ty
-typeFTV (TupleTy ds) = domsFTV ds
-typeFTV (ParenTy ty) = typeFTV ty
-typeFTV (MetaTy _)   = Set.empty
-typeFTV (ForallTy tvs ty) = typeFTV ty Set.\\ (Set.fromList tvs)
-
-domsFTV :: Ord (TyVAR p) => [Dom p] -> Set (TyVAR p)
-domsFTV = foldMap domFTV
-
-domFTV :: Ord (TyVAR p) => Dom p -> Set (TyVAR p)
-domFTV (Dom Nothing ty Nothing) = typeFTV ty
-domFTV (Dom (Just pat) ty _) = patFTV pat `Set.union` typeFTV ty
-domFTV _other = impossible

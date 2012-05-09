@@ -29,9 +29,8 @@ module H.Syntax.Subst1 where
 
 import H.Syntax.AST
 import H.Syntax.Expr ( mkVarId )
-import H.Syntax.FreeVars
+import H.Syntax.FV
 import H.Syntax.IsTc
-import H.Syntax.Phase
 import H.Syntax.Type ( tau2type, cloneTyVar )
 
 import Util.Monad ( mapAccumM )
@@ -163,23 +162,22 @@ substBinds :: (MonadUnique m, IsTc p) => Subst1 p -> [Bind p] -> m ([Bind p],Sub
 substBinds = mapAccumM substBind
 
 substBind :: (MonadUnique m, IsTc p) => Subst1 p -> Bind p -> m (Bind p,Subst1 p)
-substBind s (FunBind NonRec fun sig (PostTc typs) matches) = do
+substBind s (FunBind NonRec fun sig typs matches) = do
   sig' <- substTypeSig s sig
   (typs', s') <- substTyBndrs s typs
   matches' <- substMatches s' matches  -- non-recursive bindings
   (fun',s'') <- substBndr s' fun
-  return (FunBind NonRec fun' sig' (PostTc typs') matches',s'')
-substBind s (FunBind Rec fun sig (PostTc typs) matches) = do
+  return (FunBind NonRec fun' sig' typs' matches',s'')
+substBind s (FunBind Rec fun sig typs matches) = do
   sig' <- substTypeSig s sig
   (fun',s') <- substBndr s fun
   (typs', s'') <- substTyBndrs s' typs
   matches' <- substMatches s'' matches  -- recursive bindings
-  return (FunBind Rec fun' sig' (PostTc typs') matches',s'')
+  return (FunBind Rec fun' sig' typs' matches',s'')
 substBind s (PatBind loc pat rhs) = do
   rhs' <- substRhs s rhs
   (pat',s') <- substPat s pat
   return (PatBind loc pat' rhs',s')
-substBind _s _other = impossible
 
 substTypeSig :: (MonadUnique m, IsTc p) => Subst1 p -> TypeSig p -> m (TypeSig p)
 substTypeSig _s NoTypeSig           = return NoTypeSig
@@ -223,13 +221,13 @@ substExp s (Let binds body) = do
   (binds',s') <- substBinds s binds
   liftM (Let binds') $ substExp s' body
 substExp s (Ite ite_ty g t e)
-  = liftM4 Ite (substPostTcType s ite_ty) (substExp s g) (substExp s t) (substExp s e)
+  = liftM4 Ite (substType s ite_ty) (substExp s g) (substExp s t) (substExp s e)
 substExp s (If if_ty grhss)
-  = liftM2 If (substPostTcType s if_ty) (substGuardedRhss s grhss)
-substExp s (Case e casety alts)
-  = liftM3 Case (substExp s e) (substPostTcType s casety) (substAlts s alts)
-substExp s (Tuple ptcty es) = liftM2 Tuple (T.mapM (substType s) ptcty) (substExps s es)
-substExp s (List ptcty es) = liftM2 List (T.mapM (substType s) ptcty) (substExps s es)
+  = liftM2 If (substType s if_ty) (substGuardedRhss s grhss)
+substExp s (Case casety e alts)
+  = liftM3 Case (substType s casety) (substExp s e) (substAlts s alts)
+substExp s (Tuple ty es) = liftM2 Tuple (substType s ty) (substExps s es)
+substExp s (List ty es) = liftM2 List (substType s ty) (substExps s es)
 substExp s (Paren e) = liftM Paren $ substExp s e
 substExp s (LeftSection e op) = liftM2 LeftSection (substExp s e) (substExp s op)
 substExp s (RightSection op e) = liftM2 RightSection (substExp s op) (substExp s e)
@@ -243,7 +241,7 @@ substExp _s _other = impossible
 
 substRhs :: (MonadUnique m, IsTc p) => Subst1 p -> Rhs p -> m (Rhs  p)
 substRhs s (Rhs rhs_ty grhs whr)
-  = do rhs_ty' <- substPostTcType s rhs_ty
+  = do rhs_ty' <- substType s rhs_ty
        (whr',s') <- substBinds s whr
        grhs' <- substGRhs s' grhs
        return $ Rhs rhs_ty' grhs' whr'
@@ -272,22 +270,22 @@ substPat s (VarPat var) = do
   (var',s') <- substBndr s var
   return (VarPat var',s')
 substPat s p@(LitPat _) = return (p,s)
-substPat s (InfixCONSPat ptcty p1 p2)
+substPat s (InfixCONSPat typ p1 p2)
   = do ([p1',p2'],s') <- substPats s [p1,p2]
-       ptcty' <- T.mapM (substType s) ptcty
-       return (InfixCONSPat ptcty' p1' p2',s')
-substPat s (ConPat con ptctys ps) = do
+       typ' <- substType s typ
+       return (InfixCONSPat typ' p1' p2',s')
+substPat s (ConPat typs con ps) = do
   (ps',s') <- substPats s ps
-  ptctys' <- T.mapM (substTypes s) ptctys
-  return (ConPat con ptctys' ps',s')
-substPat s (TuplePat ps ptcty) = do
+  typs' <- substTypes s typs
+  return (ConPat typs' con ps',s')
+substPat s (TuplePat ty ps) = do
   (ps',s') <- substPats s ps
-  ptcty' <- T.mapM (substType s) ptcty
-  return (TuplePat ps' ptcty',s')
-substPat s (ListPat ps ptcty) = do
+  ty' <- substType s ty
+  return (TuplePat ty' ps',s')
+substPat s (ListPat ty ps) = do
   (ps',s') <- substPats s ps
-  ptcty' <- T.mapM (substType s) ptcty
-  return (ListPat ps' ptcty',s')
+  ty' <- substType s ty
+  return (ListPat ty' ps',s')
 substPat s (ParenPat p) = do (p',s') <- substPat s p
                              return (ParenPat p',s')
 substPat s (WildPat wild_var) = do
@@ -364,8 +362,3 @@ substDom s (Dom (Just pat) ty mbprop) = do
   mbprop' <- substMaybeExp s' mbprop
   return (Dom (Just pat') ty' mbprop',s')
 substDom _s _other = impossible
-
-substPostTcType :: (MonadUnique m, IsTc p) => Subst1 p -> PostTcType p -> m (PostTcType p)
-substPostTcType _s NoPostTc    = return NoPostTc
-substPostTcType  s (PostTc ty) = liftM PostTc $ substType s ty
-

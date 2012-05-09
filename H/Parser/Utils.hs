@@ -41,8 +41,8 @@ mkFunTy (PredTy pat a mbProp) b = dom @--> b
 mkFunTy a b = a --> b
 
 funWithSig :: (SrcLoc,NAME Pr,Sigma Pr) -> Bind Pr -> P (Bind Pr)
-funWithSig (sigloc,sigfun,sigtype) (FunBind rec fun NoTypeSig NoPostTc ms)
-  | sigfun == fun = return $ FunBind rec fun sig NoPostTc ms
+funWithSig (sigloc,sigfun,sigtype) (FunBind rec fun NoTypeSig None ms)
+  | sigfun == fun = return $ FunBind rec fun sig None ms
   | otherwise     = fail ("Type signature for `" ++ prettyPrint sigfun ++ "' lacks an accompanying binding")
                         `atSrcLoc` sigloc
   where
@@ -66,18 +66,18 @@ getMonoBind bind@(FunBind _ _ _ _ _) [] = return (bind,[])
   -- e.g. @x = 1@
   -- in this way @x = 1; x = 2@ will be reported as a duplicated
   -- definition instead of as a non-uniform definition.
-getMonoBind bind@(FunBind rec fun sig NoPostTc ms1@(Match _ [] _:_)) decls
+getMonoBind bind@(FunBind rec fun sig None ms1@(Match _ [] _:_)) decls
   = return (bind,decls)
 getMonoBind bind@(FunBind rec fun sig _ ms1@(Match _ ps _:_)) decls
   = mergeMatches ms1 decls
   where arity = length ps
         mergeMatches :: [Match Pr] -> [Decl Pr] -> P (Bind Pr, [Decl Pr])
-        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig NoPostTc ms'@(Match (Just loc) ps' _:_)):ds)
+        mergeMatches ms (ValDecl (FunBind _ fun' NoTypeSig None ms'@(Match (Just loc) ps' _:_)):ds)
           | fun' == fun = if length ps' /= arity
                             then fail ("arity mismatch for `" ++ prettyPrint fun ++ "'")
                                     `atSrcLoc` loc
                             else mergeMatches (ms ++ ms') ds
-        mergeMatches ms ds = return (FunBind rec fun sig NoPostTc ms,ds)
+        mergeMatches ms ds = return (FunBind rec fun sig None ms,ds)
 getMonoBind bind decls = return (bind,decls)
 
 

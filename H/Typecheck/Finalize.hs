@@ -6,10 +6,8 @@ import H.Syntax
 import Pretty
 import H.SrcContext
 import H.Monad
-import H.Message ( Message )
 
 import Name
-import Unique
 
 import Control.Monad
 import Control.Monad.Reader
@@ -117,11 +115,11 @@ finDecls (ValDecl bind:ds)
   = finBind bind $ \bind' -> do
   ds' <- finDecls ds
   return (ValDecl bind':ds')
-finDecls (GoalDecl loc gtype gname (PostTc tvs) prop:ds) = do
+finDecls (GoalDecl loc gtype gname tvs prop:ds) = do
   prop' <- inGoalDeclCtxt loc gtype (ppQuot gname) $
              finExp prop
   ds' <- finDecls ds
-  return (GoalDecl loc gtype gname (PostTc tvs) prop':ds')
+  return (GoalDecl loc gtype gname tvs prop':ds')
 finDecls _other = undefined -- impossible
 
 
@@ -139,18 +137,18 @@ finBind (PatBind mb_loc pat rhs) cont
   where patBindCtxt = case mb_loc of
                           Nothing  -> id
                           Just loc -> inPatBindCtxt loc (ppQuot pat)
-finBind (FunBind NonRec fun tysig (PostTc typs) matches) cont
+finBind (FunBind NonRec fun tysig typs matches) cont
   = inFunBindCtxt (ppQuot fun) $ do
   tysig' <- finTypeSig tysig
   matches' <- finMatches matches
   finBndr fun $ \fun' ->
-    popContext $ cont (FunBind NonRec fun' tysig' (PostTc typs) matches')
-finBind (FunBind Rec fun tysig (PostTc typs) matches) cont
+    popContext $ cont (FunBind NonRec fun' tysig' typs matches')
+finBind (FunBind Rec fun tysig typs matches) cont
   = inFunBindCtxt (ppQuot fun) $ do
   tysig' <- finTypeSig tysig
   finBndr fun $ \fun' -> do
     matches' <- finMatches matches
-    popContext $ cont (FunBind Rec fun' tysig' (PostTc typs) matches')
+    popContext $ cont (FunBind Rec fun' tysig' typs matches')
 finBind _other _cont = undefined -- impossible
 
 finTypeSig :: TypeSig Tc -> TiM (TypeSig Ti)
@@ -203,24 +201,24 @@ finExp (Lam mb_loc pats rhs)
                             Just loc -> inLambdaAbsCtxt loc pats
 finExp (Let bs body) = finBinds bs $ \bs' -> liftM (Let bs') $ finExp body
 finExp (TyLam tvs expr) = liftM (TyLam tvs) $ finExp expr
-finExp (Ite (PostTc ite_ty) g t e)
+finExp (Ite ite_ty g t e)
   = inIteExprCtxt g $ do
   ite_ty' <- finType ite_ty
-  liftM3 (Ite (PostTc ite_ty')) (finExp g) (finExp t) (finExp e)
-finExp (If (PostTc if_ty) grhss)
+  liftM3 (Ite ite_ty') (finExp g) (finExp t) (finExp e)
+finExp (If if_ty grhss)
   = inIfExprCtxt $ do
   if_ty' <- finType if_ty
-  liftM (If (PostTc if_ty')) $ finGuardedRhss grhss
-finExp (Case scrut (PostTc case_ty) alts) = do
+  liftM (If if_ty') $ finGuardedRhss grhss
+finExp (Case case_ty scrut alts) = do
   scrut' <- finExp scrut
   case_ty' <- finType case_ty
-  liftM (Case scrut' (PostTc case_ty')) $ finAlts alts
-finExp (Tuple (PostTc tup_ty) es) = do
+  liftM (Case case_ty' scrut') $ finAlts alts
+finExp (Tuple tup_ty es) = do
   tup_ty' <- finType tup_ty
-  liftM (Tuple (PostTc tup_ty')) $ finExps es
-finExp (List (PostTc list_ty) es) = do
+  liftM (Tuple tup_ty') $ finExps es
+finExp (List list_ty es) = do
   list_ty' <- finType list_ty
-  liftM (List (PostTc list_ty')) $ finExps es
+  liftM (List list_ty') $ finExps es
 finExp (Paren expr) = liftM Paren $ finExp expr
 finExp (LeftSection e1 op) = liftM2 LeftSection (finExp e1) (finExp op)
 finExp (RightSection op e2) = liftM2 RightSection (finExp op) (finExp e2)
@@ -248,11 +246,11 @@ finAlt (Alt (Just loc) pat rhs)
       finPat pat $ \pat'-> liftM (Alt (Just loc) pat') $ finRhs rhs
 
 finRhs :: Rhs Tc -> TiM (Rhs Ti)
-finRhs (Rhs (PostTc rhs_ty) grhs whr) = do
+finRhs (Rhs rhs_ty grhs whr) = do
   rhs_ty' <- finType rhs_ty
   finBinds whr $ \whr' -> do
     grhs' <- finGRhs grhs
-    return $ Rhs (PostTc rhs_ty') grhs' whr'
+    return $ Rhs rhs_ty' grhs' whr'
 
 finGRhs :: GRhs Tc -> TiM (GRhs Ti)
 finGRhs (UnGuarded expr) = liftM UnGuarded $ finExp expr
@@ -261,7 +259,6 @@ finGRhs (Guarded grhss)  = liftM Guarded $ finGuardedRhss grhss
 finGuardedRhss :: GuardedRhss Tc -> TiM (GuardedRhss Ti)
 finGuardedRhss (GuardedRhss grhss elserhs)
   = liftM2 GuardedRhss (mapM finGuardedRhs grhss) (finElse elserhs)
-finGuardedRhss _other = undefined -- impossible
 
 finGuardedRhs :: GuardedRhs Tc -> TiM (GuardedRhs Ti)
 finGuardedRhs (GuardedRhs loc g e)
@@ -289,21 +286,21 @@ finPats (p:ps) cont = finPat p $ \p' ->
 finPat :: Pat Tc -> (Pat Ti -> TiM a) -> TiM a
 finPat (VarPat x) cont = finBndr x $ cont . VarPat
 finPat (LitPat lit) cont = cont (LitPat lit)
-finPat (InfixCONSPat (PostTc ty) p1 p2) cont = do
+finPat (InfixCONSPat ty p1 p2) cont = do
   ty' <- finType ty
   finPat p1 $ \p1' ->
     finPat p2 $ \p2' ->
-      cont (InfixCONSPat (PostTc ty') p1' p2')
-finPat (ConPat con (PostTc tys) ps) cont = do
+      cont (InfixCONSPat ty' p1' p2')
+finPat (ConPat tys con ps) cont = do
   con' <- lookupCon con
   tys' <- finTypes tys
-  finPats ps $ cont . ConPat con' (PostTc tys')
-finPat (TuplePat ps (PostTc ty)) cont = do
+  finPats ps $ cont . ConPat tys' con'
+finPat (TuplePat ty ps) cont = do
   ty' <- finType ty
-  finPats ps $ cont . flip TuplePat (PostTc ty')
-finPat (ListPat ps (PostTc ty)) cont = do
+  finPats ps $ cont . TuplePat ty'
+finPat (ListPat ty ps) cont = do
   ty' <- finType ty
-  finPats ps $ cont . flip ListPat (PostTc ty')
+  finPats ps $ cont . ListPat ty'
 finPat (ParenPat p) cont = finPat p $ cont . ParenPat
 finPat (WildPat (V _ (MetaTy _) _)) _cont
   = throwError $ text "Cannot infer the type of `_' pattern"
@@ -315,10 +312,6 @@ finPat (WildPat wild_var@(V name pty isSk)) cont = do
   extendVarEnv [(wild_var,wild_var')] $ cont (WildPat wild_var')
 finPat (AsPat x pat) cont
   = finBndr x $ \x' -> finPat pat $ \pat' -> cont (AsPat x' pat')
--- finPat (SigPat pat ty) cont = do
---   ty' <- finType ty
---   finPat pat $ cont . flip SigPat ty'
-finPat _other _cont = undefined -- impossible
 
 finQVars :: [QVar Tc] -> ([QVar Ti] -> TiM a) -> TiM a
 finQVars []     cont = cont []

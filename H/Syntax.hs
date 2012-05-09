@@ -14,7 +14,10 @@
 module H.Syntax
   ( module H.Syntax.AST
   , module H.Syntax.Expr
-  , module H.Syntax.FreeVars
+  , module H.Syntax.FV
+  , module H.Syntax.FTV
+  , module H.Syntax.MTV
+  , module H.Syntax.GMTV
   , module H.Syntax.IsTc
   , module H.Syntax.Pattern
   , module H.Syntax.Phase
@@ -26,7 +29,10 @@ module H.Syntax
 
 import H.Syntax.AST
 import H.Syntax.Expr
-import H.Syntax.FreeVars
+import H.Syntax.FV
+import H.Syntax.FTV
+import H.Syntax.MTV
+import H.Syntax.GMTV
 import H.Syntax.IsTc
 import H.Syntax.Pattern
 import H.Syntax.Phase

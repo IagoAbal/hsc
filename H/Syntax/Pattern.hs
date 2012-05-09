@@ -36,21 +36,21 @@ isVarPat (VarPat _) = True
 isVarPat _other     = False
 
 mkNILPat :: IsTc p => Tau p -> Pat p
-mkNILPat ty = ConPat tcNilCon (PostTc [ty]) []
+mkNILPat ty = ConPat [ty] tcNilCon []
 
 mkCONSPat :: IsTc p => Tau p -> Pat p -> Pat p -> Pat p
-mkCONSPat ty p1 p2 = ConPat tcConsCon (PostTc [ty]) [p1,p2]
+mkCONSPat ty p1 p2 = ConPat [ty] tcConsCon [p1,p2]
 
 mkInfixCONSPat :: IsTc p => Tau p -> Pat p -> Pat p -> Pat p
-mkInfixCONSPat ty p1 p2 = InfixCONSPat (PostTc ty) p1 p2
+mkInfixCONSPat = InfixCONSPat
 
 patBndrs :: Pat p -> [VAR p]
 patBndrs (VarPat var) = [var]
 patBndrs (LitPat _lit) = []
 patBndrs (InfixCONSPat _ p1 p2) = patBndrs p1 ++ patBndrs p2
-patBndrs (ConPat _con _ ps) = patsBndrs ps
-patBndrs (TuplePat ps _) = patsBndrs ps
-patBndrs (ListPat ps _) = patsBndrs ps
+patBndrs (ConPat _ _con ps) = patsBndrs ps
+patBndrs (TuplePat _ ps) = patsBndrs ps
+patBndrs (ListPat _ ps) = patsBndrs ps
 patBndrs (ParenPat p) = patBndrs p
 patBndrs WildPatIn    = []
 patBndrs (WildPat var)  = [var]
@@ -67,14 +67,14 @@ instWildPat uniq tau
 pat2exp :: IsTc p => Pat p -> Exp p
 pat2exp (LitPat lit) = Lit lit
 pat2exp (VarPat x)   = Var x
-pat2exp (InfixCONSPat (PostTc typ) p1 p2)
+pat2exp (InfixCONSPat typ p1 p2)
   = InfixApp (pat2exp p1) conE (pat2exp p2)
   where conE = mkTyApp (Op CONSOp) [typ]
-pat2exp (ConPat con (PostTc typs) ps)
+pat2exp (ConPat typs con ps)
   = conE `mkApp` map pat2exp ps
   where conE = mkTyApp (Con con) typs
-pat2exp (TuplePat ps tup_ty) = Tuple tup_ty $ map pat2exp ps
-pat2exp (ListPat ps list_ty) = List list_ty $ map pat2exp ps
+pat2exp (TuplePat tup_ty ps) = Tuple tup_ty $ map pat2exp ps
+pat2exp (ListPat list_ty ps) = List list_ty $ map pat2exp ps
 pat2exp (ParenPat p) = Paren $ pat2exp p
 pat2exp (WildPat wild_var)
   = Var wild_var
@@ -97,15 +97,15 @@ matchableWith _e            (WildPat _)   = True
 matchableWith (Lit lit)     (LitPat lit') = lit == lit'
   -- 'p' is not a 'VarPar' nor a 'LitPat' so matching is not possible
 matchableWith (Lit _)       _p            = False
-matchableWith (List _ es)   (ListPat ps _)
+matchableWith (List _ es)   (ListPat _ ps)
   | length es == length ps = and $ zipWith matchableWith es ps
   | otherwise              = False
   -- if types are compatible then @length es == length ps@
-matchableWith (Tuple _ es)  (TuplePat ps _)
+matchableWith (Tuple _ es)  (TuplePat _ ps)
   = and $ zipWith matchableWith es ps
 matchableWith e             p
   | Just (con,es) <- splitConApp e
-  , ConPat con' _ ps <- p = if con == con'
+  , ConPat _ con' ps <- p = if con == con'
                               then and $ zipWith matchableWith es ps
                               else False
     -- 'con' is a data constructor with no arguments, but 'InfixPat'
@@ -154,18 +154,18 @@ matchablePats _           (WildPat _)     = True
 matchablePats (LitPat l1) (LitPat l2) = l1 == l2
 matchablePats (InfixCONSPat _ p1 p2) (InfixCONSPat _ p1' p2')
   = matchablePats p1 p1' && matchablePats p2 p2'
-matchablePats (ConPat con _ ps) (ConPat con' _ ps')
+matchablePats (ConPat _typs con ps) (ConPat _typs' con' ps')
   = con == con' && and (zipWith matchablePats ps ps')
-matchablePats (TuplePat ps _) (TuplePat ps' _)
+matchablePats (TuplePat _ ps) (TuplePat _ ps')
   = length ps == length ps' && and (zipWith matchablePats ps ps')
-matchablePats (ListPat ps _) (ListPat ps' _)
+matchablePats (ListPat _ ps) (ListPat _ ps')
   = length ps == length ps' && and (zipWith matchablePats ps ps')
-matchablePats (ListPat (p:ps) ptcty) (InfixCONSPat _ p' q)
-  = matchablePats p p' && matchablePats (ListPat ps ptcty) q
-matchablePats (InfixCONSPat _ p q) (ListPat (p':ps') ptcty)
-  = matchablePats p p' && matchablePats (ListPat ps' ptcty) q
-matchablePats (ListPat [] _) (ConPat _ _ []) = True
-matchablePats (ConPat _ _ []) (ListPat [] _) = True
+matchablePats (ListPat ty (p:ps)) (InfixCONSPat _ p' q)
+  = matchablePats p p' && matchablePats (ListPat ty ps) q
+matchablePats (InfixCONSPat _ p q) (ListPat ty (p':ps'))
+  = matchablePats p p' && matchablePats (ListPat ty ps') q
+matchablePats (ListPat _ []) (ConPat _ _ []) = True
+matchablePats (ConPat _ _ []) (ListPat _ []) = True
 matchablePats (ParenPat p) p'            = matchablePats p p'
 matchablePats p            (ParenPat p') = matchablePats p p'
 matchablePats (AsPat _ p)  p'            = matchablePats p p'
@@ -187,16 +187,16 @@ simplifyPats pats = let (pats',pats_ss) = unzip $ map simplifyPat pats
 simplifyPat :: Pat Ti -> (SimplePat Ti,[(Var Ti,Exp Ti)])
 simplifyPat p@(VarPat _) = (p,[])
 simplifyPat p@(LitPat _) = (p,[])
-simplifyPat (InfixCONSPat (PostTc typ) p1 p2)
+simplifyPat (InfixCONSPat typ p1 p2)
   = (mkCONSPat typ p1' p2',bs)
   where ([p1',p2'],bs) = simplifyPats [p1,p2]
 simplifyPat (ConPat con ptctyps ps) = (ConPat con ptctyps ps',bs)
   where (ps',bs) = simplifyPats ps
-simplifyPat (TuplePat ps ptcty) = (TuplePat ps' ptcty,bs)
+simplifyPat (TuplePat ty ps) = (TuplePat ty ps',bs)
   where (ps',bs) = simplifyPats ps
-simplifyPat (ListPat ps (PostTc list_ty)) =
+simplifyPat (ListPat ty ps) =
     (foldr (mkCONSPat elem_ty) (mkNILPat elem_ty) ps',bs)
-  where ListTy elem_ty = mu_0 list_ty
+  where ListTy elem_ty = mu_0 ty
         (ps',bs) = simplifyPats ps
   -- NB: ParenPat is just convenient for pretty-printing
   -- when we have InfixCONSPat's
@@ -206,4 +206,3 @@ simplifyPat (WildPat wild_var) = (VarPat wild_var,[])
   -- NB: `p' cannot depend on `v' nor vice-versa
 simplifyPat (AsPat v p) = (p',(v,pat2exp p):bs)
   where (p',bs) = simplifyPat p
-simplifyPat _other = impossible

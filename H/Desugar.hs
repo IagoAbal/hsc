@@ -1,7 +1,10 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module H.Desugar where
+
+#include "bug.h"
 
 import Name
 import Sorted
@@ -65,7 +68,7 @@ dsgDecl (DataDecl _ u typs cons) = do
   cons_C <- mapM dsgConDecl cons
   return [Core.DataDecl (dsgTyVar u) (dsgTyVars typs) cons_C]
 dsgDecl (ValDecl bind) = map Core.ValDecl <$> dsgBind bind
-dsgDecl (GoalDecl _ gtype t (PostTc typs) prop) = do
+dsgDecl (GoalDecl _ gtype t typs prop) = do
   prop_C <- dsgExp prop
   return [Core.GoalDecl (dsgGoalType gtype) t (dsgTyVars typs) prop_C]
 
@@ -86,7 +89,7 @@ dsgIsRec Rec    = Core.Rec
 dsgIsRec NonRec = Core.NonRec
 
 dsgBind :: Bind Ti -> DsgM [Core.Bind]
-dsgBind (FunBind rec fun _sig (PostTc tvs) matches) = do
+dsgBind (FunBind rec fun _sig tvs matches) = do
   fun_C <- dsgVar fun
   traceDoc (text "dsgBind fun=" <> pretty fun) $ do
   fun_tau <- instSigmaType fun_ty (map VarTy tvs)
@@ -99,7 +102,6 @@ dsgBind (FunBind rec fun _sig (PostTc tvs) matches) = do
   where fun_ty = sortOf fun
         arity = matchArity $ head matches
 dsgBind (PatBind _ pat rhs) = dsgPatBind pat rhs
-dsgBind _other = undefined -- impossible
 
 dsgPatBind :: Pat Ti -> Rhs Ti -> DsgM [Core.Bind]
 dsgPatBind pat rhs = do
@@ -108,7 +110,7 @@ dsgPatBind pat rhs = do
   aux_C <- dsgVar aux
   let aux_bind = Core.mkSimpleBind aux_C rhs_C
       pb_case x = mkExpRhs (varTau x) $
-                    Case (Var aux) (PostTc $ varTau x)
+                    Case (varTau x) (Var aux)
                         [Alt Nothing pat (mkVarRhs x)]
       pat_xs = Set.elems $ bsPat pat
   xs_binds <- forM pat_xs
@@ -173,19 +175,19 @@ dsgExp (Lam _ pats rhs') = do
 dsgExp (Let binds body) = Core.mkLet <$> dsgBinds binds <*> dsgExp body
 dsgExp (TyLam tvs e) = Core.TyLam tvs_C <$> dsgExp e
   where tvs_C = dsgTyVars tvs
-dsgExp (Ite (PostTc ty) g e t)
+dsgExp (Ite ty g e t)
   = Core.Ite <$> dsgType ty <*> dsgExp g <*> dsgExp e <*> dsgExp t
-dsgExp (If (PostTc ty) grhss)
+dsgExp (If ty grhss)
   = Core.If <$> dsgType ty <*> dsgGuardedRhss grhss
-dsgExp (Case scrut (PostTc case_ty) alts) = do
+dsgExp (Case _ty scrut alts) = do
   scrut_ty <- tcExprType scrut
   qs <- mapM alt2eq alts
   ([aux],Core.Rhs _ body) <- matchEq [type2dom scrut_ty] qs
   scrut_C <- dsgExp scrut
   let scrut_rhs = Core.Rhs (Core.varTau aux) scrut_C
   return $ Core.mkLet [Core.mkSimpleBind aux scrut_rhs] body 
-dsgExp (Tuple (PostTc ty) es) = Core.Tuple <$> dsgType ty <*> dsgExps es
-dsgExp (List (PostTc ty) es) = Core.List <$> dsgType ty <*> dsgExps es
+dsgExp (Tuple ty es) = Core.Tuple <$> dsgType ty <*> dsgExps es
+dsgExp (List ty es) = Core.List <$> dsgType ty <*> dsgExps es
 dsgExp (Paren e) = Core.Paren <$> dsgExp e
 dsgExp (LeftSection e1 opE) = do
   traceDoc (text "dsgExp LeftSection e1=" <> pretty e1 <+> text "opE=" <> pretty opE) $ do
@@ -217,6 +219,7 @@ dsgExp (EnumFromThenTo e1 e2 e3)
 dsgExp (Coerc _ e ty) = Core.Coerc <$> dsgExp e <*> dsgType ty
 dsgExp (QP qt qvars prop)
   = Core.QP (dsgQuantifier qt) <$> dsgQVars qvars <*> dsgExp prop
+dsgExp _other = impossible
 
 
 dsgOpExp :: OpExp Ti -> DsgM Core.OpExp
@@ -291,21 +294,21 @@ dsgPat (VarPat x) = do
   x_C <- dsgVar x
   return (Core.VarPat x_C,[])
 dsgPat (LitPat lit) = return (Core.LitPat $ dsgLit lit,[])
-dsgPat (InfixCONSPat (PostTc ty) p1 p2) = do
+dsgPat (InfixCONSPat ty p1 p2) = do
   ty_C <- dsgType ty
   (p1_C,s1) <- dsgPat p1
   (p2_C,s2) <- dsgPat p2
   return (Core.mkCONSPat ty_C p1_C p2_C,s1++s2)
-dsgPat (ConPat tcon (PostTc tys) ps) = do
+dsgPat (ConPat tys tcon ps) = do
   con_C <- dsgTcCon tcon
   tys_C <- dsgTypes tys
   (ps_C,s) <- dsgPats ps
   return (Core.ConPat tys_C con_C ps_C,s)
-dsgPat (TuplePat ps (PostTc tupty)) = do
+dsgPat (TuplePat tupty ps) = do
   tupty_C <- dsgType tupty
   (ps_C,s) <- dsgPats ps
   return (Core.TuplePat tupty_C ps_C,s)
-dsgPat (ListPat ps (PostTc listty)) = do
+dsgPat (ListPat listty ps) = do
   let ListTy elemty = mu_0 listty
   elemty_C <- dsgType elemty
   (ps_C,s) <- dsgPats ps
@@ -323,10 +326,9 @@ dsgPat (AsPat x p) = do
   (p_C,s) <- dsgPat p
 --   return (p_C,(x_C,Core.pat2exp p_C):s)
   return (p_C,(x,pat2exp p):s)
-dsgPat _other = undefined -- impossible  
 
 dsgRhs :: Rhs Ti -> DsgM Core.Rhs
-dsgRhs (Rhs (PostTc rhs_ty') grhs whr) = do
+dsgRhs (Rhs rhs_ty' grhs whr) = do
   rhs_ty <- dsgType rhs_ty'
   binds <- dsgBinds whr
   body <- dsgGRhs rhs_ty' grhs
@@ -387,6 +389,7 @@ dsgType (ListTy elem_ty) = Core.ListTy <$> dsgType elem_ty
 dsgType (TupleTy ds) = Core.TupleTy <$> dsgDoms ds
 dsgType (ForallTy tvs ty)
   = Core.ForallTy (dsgTyVars tvs) <$> dsgType ty
+dsgType _other = impossible
 
 dsgDoms :: [Dom Ti] -> DsgM [Core.Dom]
 dsgDoms [] = return []
@@ -481,7 +484,7 @@ isCon (E (ConPat _ _ _:_) _) = True
 isCon _other                 = False
 
 getCon :: Equation -> TcCon Ti
-getCon (E (ConPat con _ _:_) _) = con
+getCon (E (ConPat _ con _:_) _) = con
 getCon _other                   = undefined -- bug
 
 getEqPat :: Int -> Equation -> SimplePat Ti
@@ -563,12 +566,12 @@ matchLitClause lit' xs qs = do
 
 matchTuple :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
 matchTuple x xs qs = do
-  let E (TuplePat _ (PostTc tup_ty'):_) _ = head qs
+  let E (TuplePat tup_ty' _:_) _ = head qs
       TupleTy ds = mu_0 tup_ty'
   tup_ty <- dsgType tup_ty'
   (_,ys') <- instTupleWithVars ds
   ys <- dsgVars ys'
-  alt_rhs <- match_eq (ys++xs) [E (ps1++ps) rhs | E (TuplePat ps1 _:ps) rhs <- qs]
+  alt_rhs <- match_eq (ys++xs) [E (ps1++ps) rhs | E (TuplePat _ ps1:ps) rhs <- qs]
   let alts = [Core.Alt (Core.TuplePat tup_ty (map Core.VarPat ys)) alt_rhs]
       rhs_ty = eqsType qs
       rhs_exp = Core.Case rhs_ty (Core.Var x) alts
@@ -586,7 +589,7 @@ matchCon x xs qs = do
 
 matchClause :: TcCon Ti -> [Core.Var] -> [Equation] -> DsgM Core.Alt
 matchClause con' xs qs = do
-  let E (ConPat _ (PostTc typs') _:_) _ = head qs
+  let E (ConPat typs' _ _:_) _ = head qs
   (_,ys') <- instWithVars (sortOf con') typs' (Con con')
   con <- dsgTcCon con'
   typs <- dsgTypes typs'

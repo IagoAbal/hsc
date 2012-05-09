@@ -45,6 +45,10 @@ type instance VAR Ti = Var Ti
 
 type NAME phase = VAR phase
 
+type instance PhaseOf OccName = Pr
+type instance PhaseOf Name = Rn
+type instance PhaseOf (Var p) = p
+
 type family GoalNAME phase
 type instance GoalNAME Pr = OccName
 type instance GoalNAME Rn = Name
@@ -127,7 +131,11 @@ but a trivial workaround is to use a @-pattern
   --     any kind annotation is pointless.
 type TyParams p = [TyVAR p]
 
-type PostTcTyParams p = PostTc p [TyVar]
+type family TcTyPARAMs phase
+type instance TcTyPARAMs Pr = None Pr
+type instance TcTyPARAMs Rn = None Rn
+type instance TcTyPARAMs Tc = TyParams Tc
+type instance TcTyPARAMs Ti = TyParams Ti
 
 
 -- * Modules
@@ -155,7 +163,7 @@ data Decl p where
   ValDecl :: Bind p -> Decl p
   -- | Logical goal (theorem/lemma)
   GoalDecl :: !SrcLoc -> !GoalType -> !(GoalNAME p)
-            -> PostTcTyParams p
+            -> TcTyPARAMs p
               -- ^ If a goal depends on some arbitrary types,
               -- those types will be inferred during type checking.
               -- Note that the logical quantifiers do not allow
@@ -167,7 +175,7 @@ data Decl p where
 -- In H! type signatures have to be declared just before the corresponding
 -- bind.
 
-data Bind p = FunBind !(IsRec p) !(NAME p) !(TypeSig p) (PostTcTyParams p) [Match p]
+data Bind p = FunBind !(IsRec p) !(NAME p) !(TypeSig p) (TcTyPARAMs p) [Match p]
                   -- ^ A function defined by a *set* of equations
                   -- NB: Only uniform definitions are allowed, hence the order
                   --     of equations does not matter.
@@ -241,18 +249,18 @@ data Exp p where
   -- | type lambda
   TyLam :: Ge p Tc => [TyVar] -> Exp p -> Exp p
   -- | @if@ /exp/ @then@ /exp/ @else@ /exp/
-  Ite :: PostTcType p -> Prop p -> Exp p -> Exp p -> Exp p
+  Ite :: TcTAU p -> Prop p -> Exp p -> Exp p -> Exp p
   -- | Generalized @if@ expressions
-  If :: PostTcType p -> GuardedRhss p -> Exp p
+  If :: TcTAU p -> GuardedRhss p -> Exp p
   -- | @case@ /exp/ @of@ /alts/
-  Case :: Exp p
-        -> PostTcType p
-            -- ^ the type of the whole case expression
-        -> [Alt p] -> Exp p
+  Case :: TcTAU p     -- ^ the type of the whole case expression
+          -> Exp p    -- ^ scrutinee
+          -> [Alt p]
+          -> Exp p
   -- | tuple expression
-  Tuple :: PostTcType p -> [Exp p] -> Exp p
+  Tuple :: TcTAU p -> [Exp p] -> Exp p
   -- | list expression
-  List :: PostTcType p -> [Exp p] -> Exp p
+  List :: TcTAU p -> [Exp p] -> Exp p
   -- | parenthesized expression
   -- This makes pretty-printing easier.
   Paren :: Exp p -> Exp p
@@ -268,6 +276,9 @@ data Exp p where
   Coerc :: !SrcLoc -> Exp p -> Sigma p -> Exp p
   -- | logic quantifier
   QP :: !Quantifier -> [QVar p] -> Prop p -> Prop p
+
+type instance PhaseOf (Exp p) = p
+-- type instance PhaseOf [Exp p] = p
 
 -- | Literals.
 data Lit = IntLit Integer
@@ -297,7 +308,7 @@ data QVar p = QVar {
 
 -- | A (possibly guarded) right hand side.
 -- NB: A Rhs has always a Tau type.
-data Rhs p = Rhs (PostTcType p) (GRhs p) (WhereBinds p)
+data Rhs p = Rhs (TcTAU p) (GRhs p) (WhereBinds p)
 
 -- | RHS of a lamba-abstraction
 -- Invariant: no guards nor `where' bindings.
@@ -427,13 +438,13 @@ data Pat p where
   -- | literal constant
   LitPat :: !Lit -> Pat p
   -- | Infix @::@ (cons) pattern
-  InfixCONSPat :: PostTcType p -> Pat p -> Pat p -> Pat p
+  InfixCONSPat :: TcTAU p -> Pat p -> Pat p -> Pat p
   -- | data constructor and argument
-  ConPat :: !(CON p) -> PostTcTypes p -> [Pat p] -> Pat p
+  ConPat :: TcTAUs p -> !(CON p) -> [Pat p] -> Pat p
   -- | tuple pattern
-  TuplePat :: [Pat p] -> PostTcType p -> Pat p
+  TuplePat :: TcTAU p -> [Pat p] -> Pat p
   -- | list pattern
-  ListPat :: [Pat p] -> PostTcType p -> Pat p
+  ListPat :: TcTAU p -> [Pat p] -> Pat p
   -- | parenthesized pattern
   -- This makes pretty-printing easier.
   ParenPat :: Pat p -> Pat p
@@ -443,6 +454,9 @@ data Pat p where
   WildPat :: Ge p Rn => !(VAR p) -> Pat p
   -- ^ as-pattern (@\@@)
   AsPat :: !(VAR p) -> Pat p -> Pat p
+
+type instance PhaseOf (Pat p) = p
+-- type instance PhaseOf [Pat p] = p
 
 {- Note [Pattern signatures aka SigPat]
 SigPats are banned to simplify things. For instance, we would expect
@@ -501,6 +515,9 @@ data Type c p where
   -- | rank-1 polymorphic type
   ForallTy :: TyParams p -> Tau p -> Sigma p
 
+type instance PhaseOf (Type c p) = p
+-- type instance PhaseOf [Type c p] = p
+
 type Sigma = Type SIGMA
 type Tau   = Type TAU
 
@@ -533,11 +550,22 @@ instance (Eq (TyVAR p), Eq (TyCON p)) => Eq (Dom p) where
   Dom Nothing ty1 Nothing == Dom Nothing ty2 Nothing = ty1 == ty2
   _dom1 == _dom2 = False
 
+type instance PhaseOf (Dom p) = p
+-- type instance PhaseOf [Dom p] = p
 
 type Range = Tau
 
-type PostTcType p = PostTc p (Tau p)
-type PostTcTypes p = PostTc p [Tau p]
+type family TcTAU phase
+type instance TcTAU Pr = None Pr
+type instance TcTAU Rn = None Rn
+type instance TcTAU Tc = Tau Tc
+type instance TcTAU Ti = Tau Ti
+
+type family TcTAUs phase
+type instance TcTAUs Pr = None Pr
+type instance TcTAUs Rn = None Rn
+type instance TcTAUs Tc = [Tau Tc]
+type instance TcTAUs Ti = [Tau Ti]
 
 -- ** Meta type variables
 
@@ -609,5 +637,3 @@ instance Ord (TyName p) => Ord (TyCon p) where
 data Kind = TypeKi
           | FunKi Kind Kind
     deriving Eq
-
-type PostTcKind p = PostTc p Kind

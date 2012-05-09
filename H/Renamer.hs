@@ -132,24 +132,23 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
             f (DataDecl loc name typarams' constrs')
   renameBndr (ValDecl bind) f =
     renameBndr bind $ f . ValDecl
-  renameBndr (GoalDecl loc gtype gname NoPostTc prop) f
+  renameBndr (GoalDecl loc gtype gname None prop) f
     = inGoalDeclCtxt loc gtype (ppQuot gname) $
         renameBndr gname $ \gname' -> do
           prop' <- inPropContext $ rename prop
-          popContext $ f (GoalDecl loc gtype gname' NoPostTc prop') 
-  renameBndr _other _f = impossible
+          popContext $ f (GoalDecl loc gtype gname' None prop') 
 
 
 -- * Binds
 
 instance RenameBndr (Bind Pr) (Bind Rn) where
-  renameBndr (FunBind _rec occ sig NoPostTc matches) f
+  renameBndr (FunBind _rec occ sig None matches) f
     = inFunBindCtxt (ppQuot occ) $ do
         sig' <- rename sig
         renameBndr occ $ \name -> do
           matches' <- rnList matches
           let rec' = funbind_rec name matches'
-          popContext $ f (FunBind rec' name sig' NoPostTc matches')
+          popContext $ f (FunBind rec' name sig' None matches')
     where funbind_rec x ms
             | x `Set.member` fvMatches ms = Rec
             | otherwise                   = NonRec
@@ -203,17 +202,17 @@ instance Rename Exp where
         rnPats pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
     = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
-  rename (Ite NoPostTc g t e)
+  rename (Ite None g t e)
     = inIteExprCtxt g $
-        liftM3 (Ite NoPostTc) (rename g) (rename t) (rename e)
-  rename (If NoPostTc grhss)
+        liftM3 (Ite None) (rename g) (rename t) (rename e)
+  rename (If None grhss)
     = inIfExprCtxt $
-        liftM (If NoPostTc) $ rename grhss
-  rename (Case e NoPostTc alts)
+        liftM (If None) $ rename grhss
+  rename (Case None e alts)
     = inCaseExprCtxt e $
-        liftM2 (flip Case NoPostTc) (rename e) (rnList alts)
-  rename (Tuple NoPostTc l) = liftM (Tuple NoPostTc) $ mapM rename l
-  rename (List NoPostTc l) = liftM (List NoPostTc) $ mapM rename l
+        liftM2 (Case None) (rename e) (rnList alts)
+  rename (Tuple None l) = liftM (Tuple None) $ mapM rename l
+  rename (List None l) = liftM (List None) $ mapM rename l
   rename (Paren e) = liftM Paren $ rename e
   rename (LeftSection e (Op op)) = liftM (flip LeftSection (Op op)) $ rename e
   rename (RightSection (Op op) e) = liftM (RightSection (Op op)) $ rename e
@@ -255,11 +254,10 @@ instance RenameBndr (QVar Pr) (QVar Rn) where
 -- ** Right hand side
 
 instance Rename Rhs where
-  rename (Rhs NoPostTc grhs whr)
+  rename (Rhs None grhs whr)
     = renameBndr whr $ \whr' -> do
         grhs' <- rename grhs
-        return $ Rhs NoPostTc grhs' whr'
-  rename _other = impossible
+        return $ Rhs None grhs' whr'
 
 instance Rename GRhs where
   rename (UnGuarded e)   = liftM UnGuarded $ rename e
@@ -319,20 +317,20 @@ rn_pat (VarPat occ) = do
   name <- renameBndr occ return
   return (VarPat name,Map.fromList [(occ,name)])
 rn_pat (LitPat lit) = return (LitPat lit,Map.empty)
-rn_pat (InfixCONSPat NoPostTc p1 p2) = do
+rn_pat (InfixCONSPat None p1 p2) = do
   (p1',p1_map) <- rn_pat p1
   (p2',p2_map) <- rn_pat p2
-  return (InfixCONSPat NoPostTc p1' p2',Map.union p1_map p2_map)
-rn_pat (ConPat con NoPostTc ps) = do
+  return (InfixCONSPat None p1' p2',Map.union p1_map p2_map)
+rn_pat (ConPat None con ps) = do
     con' <- rename con
     (ps',ps_map) <- rn_pats ps
-    return (ConPat con' NoPostTc ps',ps_map)
-rn_pat (TuplePat ps NoPostTc) = do
+    return (ConPat None con' ps',ps_map)
+rn_pat (TuplePat None ps) = do
   (ps',ps_map) <- rn_pats ps
-  return (TuplePat ps' NoPostTc,ps_map)
-rn_pat (ListPat ps NoPostTc) = do
+  return (TuplePat None ps',ps_map)
+rn_pat (ListPat None ps) = do
   (ps',ps_map) <- rn_pats ps
-  return (ListPat ps' NoPostTc,ps_map)
+  return (ListPat None ps',ps_map)
 rn_pat (ParenPat p) = do
   (p',p_map) <- rn_pat p
   return (ParenPat p',p_map)

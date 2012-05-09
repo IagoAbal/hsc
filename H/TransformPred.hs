@@ -8,7 +8,7 @@ import Unique
 
 import Control.Applicative ( (<|>) )
 import Control.Monad
-import qualified Data.Traversable as T
+
 
 
 tpType :: forall c p m. (MonadUnique m, IsTc p) => (Prop p -> Maybe (Prop p)) -> Type c p -> m (Type c p)
@@ -66,23 +66,23 @@ tpPat f (VarPat b) = do
   (b',b_s) <- tpBndr f b
   return (VarPat b',b_s)
 tpPat _f p@(LitPat _) = return (p,[])
-tpPat f (InfixCONSPat ptcty p1 p2) = do
+tpPat f (InfixCONSPat typ p1 p2) = do
   (p1',p1_s) <- tpPat f p1
-  ptcty' <- T.mapM (tpType f) ptcty
+  typ' <- tpType f typ
   (p2',p2_s) <- tpPat f p2
-  return (InfixCONSPat ptcty' p1' p2',p1_s++p2_s)
-tpPat f (ConPat con ptctys ps) = do
+  return (InfixCONSPat typ' p1' p2',p1_s++p2_s)
+tpPat f (ConPat typs con ps) = do
   (ps',ps_ss) <- liftM unzip $ mapM (tpPat f) ps
-  ptctys' <- T.mapM (mapM (tpType f)) ptctys
-  return (ConPat con ptctys' ps', concat ps_ss)
-tpPat f (TuplePat ps ptcty) = do
+  typs' <- mapM (tpType f) typs
+  return (ConPat typs' con ps', concat ps_ss)
+tpPat f (TuplePat ty ps) = do
   (ps',ps_ss) <- liftM unzip $ mapM (tpPat f) ps
-  ptcty' <- T.mapM (tpType f) ptcty
-  return (TuplePat ps' ptcty', concat ps_ss)
-tpPat f (ListPat ps ptcty) = do
+  ty' <- tpType f ty
+  return (TuplePat ty' ps', concat ps_ss)
+tpPat f (ListPat ty ps) = do
   (ps',ps_ss) <- liftM unzip $ mapM (tpPat f) ps
-  ptcty' <- T.mapM (tpType f) ptcty
-  return (ListPat ps' ptcty', concat ps_ss)
+  ty' <- tpType f ty
+  return (ListPat ty' ps' , concat ps_ss)
 tpPat f (ParenPat p) = do
   (p',p_s) <- tpPat f p
   return (ParenPat p',p_s)

@@ -32,14 +32,13 @@ zonkConDecls = mapM zonkConDecl
 zonkConDecl :: MonadIO m => ConDecl Tc -> m (ConDecl Tc)
 zonkConDecl (ConDecl loc name doms)
   = liftM (ConDecl loc name) $ zonkDoms doms
-zonkConDecl _other = undefined -- impossible
 
 zonkBinds :: MonadIO m => [Bind Tc] -> m [Bind Tc]
 zonkBinds = mapM zonkBind
 
 zonkBind :: MonadIO m => Bind Tc -> m (Bind Tc)
-zonkBind (FunBind rec fun sig ptctyps matches)
-  = liftM4 (FunBind rec) (zonkVar fun) (zonkTypeSig sig) (return ptctyps) (zonkMatches matches)
+zonkBind (FunBind rec fun sig typs matches)
+  = liftM4 (FunBind rec) (zonkVar fun) (zonkTypeSig sig) (return typs) (zonkMatches matches)
 zonkBind (PatBind loc pat rhs)
   = liftM2 (PatBind loc) (zonkPat pat) (zonkRhs rhs)
 
@@ -84,12 +83,12 @@ zonkExp (Lam loc pats rhs)
   = liftM2 (Lam loc) (zonkPats pats) (zonkRhs rhs)
 zonkExp (Let binds body) = liftM2 Let (zonkBinds binds) (zonkExp body)
 zonkExp (TyLam tvs expr) = liftM (TyLam tvs) $ zonkExp expr
-zonkExp (Ite ptcty g t e) = liftM4 Ite (T.mapM zonkType ptcty) (zonkExp g) (zonkExp t) (zonkExp e)
-zonkExp (If ptcty grhss) = liftM2 If (T.mapM zonkType ptcty) (zonkGuardedRhss grhss)
-zonkExp (Case scrut ptcty alts)
-  = liftM3 Case (zonkExp scrut) (T.mapM zonkType ptcty) (zonkAlts alts)
-zonkExp (Tuple ptcty es) = liftM2 Tuple (T.mapM zonkType ptcty) (zonkExps es)
-zonkExp (List ptcty es) = liftM2 List (T.mapM zonkType ptcty) (zonkExps es)
+zonkExp (Ite ty g t e) = liftM4 Ite (zonkType ty) (zonkExp g) (zonkExp t) (zonkExp e)
+zonkExp (If ty grhss) = liftM2 If (zonkType ty) (zonkGuardedRhss grhss)
+zonkExp (Case ty scrut alts)
+  = liftM3 Case (zonkType ty) (zonkExp scrut) (zonkAlts alts)
+zonkExp (Tuple ty es) = liftM2 Tuple (zonkType ty) (zonkExps es)
+zonkExp (List ty es) = liftM2 List (zonkType ty) (zonkExps es)
 zonkExp (Paren e) = liftM Paren $ zonkExp e
 zonkExp (LeftSection e1 op) = liftM2 LeftSection (zonkExp e1) (zonkExp op)
 zonkExp (RightSection op e2) = liftM2 RightSection (zonkExp op) (zonkExp e2)
@@ -99,7 +98,6 @@ zonkExp (EnumFromThenTo e1 e2 en)
 zonkExp (Coerc loc expr polyty)
   = liftM2 (Coerc loc) (zonkExp expr) (zonkType polyty)
 zonkExp (QP qt qvars prop) = liftM2 (QP qt) (zonkQVars qvars) (zonkExp prop)
-zonkExp _other = undefined -- impossible
 
 zonkPats :: MonadIO m => [Pat Tc] -> m [Pat Tc]
 zonkPats = mapM zonkPat
@@ -107,11 +105,11 @@ zonkPats = mapM zonkPat
 zonkPat :: MonadIO m => Pat Tc -> m (Pat Tc)
 zonkPat (VarPat x) = liftM VarPat $ zonkVar x
 zonkPat pat@(LitPat _) = return pat
-zonkPat (InfixCONSPat ptcty p1 p2)
-  = liftM3 InfixCONSPat (T.mapM zonkType ptcty) (zonkPat p1) (zonkPat p2)
-zonkPat (ConPat con ptctys pats) = liftM3 ConPat (zonkCon con) (T.mapM zonkTypes ptctys) (zonkPats pats)
-zonkPat (TuplePat ps ptcty) = liftM2 TuplePat (zonkPats ps) (T.mapM zonkType ptcty)
-zonkPat (ListPat ps ptcty) = liftM2 ListPat (zonkPats ps) (T.mapM zonkType ptcty)
+zonkPat (InfixCONSPat typ p1 p2)
+  = liftM3 InfixCONSPat (zonkType typ) (zonkPat p1) (zonkPat p2)
+zonkPat (ConPat typs con pats) = liftM3 ConPat (zonkTypes typs) (zonkCon con) (zonkPats pats)
+zonkPat (TuplePat ty ps) = liftM2 TuplePat (zonkType ty) (zonkPats ps)
+zonkPat (ListPat ty ps) = liftM2 ListPat (zonkType ty) (zonkPats ps)
 zonkPat (ParenPat p) = liftM ParenPat $ zonkPat p
 zonkPat (WildPat wild_var) = liftM WildPat $ zonkVar wild_var
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
@@ -133,7 +131,7 @@ zonkAlt :: MonadIO m => Alt Tc -> m (Alt Tc)
 zonkAlt (Alt loc pat rhs) = liftM2 (Alt loc) (zonkPat pat) (zonkRhs rhs)
 
 zonkRhs :: MonadIO m => Rhs Tc -> m (Rhs Tc)
-zonkRhs (Rhs tcty grhs whr) = liftM3 Rhs (T.mapM zonkType tcty) (zonkGRhs grhs) (zonkBinds whr)
+zonkRhs (Rhs ty grhs whr) = liftM3 Rhs (zonkType ty) (zonkGRhs grhs) (zonkBinds whr)
 
 zonkGRhs :: MonadIO m => GRhs Tc -> m (GRhs Tc)
 zonkGRhs (UnGuarded expr) = liftM UnGuarded $ zonkExp expr
@@ -142,7 +140,6 @@ zonkGRhs (Guarded grhss) = liftM Guarded $ zonkGuardedRhss grhss
 zonkGuardedRhss :: MonadIO m => GuardedRhss Tc -> m (GuardedRhss Tc)
 zonkGuardedRhss (GuardedRhss grhss elserhs)
   = liftM2 GuardedRhss (mapM zonkGuardedRhs grhss) (zonkElse elserhs)
-zonkGuardedRhss _other = undefined -- impossible
 
 zonkGuardedRhs :: MonadIO m => GuardedRhs Tc -> m (GuardedRhs Tc)
 zonkGuardedRhs (GuardedRhs loc g e)

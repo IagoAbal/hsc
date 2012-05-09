@@ -142,7 +142,7 @@ instance AppFixity (Decl Pr) where
 
 instance AppFixity (Bind Pr) where
   applyFixities fixs bind = case bind of
-      FunBind rec n sig NoPostTc matches  -> liftM3 (FunBind rec n) (fix sig) (return NoPostTc) (mapM fix matches)
+      FunBind rec n sig None matches  -> liftM3 (FunBind rec n) (fix sig) (return None) (mapM fix matches)
       PatBind loc p rhs -> liftM2 (PatBind loc) (fix p) (fix rhs)
     where fix :: (Monad m, AppFixity ast) => ast -> m ast
           fix x = applyFixities fixs x
@@ -162,8 +162,8 @@ instance AppFixity (Match Pr) where
             fix x = applyFixities fixs x
 
 instance AppFixity (Rhs Pr) where
-  applyFixities fixs (Rhs NoPostTc grhs whr)
-    = liftM2 (Rhs NoPostTc) (fix grhs) (mapM fix whr)
+  applyFixities fixs (Rhs None grhs whr)
+    = liftM2 (Rhs None) (fix grhs) (mapM fix whr)
     where fix :: (Monad m, AppFixity ast) => ast -> m ast
           fix x = applyFixities fixs x
 
@@ -224,11 +224,11 @@ leafFix fixs e = case e of
     App e1 e2               -> liftM2 App (fix e1) (fix e2)
     Lam loc pats e       -> liftM2 (Lam loc) (mapM fix pats) $ fix e
     Let bs e                -> liftM2 Let (mapM fix bs) $ fix e
-    Ite NoPostTc e a b       -> liftM3 (Ite NoPostTc) (fix e) (fix a) (fix b)
-    If NoPostTc grhss                 -> liftM (If NoPostTc) $ fix grhss
-    Case e ptcty alts             -> liftM2 (flip Case ptcty) (fix e) $ mapM fix alts
-    Tuple NoPostTc exps              -> liftM (Tuple NoPostTc) $ mapM fix exps
-    List NoPostTc exps               -> liftM (List NoPostTc) $ mapM fix  exps
+    Ite None e a b       -> liftM3 (Ite None) (fix e) (fix a) (fix b)
+    If None grhss                 -> liftM (If None) $ fix grhss
+    Case None scrut alts             -> liftM2 (Case None) (fix scrut) $ mapM fix alts
+    Tuple None exps              -> liftM (Tuple None) $ mapM fix exps
+    List None exps               -> liftM (List None) $ mapM fix  exps
     Paren e                 -> liftM Paren $ fix e
     LeftSection e op        -> liftM (flip LeftSection op) (fix e)
     RightSection op e       -> liftM (RightSection op) $ fix e
@@ -242,10 +242,10 @@ leafFix fixs e = case e of
     fix x = applyFixities fixs x
 
 leafFixP fixs p = case p of
-        InfixCONSPat NoPostTc p1 p2       -> liftM2 (InfixCONSPat NoPostTc) (fix p1) (fix p2)
-        ConPat n NoPostTc ps             -> liftM (ConPat n NoPostTc) $ mapM fix ps
-        TuplePat ps NoPostTc             -> liftM (flip TuplePat NoPostTc) $ mapM fix ps
-        ListPat ps NoPostTc              -> liftM (flip ListPat NoPostTc) $ mapM fix ps
+        InfixCONSPat None p1 p2       -> liftM2 (InfixCONSPat None) (fix p1) (fix p2)
+        ConPat None n ps             -> liftM (ConPat None n) $ mapM fix ps
+        TuplePat None ps             -> liftM (TuplePat None) $ mapM fix ps
+        ListPat None ps              -> liftM (ListPat None) $ mapM fix ps
         ParenPat p              -> liftM ParenPat $ fix p
         AsPat n p            -> liftM (AsPat n) $ fix p
 --         SigPat p t    -> liftM2 SigPat (fix p) (fix t)
