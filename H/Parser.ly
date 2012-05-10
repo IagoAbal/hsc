@@ -22,6 +22,7 @@
 > import H.Monad ( H )
 > import H.Syntax
 > import H.SrcLoc
+> import H.SrcContext ( inContextAt )
 > import Pretty
 > import H.Parser.ParseMonad
 > import H.Parser.Lexer
@@ -607,5 +608,5 @@ Miscellaneous (mostly renamings)
 
 > parseH :: ParseResult a -> H () () () a
 > parseH (ParseOk a) = return a
-> parseH (ParseFailed loc msg) = throwError $ mySep [pretty loc <> char ':', text msg]
+> parseH (ParseFailed loc msg) = inContextAt loc empty $ throwError $ text msg
 > }
