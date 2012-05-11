@@ -1,4 +1,7 @@
-{-# LANGUAGE GADTs, NamedFieldPuns #-}
+
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module H.Typecheck.Zonk where
 
@@ -9,6 +12,8 @@ import H.Syntax
 import Control.Monad
 import Control.Monad.IO.Class
 import qualified Data.Traversable as T
+
+#include "bug.h"
 
 
 zonkDecls :: MonadIO m => [Decl Tc] -> m [Decl Tc]

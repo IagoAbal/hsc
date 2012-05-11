@@ -1,3 +1,5 @@
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -29,6 +31,8 @@ import qualified Data.Set as Set
 import Data.Sequence ( Seq, (|>) )
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
+
+#include "bug.h"
 
 
 data TccHypoThing = ForAll [QVar Ti]
@@ -186,19 +190,23 @@ coDecls :: [Decl Ti] -> CoM ()
 coDecls = mapM_ coDecl
 
 coDecl :: Decl Ti -> CoM ()
-coDecl (TypeDecl loc tyname tvs tau) = do
+coDecl (TypeDecl loc ty_name tvs tau)
+  = inTypeDeclCtxt loc (ppQuot ty_name) $ do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_tau <- subst_type [] (zip tvs sko_tys) tau
   coType sko_tau
-coDecl (DataDecl loc tyname tvs constrs) = do
+coDecl (DataDecl loc ty_name tvs constrs)
+  = inDataDeclCtxt loc (ppQuot ty_name) $ do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_constrs <- subst_condecls [] (zip tvs sko_tys) constrs
   mapM_ coConDecl sko_constrs
-  where coConDecl (ConDecl loc name doms) = coDoms doms
+  where coConDecl (ConDecl loc1 con_name doms)
+          = inConDeclCtxt loc1 (ppQuot con_name) $ coDoms doms
 coDecl (ValDecl bind) = coBind bind
-coDecl (GoalDecl loc gtype gname tvs prop) = do
+coDecl (GoalDecl loc gtype g_name tvs prop)
+  = inGoalDeclCtxt loc gtype (ppQuot g_name) $ do
   sko_tvs <- mapM skoTyVar tvs
   let sko_tys = map VarTy sko_tvs
   sko_prop <- subst_exp [] (zip tvs sko_tys) prop
@@ -225,10 +233,12 @@ coBind (FunBind _rec fun fun_tsig tvs matches)
 --   traceDoc (text "fun-tau =" <+> pretty fun_tau) $ do
   coMatches sko_matches fun_tau
   where fun_ty = sortOf fun
+coBind _other = impossible
 
 coTypeSig :: TypeSig Ti -> CoM ()
 coTypeSig NoTypeSig = return ()
-coTypeSig (TypeSig loc sig) = coType sig
+coTypeSig (TypeSig loc sig)
+  = inContextAt loc (text "In type signature") $ coType sig
 
 coMatches :: [Match Ti] -> Tau Ti -> CoM ()
 coMatches matches@(m:_) exp_ty = do
@@ -237,6 +247,7 @@ coMatches matches@(m:_) exp_ty = do
   where arity = matchArity m
         -- splitFunTy* must to take care of type synonyms... so I need to use expandSyn
         (doms,_) = splitFunTyN arity exp_ty
+coMatches [] _exp_ty = impossible
 
 getCaseLikeCtxt :: Exp Ti -> Sigma Ti -> [Pat Ti] -> CoM (Var Ti,CoM a -> CoM a)
 getCaseLikeCtxt (Var x) _ty _pats = return (x,id)
@@ -313,18 +324,18 @@ coExp (TyLam tvs e) Infer = do
   e_ty <- subst_type [] (zip sko_tvs $ map VarTy tvs) sko_e_ty
   return (ForallTy tvs $ type2tau e_ty)
 coExp e@(Ite ite_ty g e1 e2) exp_ty = do
-  coExp g (Check boolTy)
+  void $ coExp g (Check boolTy)
   withFacts [g] $
-    coExp e1 (Check $ tau2sigma ite_ty)
+    void $ coExp e1 (Check $ tau2sigma ite_ty)
   withFacts [P.notP g] $
-    coExp e2 (Check $ tau2sigma ite_ty)
+    void $ coExp e2 (Check $ tau2sigma ite_ty)
   (tau2sigma ite_ty ~>? exp_ty) e
 coExp e@(If if_ty grhss) exp_ty = do
   coGuardedRhss grhss if_ty
   (tau2sigma if_ty ~>? exp_ty) e
   -- Remember that case_ty is only a 'cached' value
   -- and it matches with the rhs_ty of all alternatives
-coExp (Case case_ty scrut alts) exp_ty = do
+coExp (Case case_ty scrut alts) _exp_ty = do
   scrut_ty <- coExp scrut Infer
   (x,scrut_ctxt) <- getCaseLikeCtxt scrut scrut_ty [ pat | Alt _ pat _ <- alts ]
   scrut_ctxt $
@@ -344,7 +355,7 @@ coExp e@(LeftSection e1 op) exp_ty
 coExp e@(RightSection op e2) exp_ty = do
   op_ty <- coExp op Infer
   let FunTy d1 (FunTy d2 res_ty) = op_ty
-  coExp e2 (Check $ dom2type d2)
+  void $ coExp e2 (Check $ dom2type d2)
   res_ty' <- instFunTy (d2,res_ty) e2
   ((d1 @--> res_ty') ~>? exp_ty) e
 coExp e@(EnumFromTo e1 e2) exp_ty = do
@@ -356,13 +367,14 @@ coExp e@(EnumFromThenTo e1 e2 e3) exp_ty = do
   void $ coExp e2 (Check intTy)
   void $ coExp e3 (Check intTy)
   (ListTy intTy ~>? exp_ty) e
-coExp (Coerc loc e ann_ty) exp_ty = do
-  coExp e (Check ann_ty)
+coExp (Coerc loc e ann_ty) exp_ty
+  = inCoercExprCtxt loc $ do
+  void $ coExp e (Check ann_ty)
   (ann_ty ~>? exp_ty) e
-coExp e@(QP qt avars prop) exp_ty
-  = inQPExprCtxt qt avars $ do
-    withForall avars $
-      coExp prop (Check boolTy)
+coExp e@(QP qt xs prop) exp_ty
+  = inQPExprCtxt qt xs $ do
+    withForall xs $
+      void $ coExp prop (Check boolTy)
     (boolTy ~>? exp_ty) e
 coExp e _exp_ty = traceDoc (text "coExp-impossible?" <+> pretty e) $ undefined
 
@@ -375,19 +387,21 @@ coApp expr fun args exp_res_ty = do
 coArgs :: [Exp Ti] -> Tau Ti -> CoM (Tau Ti)
 coArgs []         res_ty = return res_ty
 coArgs (arg:args) fun_ty = do
-  coExp arg (Check $ dom2type dom)
+  void $ coExp arg (Check $ dom2type dom)
   rang' <- instFunTy (dom,rang) arg
   res_ty <- coArgs args rang'
   return res_ty
   where FunTy dom rang = fun_ty
+      -- TODO: Take care of type synonyms
 
 
 coTuple :: [Exp Ti] -> [Dom Ti] -> CoM ()
 coTuple []     []     = return ()
 coTuple (e:es) (d:ds) = do
-  coExp e (Check $ dom2type d)
+  void $ coExp e (Check $ dom2type d)
   ds_e <- instDoms e d ds
   coTuple es ds_e
+coTuple _ _ = impossible
 
 coAlts :: Var Ti -> [Alt Ti] -> CoM ()
 coAlts scrut_var alts = do
@@ -395,7 +409,7 @@ coAlts scrut_var alts = do
   co_Equations [scrut_var] qs
 
 coRhs :: Rhs Ti -> CoM ()
-coRhs rhs@(Rhs rhs_ty grhs binds) = do
+coRhs (Rhs rhs_ty grhs binds) = do
   coBinds binds
   withLetIn binds $
     coGRhs grhs rhs_ty
@@ -414,21 +428,24 @@ coGuardedRhss (GuardedRhss grhss elserhs) exp_ty = do
       grhss
   withFacts not_guards $ coElse elserhs exp_ty
   grhsCompletenessTCC grhss elserhs
-  where get_guard (GuardedRhs _ guard _) = guard
+  where get_guard (GuardedRhs _ g _) = g
 
 grhsCompletenessTCC :: [GuardedRhs Ti] -> Else Ti -> CoM ()
 grhsCompletenessTCC _     (Else _ _) = return ()
 grhsCompletenessTCC grhss NoElse     = addCompletenessTCC (P.disj $ map get_guard grhss)
-  where get_guard (GuardedRhs _ guard _) = guard
+  where get_guard (GuardedRhs _ g _) = g
 
 coGuardedRhs :: GuardedRhs Ti -> Tau Ti -> CoM ()
-coGuardedRhs (GuardedRhs loc guard expr) exp_ty = do
-  void $ coExp guard (Check boolTy)
-  void $ withFacts [guard] $ coExp expr (Check $ tau2sigma exp_ty)
+coGuardedRhs (GuardedRhs loc g expr) exp_ty
+  = inGuardedRhsCtxt loc $ do
+  void $ coExp g (Check boolTy)
+  void $ withFacts [g] $ coExp expr (Check $ tau2sigma exp_ty)
 
 coElse :: Else Ti -> Tau Ti -> CoM ()
 coElse NoElse          _exp_ty = return ()
-coElse (Else loc expr)  exp_ty = void $ coExp expr (Check $ tau2sigma exp_ty)
+coElse (Else loc expr)  exp_ty
+  = inElseRhsCtxt loc $ do
+  void $ coExp expr (Check $ tau2sigma exp_ty)
 
 
 -- * Equations
@@ -455,9 +472,11 @@ mkEq loc pats rhs = do
 
 alt2eq :: Alt Ti -> CoM Equation
 alt2eq (Alt (Just loc) pat rhs) = mkEq loc [pat] rhs
+alt2eq _other = impossible
 
 match2eq :: Match Ti -> CoM Equation
 match2eq (Match (Just loc) pats rhs) = mkEq loc pats rhs
+match2eq _other = impossible
 
 matches2eqs :: [Match Ti] -> CoM [Equation]
 matches2eqs = mapM match2eq
@@ -506,6 +525,7 @@ coType (ForallTy tvs tau) = do
   let sko_tys = map VarTy sko_tvs
   sko_tau <- subst_type [] (zip tvs sko_tys) tau
   coType sko_tau
+coType _other = impossible
 
 
 coDoms :: [Dom Ti] -> CoM ()
@@ -546,7 +566,7 @@ co_Equations :: [Var Ti] -> [Equation] -> CoM ()
 co_Equations [] []  = error "coEquations undefined 1" -- FALSE must hold
 co_Equations [] [E _ [] rhs] = coEqRHS rhs
 co_Equations [] (_:_) = throwError $ text "Non-uniform definition/pattern(s)"
-co_Equations xs []    = error "coEquations undefined 2" -- FALSE must hold
+co_Equations _xs []    = error "coEquations undefined 2" -- FALSE must hold
 co_Equations (x:xs) qs
   | all isVar   qs = matchVar x xs qs
   | all isLit   qs = matchLit x xs qs
@@ -557,12 +577,12 @@ co_Equations (x:xs) qs
 
 subst_eq :: [(Var Ti,Exp Ti)] -> Equation -> CoM Equation
 subst_eq var_s (E loc pats rhs) = do
+  let s = mkSubst1_FV var_s []
   (pats',s') <- substPats s pats
   rhs' <- substEqRHS s' rhs
   return (E loc pats' rhs')
-  where s = mkSubst1_FV var_s []
-        substEqRHS s NoEqRHS     = return NoEqRHS
-        substEqRHS s (EqRHS rhs) = liftM EqRHS $ substRhs s rhs
+  where substEqRHS _s NoEqRHS        = return NoEqRHS
+        substEqRHS  s (EqRHS eq_rhs) = liftM EqRHS $ substRhs s eq_rhs
 
 getNameForPats :: [Pat Ti] -> Maybe String
 getNameForPats pats = do
@@ -609,7 +629,7 @@ matchTuple x xs qs = do
   (tup_exp,xs') <- instTupleWithVars ds
   let qxs' = map toQVar xs'
   withForall qxs' $ withFacts [Var x ==* tup_exp] $
-    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(TuplePat _ ps1):ps) rhs <- qs]
+    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (TuplePat _ ps1:ps) rhs <- qs]
 
 matchCon :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchCon x xs qs = do
@@ -632,7 +652,7 @@ matchCon x xs qs = do
           
 
 matchClause :: Var Ti -> TcCon Ti -> [Var Ti] -> [Equation] -> CoM ()
-matchClause x con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]
+matchClause x _con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]
   | all isVarPat ps1 =
       withForall qxs' $ withFacts [Var x ==* pat2exp p] $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
@@ -643,7 +663,7 @@ matchClause x con xs qs = do
   (p_exp,xs') <- instWithVars (sortOf con) typs (Con con)
   let qxs' = map toQVar xs'
   withForall qxs' $ withFacts [Var x ==* p_exp] $
-    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (p@(ConPat _ _ ps1):ps) rhs <- qs]
+    co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (ConPat _ _ ps1:ps) rhs <- qs]
 
 choose :: TcCon Ti -> [Equation] -> [Equation]
 choose c qs = [q | q <- qs, getCon q == c]

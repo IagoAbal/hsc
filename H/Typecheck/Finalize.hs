@@ -1,4 +1,8 @@
-{-# LANGUAGE GADTs, NamedFieldPuns, DoRec #-}
+
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DoRec #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module H.Typecheck.Finalize where
 
@@ -16,6 +20,8 @@ import Data.List ( find )
 import Data.Map ( Map )
 import qualified Data.Map as Map
 import qualified Data.Traversable as T
+
+#include "bug.h"
 
 
 type TiM = H TiEnv () ()
@@ -110,7 +116,6 @@ finDecls (DataDecl loc tyname tvs constrs:ds)
           doms' <- finDoms doms
           conname' <- finBndr conname return 
           return (ConDecl loc conname' doms',(UserCon conname,UserCon conname'))
-        finConDecl _other = undefined -- impossible
 finDecls (ValDecl bind:ds)
   = finBind bind $ \bind' -> do
   ds' <- finDecls ds
@@ -120,7 +125,6 @@ finDecls (GoalDecl loc gtype gname tvs prop:ds) = do
              finExp prop
   ds' <- finDecls ds
   return (GoalDecl loc gtype gname tvs prop':ds')
-finDecls _other = undefined -- impossible
 
 
 finBinds :: [Bind Tc] -> ([Bind Ti] -> TiM a) -> TiM a
@@ -149,7 +153,6 @@ finBind (FunBind Rec fun tysig typs matches) cont
   finBndr fun $ \fun' -> do
     matches' <- finMatches matches
     popContext $ cont (FunBind Rec fun' tysig' typs matches')
-finBind _other _cont = undefined -- impossible
 
 finTypeSig :: TypeSig Tc -> TiM (TypeSig Ti)
 finTypeSig NoTypeSig = return NoTypeSig
@@ -232,7 +235,7 @@ finExp (QP qt qvars prop)
   = inQPExprCtxt qt qvars $
       finQVars qvars $ \qvars' ->
         liftM (QP qt qvars') $ finProp prop
-finExp _other = undefined -- impossible
+finExp _other = impossible
 
 finProp :: Prop Tc -> TiM (Prop Ti)
 finProp = inPropContext . finExp
@@ -244,6 +247,7 @@ finAlt :: Alt Tc -> TiM (Alt Ti)
 finAlt (Alt (Just loc) pat rhs)
   = inCaseAltCtxt loc pat $
       finPat pat $ \pat'-> liftM (Alt (Just loc) pat') $ finRhs rhs
+finAlt _other = impossible
 
 finRhs :: Rhs Tc -> TiM (Rhs Ti)
 finRhs (Rhs rhs_ty grhs whr) = do
@@ -343,7 +347,7 @@ finType (MetaTy mtv)
 finType tcpty@(ForallTy tvs ty)
   = inTypeCtxt tcpty $
       liftM (ForallTy tvs) $ finType ty
-finType _other = undefined -- impossible
+finType _other = impossible
 
 finDoms :: [Dom Tc] -> TiM [Dom Ti]
 finDoms []     = return []
@@ -359,4 +363,4 @@ finDom (Dom (Just pat) ty mb_prop) cont = do
   finPat pat $ \pat' -> do
     mb_prop' <- T.mapM finProp mb_prop
     cont (Dom (Just pat') ty' mb_prop')
-finDom _other _cont = undefined -- imposible
+finDom _other _cont = impossible

@@ -190,8 +190,8 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
         con_res_ty = mkAppTyIn (UserTyCon ty_name) (map VarTy typarams)
 --         ConDecl :: Ge p Rn => SrcLoc -> NAME p -> [Dom p] -> ConDecl p
         tc_constr :: [TyVar] -> ConDecl Rn -> TcM (ConDecl Tc,(Con Rn,Con Tc))
-        tc_constr ty_tvs (ConDecl loc con_name doms)
-          = inConDeclCtxt loc (ppQuot con_name) $ do
+        tc_constr ty_tvs (ConDecl loc1 con_name doms)
+          = inConDeclCtxt loc1 (ppQuot con_name) $ do
           (con_ty,_) <- kcType (mkForallTy typarams $ funTy doms con_res_ty)
           let (con_tvs,con_tau) = splitSigma con_ty
               con = mkVarId con_name con_ty
