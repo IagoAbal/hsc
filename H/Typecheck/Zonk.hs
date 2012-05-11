@@ -31,7 +31,7 @@ zonkConDecls = mapM zonkConDecl
 
 zonkConDecl :: MonadIO m => ConDecl Tc -> m (ConDecl Tc)
 zonkConDecl (ConDecl loc name doms)
-  = liftM (ConDecl loc name) $ zonkDoms doms
+  = liftM2 (ConDecl loc) (zonkVar name) (zonkDoms doms)
 
 zonkBinds :: MonadIO m => [Bind Tc] -> m [Bind Tc]
 zonkBinds = mapM zonkBind
@@ -98,6 +98,7 @@ zonkExp (EnumFromThenTo e1 e2 en)
 zonkExp (Coerc loc expr polyty)
   = liftM2 (Coerc loc) (zonkExp expr) (zonkType polyty)
 zonkExp (QP qt qvars prop) = liftM2 (QP qt) (zonkQVars qvars) (zonkExp prop)
+zonkExp _other = impossible
 
 zonkPats :: MonadIO m => [Pat Tc] -> m [Pat Tc]
 zonkPats = mapM zonkPat
@@ -113,7 +114,6 @@ zonkPat (ListPat ty ps) = liftM2 ListPat (zonkType ty) (zonkPats ps)
 zonkPat (ParenPat p) = liftM ParenPat $ zonkPat p
 zonkPat (WildPat wild_var) = liftM WildPat $ zonkVar wild_var
 zonkPat (AsPat x pat) = liftM2 AsPat (zonkVar x) (zonkPat pat)
--- zonkPat (SigPat pat ty) = liftM2 SigPat (zonkPat pat) (zonkType ty)
 
 zonkQVars :: MonadIO m => [QVar Tc] -> m [QVar Tc]
 zonkQVars = mapM zonkQVar
