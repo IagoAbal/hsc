@@ -64,6 +64,9 @@ inCaseAltCtxt loc pat = inContextAt loc (text "In the case alternative" <+> ppQu
 inGuardedRhsCtxt :: MonadContext m => SrcLoc -> m a -> m a
 inGuardedRhsCtxt loc = inContextAt loc (text "In guarded alternative")
 
+inElseRhsCtxt :: MonadContext m => SrcLoc -> m a -> m a
+inElseRhsCtxt loc = inContextAt loc (text "In else alternative")
+
 inExprCtxt :: (MonadContext m, PrettyNames p) => Exp p -> m a -> m a
 inExprCtxt expr = inContext (text "In expression:" <+> pretty expr)
 
