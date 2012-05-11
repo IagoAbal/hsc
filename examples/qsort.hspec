@@ -1,0 +1,56 @@
+
+module QSort where
+
+
+not p x = ~(p x)
+
+elem : Int -> [Int] -> Bool
+elem a [] = False
+elem a (x::xs)
+  | a == x = True
+  | else   = elem a xs
+
+delete1 : Int -> [Int] -> [Int]
+delete1 a [] = []
+delete1 a (x::xs)
+  | a == x = xs
+  | else   = x :: delete1 a xs
+
+permutation : [Int] -> [Int] -> Bool
+permutation [] [] = True
+permutation [] (_::_) = False
+permutation (_::_) [] = False
+permutation (x::xs) ys@(_::_)
+  | elem x ys = permutation xs (delete1 x ys)
+  | else      = False
+
+sorted : [Int] -> Bool
+sorted [] = True
+sorted [x] = True
+sorted (a::b::xs)
+  | a <= b = sorted xs
+  | else   = False
+
+all : forall a. (a -> Bool) -> [a] -> Bool
+all p [] = True
+all p (x::xs)
+  | p x  = all p xs
+  | else = False
+
+append : forall a. [a] -> [a] -> [a]
+append [] ys = ys
+append (x::xs) ys = x :: (append xs ys)
+
+partition : forall a. {p:a -> Bool}
+                      -> [a]
+                      -> { (ys,ns) : ([a],[a]) | all p ys && all (not p) ns }
+partition p [] = ([],[])
+partition p (x::xs)
+  | p x  = (x::ys,ns)
+  | else = (ys,x::ns)
+  where (ys,ns) = partition p xs
+
+qsort : {p:[Int]} -> {q:[Int] | permutation p q && sorted q}
+qsort [] = []
+qsort (x::xs) = append (qsort ls) (x :: qsort rs)
+  where (ls,rs) = partition (< x) xs
