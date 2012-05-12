@@ -1,11 +1,14 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving,
-             StandaloneDeriving,
-             FlexibleInstances,
-             MultiParamTypeClasses,
-             NamedFieldPuns,
-             TypeSynonymInstances
-             #-}
+
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+
 module H.Monad where
+
 
 import H.Message
 import H.SrcLoc
@@ -19,6 +22,10 @@ import Control.Monad.Error
 import Control.Monad.RWS.Strict
 
 import Data.IORef
+
+#include "bug.h"
+
+
 
 newtype H env log st a = H { unH :: RWST (Henv env) log st (ErrorT Message IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadFix)
