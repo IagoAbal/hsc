@@ -28,7 +28,7 @@ import H.SrcLoc
 
 import Name
 import Sorted
-import Unique( Uniquable(..) )
+import Unique( Uniquable(..), UniqSupply )
 
 import Data.IORef( IORef )
 import Data.Function ( on )
@@ -623,6 +623,7 @@ data TyCon p
       tyConName   :: TyName p
     , tyConParams :: [TyVar]
     , synTyConRhs :: Tau p
+    , synTySupply :: Maybe UniqSupply
     }
 
 instance Eq (TyName p) => Eq (TyCon p) where

@@ -57,11 +57,6 @@ quantifyExp expr mtvs ty = do
   return (mkTyLam forall_tvs expr,pty)
 
 
-expandSyn :: (IsTc p, MonadUnique m) => Type c p -> m (Maybe (Type c p))
-expandSyn (ConTy (SynTyCon _ ps rhs) args)
-  = liftM (Just . tau2type) $ subst_type [] (zip ps args) rhs
-expandSyn _other = return  Nothing
-
 instSigmaType :: (MonadUnique m, IsTc p) => Sigma p -> [Tau p] -> m (Tau p)
 instSigmaType (ForallTy tvs ty) typs = subst_type [] (zip tvs typs) ty
 instSigmaType ty [] = return $ type2tau ty

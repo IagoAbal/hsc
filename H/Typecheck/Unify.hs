@@ -4,7 +4,6 @@ module H.Typecheck.Unify where
 
 import H.Typecheck.TcM
 import H.Typecheck.Zonk
-import H.Typecheck.Utils
 
 import H.Syntax
 import Pretty
@@ -113,13 +112,9 @@ unifyKappa ty1@(PredTy pat1 _ _) ty2@(PredTy pat2 _ _)
 unifyKappa (PredTy _ ty1 _) ty2 = unifyKappa ty1 ty2
 unifyKappa ty1 (PredTy _ ty2 _) = unifyKappa ty1 ty2
 
-unifyKappa ty1 ty2 | isSynTy ty1 = do
-  Just ty1' <- expandSyn ty1
-  unify ty1' ty2
+unifyKappa ty1 ty2 | isSynTy ty1 = unify (expandSyn ty1) ty2
   
-unifyKappa ty1 ty2 | isSynTy ty2 = do
-  Just ty2' <- expandSyn ty2
-  unify ty1 ty2'
+unifyKappa ty1 ty2 | isSynTy ty2 = unify ty1 (expandSyn ty2)
 
 unifyKappa (ConTy tc1 args1) (ConTy tc2 args2)
   | tc1 == tc2 = zipWithM_ unifyKappa args1 args2
@@ -195,6 +190,7 @@ unifyFun ty = do
       let funty@(FunTy dom rang) = s --> t
       writeMetaTyVar mtv funty
       return (dom,rang)
+    syn | isSynTy syn -> unifyFun (expandSyn syn)
     other           -> throwError $ text "Cannot unify"
                                     <+> pretty other
                                     <+> text "with a function type `? -> ?'"

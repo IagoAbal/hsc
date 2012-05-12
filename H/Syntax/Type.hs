@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -25,10 +26,11 @@ import H.Syntax.AST
 import {-# SOURCE #-} H.Syntax.Expr
 import H.Syntax.IsTc
 import H.Syntax.Phase
+import H.Syntax.Subst1 ( subst_type )
 
 import Name
 import Sorted
-import Unique( MonadUnique(..) )
+import Unique( MonadUnique(..), evalUnique )
 
 import Data.IORef( newIORef )
 import Control.Monad ( liftM )
@@ -105,30 +107,30 @@ isVarTy :: Type c p -> Bool
 isVarTy (VarTy _) = True
 isVarTy _ty       = False
 
-isFunTy :: Tau p -> Bool
-isFunTy ty
-  | FunTy _ _ <- mu_0 ty = True
-  | otherwise            = False
+isFunTy :: IsTc p => Tau p -> Maybe (Dom p,Tau p)
+isFunTy (FunTy d r)     = Just (d,r)
+isFunTy (PredTy _ ty _) = isFunTy ty
+isFunTy ty | isSynTy ty = isFunTy $ expandSyn ty
+isFunTy _other          = Nothing
 
-  -- (args,result)
-splitFunTy :: Tau p -> ([Dom p],Tau p)
-splitFunTy ty
- | FunTy a t <- mu_0 ty
- , let (args,res) = splitFunTy t
- = (a:args,res)
-splitFunTy ty = ([],ty)
+unFunTy :: IsTc p => Tau p -> ([Dom p],Tau p)
+unFunTy ty
+  | Just (d,t) <- isFunTy ty
+  , (ds,r) <- unFunTy t
+  = (d:ds,r)
+  | otherwise
+  = ([],ty)
 
-splitFunTyN :: Int -> Tau p -> ([Dom p],Tau p)
-splitFunTyN 0 ty = ([],ty)
-splitFunTyN n ty
- | FunTy a t <- mu_0 ty
- , let (args,res) = splitFunTyN (n-1) t
- = (a:args,res)
-splitFunTyN _ ty = ([],ty)
+splitFunTy :: IsTc p =>  Int -> Tau p -> ([Dom p],Tau p)
+splitFunTy 0  ty = ([],ty)
+splitFunTy n  ty
+ | Just (a,t) <- isFunTy ty
+ , let (as,r) = splitFunTy (n-1) t
+ = (a:as,r)
+splitFunTy _ _ty = bug "splitFunTy: insufficient arity"
 
-funTyArity :: Tau p -> Int
-funTyArity ty = length args
-  where (args,_res) = splitFunTy ty
+funTyArity :: IsTc p => Tau p -> Int
+funTyArity = length . fst . unFunTy
 
 splitSigma :: Sigma p -> (TyParams p,Tau p)
 splitSigma (ForallTy tvs tau) = (tvs,tau)
@@ -243,6 +245,25 @@ boolTyName = BuiltinTyCon BoolTyCon
 intTyName  = BuiltinTyCon IntTyCon
 natTyName  = BuiltinTyCon NatTyCon
 
+mkSynTyCon :: (MonadUnique m, IsTc p) => UTyNAME p -> TyParams p -> Tau p -> m (TyCon p)
+mkSynTyCon name typs rhs = do
+  mb_us <- case typs of
+               [] -> return Nothing
+               _  -> liftM Just forkSupply
+  return $ SynTyCon {
+             tyConName   = UserTyCon name
+           , tyConParams = typs
+           , synTyConRhs = rhs
+           , synTySupply = mb_us
+           }
+
+expandSyn :: IsTc p => Type c p -> Type c p
+expandSyn (ConTy (SynTyCon _   [] rhs Nothing)   [])
+  = tau2type rhs
+expandSyn (ConTy (SynTyCon _ typs rhs (Just us)) args)
+  = tau2type $ evalUnique (subst_type [] (zip typs args) rhs) us
+expandSyn _other = bug "expandSyn: not an expandable type synonym"
+
 unitTyCon, boolTyCon, intTyCon, natTyCon, listTyCon :: IsTc p => TyCon p
 unitTyCon = AlgTyCon {
               tyConName = unitTyName
@@ -260,6 +281,7 @@ natTyCon  = SynTyCon {
               tyConName   = natTyName
             , tyConParams = []
             , synTyConRhs = mkPredTy (VarPat n) intTy (Just $ (Var n) .>=. zero)
+            , synTySupply = Nothing
             }
   where n = mkVarId n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq

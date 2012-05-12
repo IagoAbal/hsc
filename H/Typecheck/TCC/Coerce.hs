@@ -44,13 +44,11 @@ coerce  t  (ListTy ty1)     (ListTy ty2)
 coerce  t  (TupleTy ds1)    (TupleTy ds2)
   = coerceTupleTys t ds1 ds2
 
-coerce t   ty1              ty2 | isSynTy ty1 = do
-  Just ty1_def <- expandSyn ty1
-  coerce t ty1_def ty2
+coerce t   ty1              ty2
+  | isSynTy ty1 = coerce t (expandSyn ty1) ty2
 
-coerce t   ty1              ty2 | isSynTy ty2 = do
-  Just ty2_def <- expandSyn ty2
-  coerce t ty1 ty2_def
+coerce t   ty1              ty2
+  | isSynTy ty2 = coerce t ty1 (expandSyn ty2)
 
 coerce t   (PredTy pat1 ty1 mb_prop1) ty2 = do
   mb_prop1_t <- instPredTyProp t pat1 ty1 mb_prop1

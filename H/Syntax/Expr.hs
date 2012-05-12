@@ -23,7 +23,7 @@ module H.Syntax.Expr
 import H.Syntax.AST
 import H.Syntax.IsTc
 import H.Syntax.Phase
-import H.Syntax.Type
+import {-# SOURCE #-} H.Syntax.Type
 
 import Name
 import Sorted

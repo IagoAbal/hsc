@@ -140,13 +140,9 @@ is_trivial_coercion (PredTy (VarPat _) ty1 Nothing) exp_ty expr
 is_trivial_coercion act_ty (PredTy (VarPat _) ty2 Nothing) expr
   = is_trivial_coercion act_ty (tau2sigma ty2) expr
 is_trivial_coercion act_ty          exp_ty expr
-  | isSynTy act_ty = do
-    Just act_ty' <- expandSyn act_ty
-    is_trivial_coercion act_ty' exp_ty expr
+  | isSynTy act_ty = is_trivial_coercion (expandSyn act_ty) exp_ty expr
 is_trivial_coercion act_ty          exp_ty expr
-  | isSynTy exp_ty = do
-    Just exp_ty' <- expandSyn exp_ty
-    is_trivial_coercion act_ty exp_ty' expr
+  | isSynTy exp_ty = is_trivial_coercion act_ty (expandSyn exp_ty) expr
 is_trivial_coercion _act_ty        _exp_ty _expr
   = return False
 
@@ -245,8 +241,7 @@ coMatches matches@(m:_) exp_ty = do
   qs <- matches2eqs matches
   coEquations doms qs
   where arity = matchArity m
-        -- splitFunTy* must to take care of type synonyms... so I need to use expandSyn
-        (doms,_) = splitFunTyN arity exp_ty
+        (doms,_) = splitFunTy arity exp_ty
 coMatches [] _exp_ty = impossible
 
 getCaseLikeCtxt :: Exp Ti -> Sigma Ti -> [Pat Ti] -> CoM (Var Ti,CoM a -> CoM a)
@@ -296,7 +291,7 @@ coExp (Lam (Just loc) pats rhs) (Check exp_ty) = do
   coEquations doms [q]
   return exp_ty
   where arity = length pats
-        (doms,_) = splitFunTyN arity (type2tau exp_ty)
+        (doms,_) = splitFunTy arity (type2tau exp_ty)
 coExp (Lam (Just loc) pats rhs) Infer = do
   pats_tys <- tcPatsTypes pats
   let doms = zipWith mkPatDom pats pats_tys
@@ -391,8 +386,7 @@ coArgs (arg:args) fun_ty = do
   rang' <- instFunTy (dom,rang) arg
   res_ty <- coArgs args rang'
   return res_ty
-  where FunTy dom rang = fun_ty
-      -- TODO: Take care of type synonyms
+  where Just (dom,rang) = isFunTy fun_ty
 
 
 coTuple :: [Exp Ti] -> [Dom Ti] -> CoM ()

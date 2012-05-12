@@ -19,6 +19,7 @@ import Control.Monad.Error
 import Data.List ( find )
 import Data.Map ( Map )
 import qualified Data.Map as Map
+import Data.Maybe ( isJust )
 import qualified Data.Traversable as T
 
 #include "bug.h"
@@ -92,7 +93,8 @@ finDecls [] = return []
 finDecls (TypeDecl loc tyname tvs rhs:ds) = do
   rhs' <- inTypeDeclCtxt loc (ppQuot tyname) $
             finType rhs
-  extendTyConEnv [(UserTyCon tyname,SynTyCon (UserTyCon tyname) tvs rhs')] $ do
+  tycon' <- mkSynTyCon tyname tvs rhs'
+  extendTyConEnv [(UserTyCon tyname,tycon')] $ do
     ds' <- finDecls ds
     return (TypeDecl loc tyname tvs rhs':ds')
 finDecls (DataDecl loc tyname tvs constrs:ds)
@@ -192,8 +194,10 @@ finExp (TyApp (Op (BoolOp bop)) [ty])
     when (not $ isPropContext ctx) check_eq_ty
     liftM (TyApp (Op (BoolOp bop))) $ finTypes [ty]
   where check_eq_ty
-          | isFunTy ty = throwError $ text "Extensionality only applies inside a logical context"
-          | isVarTy ty = throwError $ text "Equality operators cannot be applied to arbitrary types"
+          | isJust (isFunTy ty)
+          = throwError $ text "Extensionality only applies inside a logical context"
+          | isVarTy ty
+          = throwError $ text "Equality operators cannot be applied to arbitrary types"
           | otherwise  = return ()
 finExp (TyApp e tys) = liftM2 TyApp (finExp e) (finTypes tys)
 finExp (Lam mb_loc pats rhs)

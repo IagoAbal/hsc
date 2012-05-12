@@ -162,11 +162,7 @@ kcTypeDecl (TypeDecl loc ty_name ty_params ty_rhs)
       (sig,_) <- kcType $ mkForallTy ty_params ty_rhs
       let (tvs,ty_rhs') = splitSigma sig
           ty_var = mkTyVar ty_name tc_kind
-          tycon = SynTyCon {
-                    tyConName = UserTyCon ty_var
-                  , tyConParams = tvs
-                  , synTyConRhs = ty_rhs'
-                  }
+      tycon <- mkSynTyCon ty_var tvs ty_rhs'
       return (TypeDecl loc ty_var tvs ty_rhs',[(UserTyCon ty_name,tycon)])
   where tc_kind = mkFunKi (replicate (length ty_params) typeKi) typeKi
 kcTypeDecl _other = bug "kcTypeDecl: not a type declaration"
@@ -196,7 +192,7 @@ kcDataDecl (DataDecl loc ty_name typarams constrs)
           let (con_tvs,con_tau) = splitSigma con_ty
               con = mkVarId con_name con_ty
           con_tau' <- substTypeTc [] (zip con_tvs (map VarTy ty_tvs)) con_tau
-          let (doms',_) = splitFunTy con_tau
+          let (doms',_) = unFunTy con_tau
           return (ConDecl loc con doms',(UserCon con_name,UserCon con))
 kcDataDecl _other = bug "kcDataDecl: not a data declaration"
 

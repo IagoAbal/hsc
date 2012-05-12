@@ -31,7 +31,7 @@ import H.Syntax.AST
 import H.Syntax.Expr ( mkVarId )
 import H.Syntax.FV
 import H.Syntax.IsTc
-import H.Syntax.Type ( tau2type, cloneTyVar )
+import {-# SOURCE #-} H.Syntax.Type ( tau2type, cloneTyVar )
 
 import Util.Monad ( mapAccumM )
 

@@ -92,8 +92,7 @@ dsgBind :: Bind Ti -> DsgM [Core.Bind]
 dsgBind (FunBind rec fun _sig tvs matches) = do
   fun_C <- dsgVar fun
   fun_tau <- instSigmaType fun_ty (map VarTy tvs)
-  -- splitFunTy* must to take care of type synonyms... so I need to use expandSyn
-  let (doms,_) = splitFunTyN arity fun_tau
+  let (doms,_) = splitFunTy arity fun_tau
   qs <- matches2eqs matches
   (xs,bind_rhs) <- matchEq doms qs
   let tvs_C = dsgTyVars tvs
@@ -358,7 +357,7 @@ dsgBuiltinTyCon ListTyCon = Core.ListTyCon
 
 dsgTyCon :: TyCon Ti -> DsgM Core.TyCon
 dsgTyCon (AlgTyCon tyname _) = return $ Core.AlgTyCon $ dsgTyName tyname
-dsgTyCon (SynTyCon tynm typs tyrhs)
+dsgTyCon (SynTyCon tynm typs tyrhs _)
   = Core.SynTyCon (dsgTyName tynm) (dsgTyVars typs) <$> dsgType tyrhs
 
 dsgTypes :: [Type c Ti] -> DsgM [Core.Type c]
