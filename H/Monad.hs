@@ -79,6 +79,13 @@ instance Monoid log => MonadUnique (H env log st) where
                    let (uniq,us') = next us
                    liftIO $ writeIORef us_ref us'
                    return uniq
+  forkSupply = H $ do
+    us_ref <- asks henv_us
+    us <- liftIO $ readIORef us_ref
+    let (us1,us2) = split us
+    liftIO $ writeIORef us_ref us1
+    return us2
+    
 
 instance Monoid log => MonadContext (H env log st) where
   getContext = H $ asks mkSrcContext

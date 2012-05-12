@@ -62,13 +62,15 @@ split (UniqSupply i x) = (UniqSupply (2*i) x, UniqSupply (2*i) (x+1))
 
 class Monad m => MonadUnique m where
   getUniq :: m Uniq
+  forkSupply :: m UniqSupply
 
 instance MonadUnique m => MonadUnique (ReaderT r m) where
   getUniq = lift getUniq
+  forkSupply =  lift forkSupply
   
 instance MonadUnique m => MonadUnique (MaybeT m) where
   getUniq = lift getUniq
-
+  forkSupply =  lift forkSupply
 
 -- * UniqueT monad transformer
 
@@ -83,10 +85,15 @@ runUniqueT = runStateT . unUniqueT
 
 
 instance Monad m => MonadUnique (UniqueT m) where
-    getUniq = UniqueT $ do (uniq,us') <- gets next
-                           put us'
-                           return uniq
-
+    getUniq = UniqueT $ do
+      (uniq,us') <- gets next
+      put us'
+      return uniq
+    forkSupply = UniqueT $ do
+      us <- get
+      let (us1,us2) = split us
+      put us1
+      return us2
 
 -- * Unique monad
 
