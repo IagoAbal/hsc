@@ -4,8 +4,6 @@
 
 module H.Desugar where
 
-#include "bug.h"
-
 import Name
 import Sorted
 
@@ -30,6 +28,8 @@ import qualified Data.Traversable as T
 
 import Pretty
 
+#include "bug.h"
+
 
 type DsgM = H () () ()
 
@@ -37,8 +37,8 @@ type DsgM = H () () ()
 dsgModule :: Module Ti -> ModTCCs -> DsgM Core.Module
 dsgModule (Module _ modname decls) tccs
   = Core.Module (dsgModuleName modname) <$> dsgDecls decls <*> dsg_tccs tccs
-  where dsg_tccs tccs = IMap.fromList <$>
-                          (mapM (\(i,tcc') -> do tcc <- dsgTCC tcc'; return (i,tcc) ) $ IMap.toList tccs)
+  where dsg_tccs tccs1 = IMap.fromList <$>
+                          (mapM (\(i,tcc') -> do tcc <- dsgTCC tcc'; return (i,tcc) ) $ IMap.toList tccs1)
 
 dsgModuleName :: ModuleName -> Core.ModuleName
 dsgModuleName (ModName n) = Core.ModName n
@@ -91,7 +91,6 @@ dsgIsRec NonRec = Core.NonRec
 dsgBind :: Bind Ti -> DsgM [Core.Bind]
 dsgBind (FunBind rec fun _sig tvs matches) = do
   fun_C <- dsgVar fun
-  traceDoc (text "dsgBind fun=" <> pretty fun) $ do
   fun_tau <- instSigmaType fun_ty (map VarTy tvs)
   -- splitFunTy* must to take care of type synonyms... so I need to use expandSyn
   let (doms,_) = splitFunTyN arity fun_tau
@@ -115,7 +114,6 @@ dsgPatBind pat rhs = do
       pat_xs = Set.elems $ bsPat pat
   xs_binds <- forM pat_xs
                 (\x -> Core.mkSimpleBind <$> dsgVar x <*> (dsgRhs $ pb_case x))
-                   
   return $ aux_bind:xs_binds
   where ty = tau2sigma $ tcRhsType rhs
 
@@ -180,17 +178,12 @@ dsgExp (Ite ty g e t)
 dsgExp (If ty grhss)
   = Core.If <$> dsgType ty <*> dsgGuardedRhss grhss
 dsgExp (Case _ty scrut alts) = do
-  scrut_ty <- tcExprType scrut
   qs <- mapM alt2eq alts
-  ([aux],Core.Rhs _ body) <- matchEq [type2dom scrut_ty] qs
-  scrut_C <- dsgExp scrut
-  let scrut_rhs = Core.Rhs (Core.varTau aux) scrut_C
-  return $ Core.mkLet [Core.mkSimpleBind aux scrut_rhs] body 
+  matchCase scrut qs
 dsgExp (Tuple ty es) = Core.Tuple <$> dsgType ty <*> dsgExps es
 dsgExp (List ty es) = Core.List <$> dsgType ty <*> dsgExps es
 dsgExp (Paren e) = Core.Paren <$> dsgExp e
 dsgExp (LeftSection e1 opE) = do
-  traceDoc (text "dsgExp LeftSection e1=" <> pretty e1 <+> text "opE=" <> pretty opE) $ do
   e1_C <- dsgExp e1
   opE_C <- dsgOpExp opE
   app_ty <- tcExprType $ App opE e1
@@ -409,7 +402,7 @@ dsgDom (Dom (Just pat') ty' mb_prop'') = do
   mb_prop' <- subst_mbExp pat_s [] mb_prop''
   mb_prop <- T.mapM dsgExp mb_prop'
   return (Core.Dom (Just pat) ty mb_prop,pat_s)
-dsgDom _other = undefined -- impossible
+dsgDom _other = impossible
 
 dsgKind :: Kind -> Core.Kind
 dsgKind TypeKi = Core.TypeKi
@@ -435,6 +428,7 @@ dsgTCC (CompletenessTCC srcCtxt propCtxt prop)
       <$> dsgTccPropCtxt propCtxt
       <*> dsgExp prop
 
+
 -- * Equations
 
 data Equation
@@ -445,7 +439,7 @@ data Equation
 
 eqsType :: [Equation] -> Core.Tau
 eqsType (E _ (Core.Rhs ty _):_) = ty
-eqsType _other             = undefined
+eqsType _other             = impossible
 
 mkEq :: [Pat Ti] -> Rhs Ti -> DsgM Equation
 mkEq pats rhs'' = do
@@ -473,7 +467,7 @@ isLit _other             = False
 
 getLit :: Equation -> Lit
 getLit (E (LitPat lit:_) _) = lit
-getLit _other               = undefined -- bug
+getLit _other               = bug "getLit: not a lit-pattern"
 
 isTuple :: Equation -> Bool
 isTuple (E (TuplePat _ _:_) _) = True
@@ -485,16 +479,22 @@ isCon _other                 = False
 
 getCon :: Equation -> TcCon Ti
 getCon (E (ConPat _ con _:_) _) = con
-getCon _other                   = undefined -- bug
+getCon _other                   = bug "getCon: not a con-pattern"
 
 getEqPat :: Int -> Equation -> SimplePat Ti
 getEqPat n (E pats _) = pats !! n
+
+matchCase :: Exp Ti -> [Equation] -> DsgM Core.Exp
+matchCase scrut qs = do
+  scrut_C <- dsgExp scrut
+  Core.Rhs _ e <- match_eq [scrut_C] qs
+  return e
 
 matchEq :: [Dom Ti] -> [Equation] -> DsgM ([Core.Var],Core.Rhs)
 matchEq ds qs = do
   xs' <- pick_variables
   xs <- dsgVars xs'
-  rhs <- match_eq xs qs
+  rhs <- match_eq (map Core.Var xs) qs
   return (xs,rhs)
   where pick_variables = go 0 [] ds
           where go _i vs_rev []     = return $ reverse vs_rev
@@ -506,27 +506,26 @@ matchEq ds qs = do
                   ds' <- instDoms (Var v) d ds
                   go (i+1) (v:vs_rev) ds'
 
-match_eq :: [Core.Var] -> [Equation] -> DsgM Core.Rhs
+match_eq :: [Core.Exp] -> [Equation] -> DsgM Core.Rhs
 match_eq [] []         = error "match_eq implicit default 1" 
 match_eq [] [E [] rhs] = return rhs
-match_eq [] (_:_)      = undefined -- bug, it should be detected during typechecking
-match_eq _xs []         = error "match_eq implicit default 2"
+match_eq [] (_:_)      = bug "this case should be caught during typechecking"
+match_eq _xs []        = error "match_eq implicit default 2"
 match_eq (x:xs) qs
   | all isVar   qs = matchVar x xs qs
   | all isLit   qs = matchLit x xs qs
   | all isTuple qs = matchTuple x xs qs
   | all isCon   qs = matchCon x xs qs
-  | otherwise = undefined -- bug, it should be detected during typechecking
+  | otherwise = bug "this case should be caught during typechecking"
 
 
 -- I don't have to apply the substitution inside 'pats' because
 -- all those variables will be replaced by fresh ones that have the
 -- right types.
-subst_eq :: Var Ti -> Core.Var -> Equation -> DsgM Equation
+subst_eq :: Var Ti -> Core.Exp -> Equation -> DsgM Equation
 subst_eq y' x (E pats rhs) = do
---   (pats',s') <- substPats s pats
   y <- dsgVar y'
-  rhs' <- Core.subst_rhs [(y,Core.Var x)] [] rhs
+  rhs' <- Core.subst_rhs [(y,x)] [] rhs
   return (E pats rhs')
 
 getNameForPats :: [Pat Ti] -> Maybe String
@@ -538,7 +537,7 @@ getNameForPats pats = do
         is_ok_varpat _other     = False
 
 
-matchVar :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
+matchVar :: Core.Exp -> [Core.Exp] -> [Equation] -> DsgM Core.Rhs
 matchVar x xs qs = do
   qs' <- sequence [ subst_eq y x q'
                   | E (VarPat y:ps) rhs <- qs
@@ -546,11 +545,11 @@ matchVar x xs qs = do
                   ]
   match_eq xs qs'
 
-matchLit :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
+matchLit :: Core.Exp -> [Core.Exp] -> [Equation] -> DsgM Core.Rhs
 matchLit x xs qs = do
   alts <- sequence [ matchLitClause lit xs (chooseLit lit qs) | lit <- lits ]
   let rhs_ty = eqsType qs
-      rhs_exp = Core.Case rhs_ty (Core.Var x) alts
+      rhs_exp = Core.Case rhs_ty x alts
       rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
   where lits = nub $ map getLit qs
@@ -558,43 +557,45 @@ matchLit x xs qs = do
 chooseLit :: Lit -> [Equation] -> [Equation]
 chooseLit lit qs = [q | q <- qs, getLit q == lit]
 
-matchLitClause :: Lit -> [Core.Var] -> [Equation] -> DsgM Core.Alt
+matchLitClause :: Lit -> [Core.Exp] -> [Equation] -> DsgM Core.Alt
 matchLitClause lit' xs qs = do
   let lit = dsgLit lit'
   alt_rhs <- match_eq xs [ E ps rhs | E (LitPat _:ps) rhs <- qs]
   return $ Core.Alt (Core.LitPat lit) alt_rhs
 
-matchTuple :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
+matchTuple :: Core.Exp -> [Core.Exp] -> [Equation] -> DsgM Core.Rhs
 matchTuple x xs qs = do
   let E (TuplePat tup_ty' _:_) _ = head qs
       TupleTy ds = mu_0 tup_ty'
   tup_ty <- dsgType tup_ty'
   (_,ys') <- instTupleWithVars ds
   ys <- dsgVars ys'
-  alt_rhs <- match_eq (ys++xs) [E (ps1++ps) rhs | E (TuplePat _ ps1:ps) rhs <- qs]
+  let vs = map Core.Var ys
+  alt_rhs <- match_eq (vs++xs) [E (ps1++ps) rhs | E (TuplePat _ ps1:ps) rhs <- qs]
   let alts = [Core.Alt (Core.TuplePat tup_ty (map Core.VarPat ys)) alt_rhs]
       rhs_ty = eqsType qs
-      rhs_exp = Core.Case rhs_ty (Core.Var x) alts
+      rhs_exp = Core.Case rhs_ty x alts
       rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
 
-matchCon :: Core.Var -> [Core.Var] -> [Equation] -> DsgM Core.Rhs
+matchCon :: Core.Exp -> [Core.Exp] -> [Equation] -> DsgM Core.Rhs
 matchCon x xs qs = do
   alts <- sequence [ matchClause c xs (choose c qs) | c <- cs ]
   let rhs_ty = eqsType qs
-      rhs_exp = Core.Case rhs_ty (Core.Var x) alts
+      rhs_exp = Core.Case rhs_ty x alts
       rhs = Core.mkExpRhs rhs_ty rhs_exp
   return rhs
   where cs = nub $ map getCon qs
 
-matchClause :: TcCon Ti -> [Core.Var] -> [Equation] -> DsgM Core.Alt
+matchClause :: TcCon Ti -> [Core.Exp] -> [Equation] -> DsgM Core.Alt
 matchClause con' xs qs = do
   let E (ConPat typs' _ _:_) _ = head qs
   (_,ys') <- instWithVars (sortOf con') typs' (Con con')
   con <- dsgTcCon con'
   typs <- dsgTypes typs'
   ys <- dsgVars ys'
-  alt_rhs <- match_eq (ys++xs) [E (ps1++ps) rhs | E (ConPat _ _ ps1:ps) rhs <- qs]
+  let vs = map Core.Var ys
+  alt_rhs <- match_eq (vs++xs) [E (ps1++ps) rhs | E (ConPat _ _ ps1:ps) rhs <- qs]
   return $ Core.Alt (Core.ConPat typs con (map Core.VarPat ys)) alt_rhs
 
 choose :: TcCon Ti -> [Equation] -> [Equation]
