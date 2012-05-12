@@ -51,16 +51,16 @@ hc_ = modes [typecheck_ &= auto, list_, check_]
 executeCommand :: HC -> IO ()
 executeCommand Typecheck{srcFile} = do
   f <- readFile srcFile
-  let tc = bindH_ (parseH $ parseModuleWithMode (ParseMode "foo.h") f) () () $ \mod_pr ->
+  let tc = bindH_ (parseH $ parseModuleWithMode (ParseMode srcFile) f) () () $ \mod_pr ->
             bindH_ (rnModule mod_pr) emptyRnEnv () $ \mod_rn ->
             bindH_ (tcModule mod_rn) emptyTcEnv () $ \mod_tc ->
             bindH_ (finModule mod_tc) emptyTiEnv () $ \mod_ti ->
             bindH_ (coModule mod_ti) emptyCoEnv emptyCoST $ \modTCCs ->
             dsgModule mod_ti modTCCs
-  (res,_) <- runH tc (SrcContext (SrcLoc "foo.h" 0 0) Pretty.empty False) newSupply () ()
+  (res,_) <- runH tc (SrcContext (SrcLoc srcFile 0 0) Pretty.empty False) newSupply () ()
   case res of
       Left err      -> putStrLn $ render err
-      Right (m,_,_) -> Binary.encodeFile (srcFile ++ "c") m
+      Right (m,_,_) -> Binary.encodeFile (srcFile ++ "-core") m
 executeCommand List{coreFile} = do
   m <- Binary.decodeFile coreFile
   putStrLn $ render $ pretty $ Core.modTCCs m

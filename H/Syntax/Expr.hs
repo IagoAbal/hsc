@@ -125,6 +125,14 @@ mkForall xs prop = QP ForallQ (map toQVar xs) prop
 
 -- ** Right hand side
 
+-- isVar :: Exp p -> Maybe (VAR p)
+-- isVar (Var x) = Just x
+-- isVar _other  = Nothing
+
+isVarRhs :: Rhs p -> Maybe (VAR p)
+isVarRhs (Rhs _ty (UnGuarded (Var x)) []) = Just x
+isVarRhs _other                           = Nothing
+
 lamRhs :: Rhs p -> Exp p
 lamRhs (Rhs _ty (UnGuarded e) []) = e
 lamRhs _other                     = bug "lamRhs: not a lambda-RHS"
