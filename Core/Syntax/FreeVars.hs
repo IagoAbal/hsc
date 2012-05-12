@@ -23,10 +23,10 @@ fvBind (FunBind _rec fun _typs args rhs)
 -- fvBind (PatBind pat rhs) = fvPat pat `Set.union` (fvRhs rhs Set.\\ bsPat pat)
 
 bsBinds :: [Bind] -> Set Var
-bsBinds = Set.unions . map bsBind
+bsBinds = Set.fromList . map bsBind
 
-bsBind :: Bind -> Set Var
-bsBind (FunBind _rec fun _typs _args _rhs) = Set.singleton fun
+bsBind :: Bind -> Var
+bsBind (FunBind _rec fun _typs _args _rhs) = fun
 -- bsBind (PatBind pat _rhs)                  = bsPat pat
 
 fvExps :: [Exp] -> Set Var

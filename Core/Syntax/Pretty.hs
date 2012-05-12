@@ -135,7 +135,6 @@ ppInfixApp op a b
 
 instance Pretty Exp where
   pretty (Lit lit) = pretty lit
---   pretty Undefined = text "_|_"
     -- no other possibility for prefix ops
   pretty (PrefixApp op a) = myFsep [ppOpExp op, pretty a]
   pretty (InfixApp a op b) = ppInfixApp op a b
@@ -220,7 +219,7 @@ ppElse Nothing = empty
 -- ** Patterns
 
 instance Pretty Pat where
-  prettyPrec _ (VarPat var) = parens $ prettyBndr var
+  prettyPrec _ (VarPat var) = pretty var -- parens $ prettyBndr var
   prettyPrec _ (LitPat lit) = pretty lit
 --   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
 --     myFsep [pretty a, text "::", pretty b]

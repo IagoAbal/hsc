@@ -43,12 +43,20 @@ bool2exp :: Bool -> Exp
 bool2exp True = mkTrue
 bool2exp False = mkFalse
 
+filterVars :: Exp -> [Var] -> [Var]
+filterVars e xs = go [] (reverse xs) e_fv
+  where e_fv = fvExp e
+        go acc []     _fvs = acc
+        go acc (y:ys)  fvs
+          | y `Set.member` fvs = go (y:acc) ys (y_fv `Set.union` fvs)
+          | otherwise          = go acc ys fvs
+          where y_fv = fvBndr y
+
 cleanup :: Exp -> Exp
 cleanup = G.transform f
-  where f (QP _qt xs p)
-          | Set.fromList xs `Set.disjointWith` fvExp p = p
-        f (QP qt xs (QP qt1 ys p))
+  where f (QP qt xs (QP qt1 ys p))
           | qt == qt1 = QP qt (xs ++ ys) p
+        f (QP qt xs p) = mkQP qt (filterVars p xs) p
         f (InfixApp e1 (OpExp [] (BoolOp OrB)) e2)
           | e1 == e2      = e1
           | e1 == mkTrue  = mkTrue
@@ -70,6 +78,22 @@ cleanup = G.transform f
         f (InfixApp e1 (OpExp [_] (BoolOp EqB)) e2)
           | e1 == e2 = mkTrue
         f t = t
+
+mkQP :: Quantifier -> [Var] -> Prop -> Prop
+mkQP _qt [] prop = prop
+mkQP  qt xs prop = QP qt xs prop
+
+mkLet :: [Bind] -> Exp -> Exp
+mkLet []    e = e
+mkLet binds e = Let binds' e
+  where e_fv = fvExp e
+        binds' = filter_bs [] (reverse binds) e_fv
+        filter_bs acc [] _fvs = acc
+        filter_bs acc (b:bs) fvs
+          | b_x `Set.member` fvs = filter_bs (b:acc) bs (b_fv `Set.union` fvs)
+          | otherwise            = filter_bs acc bs fvs
+          where b_x = bsBind b
+                b_fv = fvBind b
 
 -- ** Prop
 

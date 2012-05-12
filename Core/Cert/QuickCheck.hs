@@ -1,15 +1,20 @@
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
 
-module Core.Cert.QuickCheck where
+module Core.Cert.QuickCheck
+  ( checkProp )
+  where
 
 import Core.Syntax
-import Core.Syntax.Built
 import Core.Eval
 import Core.Cert.Supported
 
 import Control.Applicative ( (<$>) )
 import qualified Data.Map as Map
 import qualified Test.QuickCheck as QC
+
+#include "bug.h"
 
 
 aBool :: QC.Gen Exp
@@ -19,13 +24,14 @@ anInt :: QC.Gen Exp
 anInt = mkInt <$> QC.arbitrary
 
 aNat :: QC.Gen Exp
-aNat = QC.sized $ \n -> mkInt . abs <$> QC.arbitrary
+aNat = mkInt . abs <$> QC.arbitrary
 
 
 typeGen :: Type c -> QC.Gen Exp
 typeGen ty | ty == boolTy = aBool
            | ty == intTy  = anInt
            | ty == natTy  = aNat
+typeGen _ty = bug "unsupported type"
 
 param_ :: Var -> QC.Gen (Var,Exp)
 param_ x = do
@@ -41,6 +47,7 @@ mkProperty (QP ForallQ xs p)
       let ?env = Map.fromList env
         in val2bool $ eval p
   where anEnv = params_ xs
+mkProperty _other = bug "mkProperty: unsupported property"
 
 checkProp :: Prop -> IO ()
 checkProp p
