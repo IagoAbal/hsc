@@ -1,9 +1,13 @@
-{-# LANGUAGE PatternGuards  #-}
+
+{-# LANGUAGE CPP  #-}
+
 module H.Prop where
 
 import H.Syntax
 
 import Data.List  ( sort )
+
+#include "bug.h"
 
 
 _True_ :: IsTc p => Prop p
@@ -11,6 +15,12 @@ _True_ = Con tcTrueCon
 
 _False_ :: IsTc p => Prop p
 _False_ = Con tcFalseCon
+
+bool :: IsTc p => Prop p -> Maybe Bool
+bool (Con con)
+  | con == tcTrueCon  = Just True
+  | con == tcFalseCon = Just False
+bool _other           = Nothing
 
 infixr .==>.
 
@@ -70,4 +80,4 @@ oneOfInts  t ns1 = disj $ build_prop $ sort ns1
       | ns == [a..b] = [mkInt a .<=. t .&&. t .<=. mkInt b]
       | otherwise    = [t ==* mkInt n | n <- ns]
       where b = last rest
-
+    build_prop _other = impossible
