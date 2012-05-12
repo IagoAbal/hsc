@@ -170,8 +170,11 @@ instance Pretty Exp where
            text "..", pretty to]
   pretty (Coerc e ty) =
     myFsep [pretty e, text ":", pretty ty]
-  pretty (QP quant patList body)
-    = myFsep $ pretty quant : map pretty patList ++ [text ",", pretty body]
+  pretty (LetP e pat prop)
+    = myFsep [text "letP", pretty pat, char '=', pretty e, text "in", pretty prop]
+  pretty (QP quant xs body)
+    = myFsep $ pretty quant : map ppr_qvar xs ++ [text ",", pretty body]
+    where ppr_qvar x = parens $ prettyBndr x
 
 instance Show Exp where
   show = render . pretty

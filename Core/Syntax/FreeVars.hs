@@ -58,6 +58,7 @@ fvExp (Paren e) = fvExp e
 fvExp (EnumFromTo e1 e2) = fvExps [e1,e2]
 fvExp (EnumFromThenTo e1 e2 e3) = fvExps [e1,e2,e3]
 fvExp (Coerc e ty) = fvExp e `Set.union` fvType ty
+fvExp (LetP pat e prop) = fvExp e `Set.union` (fvExp prop Set.\\ bsPat pat)
 fvExp (QP _qt vars body) = fvBndrs vars `Set.union` (fvExp body Set.\\ Set.fromList vars)
 
 

@@ -274,6 +274,10 @@ data Exp p where
   EnumFromThenTo :: Exp p -> Exp p -> Exp p -> Exp p
   -- | explicit type coercion
   Coerc :: !SrcLoc -> Exp p -> Sigma p -> Exp p
+  -- | logical let
+  -- If the expression does not match the pattern then it is evaluated
+  -- to /false/.
+  LetP :: Ge p Tc => Pat p -> Exp p -> Prop p -> Prop p
   -- | logic quantifier
   QP :: !Quantifier -> [QVar p] -> Prop p -> Prop p
 

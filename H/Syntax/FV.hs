@@ -88,6 +88,8 @@ fvExp (RightSection _op e) = fvExp e
 fvExp (EnumFromTo e1 e2)   = fvExps [e1,e2]
 fvExp (EnumFromThenTo e1 e2 e3) = fvExps [e1,e2,e3]
 fvExp (Coerc _loc e ty)    = fvExp e `Set.union` fvType ty
+fvExp (LetP pat e prop)
+  = fvExp e `Set.union` (fvExp prop Set.\\ bsPat pat)
 fvExp (QP _qt xs p)
   = fvQVars xs `Set.union` (fvExp p Set.\\ bsQVars xs)
 

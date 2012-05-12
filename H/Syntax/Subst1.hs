@@ -235,6 +235,11 @@ substExp s (EnumFromTo e1 en) = liftM2 EnumFromTo (substExp s e1) (substExp s en
 substExp s (EnumFromThenTo e1 e2 en)
   = liftM3 EnumFromThenTo (substExp s e1) (substExp s e2) (substExp s en)
 substExp s (Coerc loc e polyty) = liftM2 (Coerc loc) (substExp s e) (substType s polyty)
+substExp s (LetP pat e prop) = do
+  e' <- substExp s e
+  (pat',s') <- substPat s pat
+  prop' <- substExp s' prop
+  return $ LetP pat' e' prop'
 substExp s (QP q qvars body) = do (qvars',s') <- substQVars s qvars
                                   liftM (QP q qvars') $ substExp s' body
 substExp _s _other = impossible

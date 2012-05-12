@@ -104,4 +104,6 @@ instance GMTV (Exp Tc) where
   gmtvOf (EnumFromTo e1 e2) = gmtvOf [e1,e2]
   gmtvOf (EnumFromThenTo e1 e2 e3) = gmtvOf [e1,e2,e3]
   gmtvOf (Coerc _loc e _ty) = gmtvOf e
+  gmtvOf (LetP pat e prop)
+    = gmtvOf pat `union` gmtvOf e `union` gmtvOf prop
   gmtvOf (QP _qt xs prop) = gmtvOf xs `union` gmtvOf prop

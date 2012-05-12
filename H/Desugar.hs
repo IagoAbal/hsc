@@ -209,6 +209,12 @@ dsgExp (EnumFromTo e1 e2) = Core.EnumFromTo <$> dsgExp e1 <*> dsgExp e2
 dsgExp (EnumFromThenTo e1 e2 e3)
   = Core.EnumFromThenTo <$> dsgExp e1 <*> dsgExp e2 <*> dsgExp e3
 dsgExp (Coerc _ e ty) = Core.Coerc <$> dsgExp e <*> dsgType ty
+dsgExp (LetP pat e prop) = do
+  e' <- dsgExp e
+  (pat',pat_s) <- dsgPat pat
+  prop_p <- subst_exp pat_s [] prop
+  prop' <- dsgExp prop_p
+  return $ Core.LetP pat' e' prop' 
 dsgExp (QP qt qvars prop)
   = Core.QP (dsgQuantifier qt) <$> dsgQVars qvars <*> dsgExp prop
 dsgExp _other = impossible

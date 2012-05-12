@@ -72,6 +72,7 @@ instance MTV (Exp Tc) where
   mtvOf (EnumFromTo e1 e2) = mtvOf [e1,e2]
   mtvOf (EnumFromThenTo e1 e2 e3) = mtvOf [e1,e2,e3]
   mtvOf (Coerc _loc e polyty) = mtvOf e `Set.union` mtvOf polyty
+  mtvOf (LetP pat e prop) = mtvOf pat `Set.union` mtvOf [e,prop]
   mtvOf (QP _qt xs prop) = mtvOf xs `Set.union` mtvOf prop
 
 instance MTV (Pat Tc) where

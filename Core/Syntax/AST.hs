@@ -195,6 +195,7 @@ data Exp = Var Var -- ^ variable
          | EnumFromTo Exp Exp -- ^ bounded arithmetic sequence, incrementing by 1
          | EnumFromThenTo Exp Exp Exp -- ^ bounded arithmetic sequence, with first two elements given
          | Coerc Exp Sigma -- ^ explicit type coercion
+         | LetP Pat Exp Prop  -- ^ logical let
          | QP Quantifier [Var] Prop -- ^ logic quantifier
     deriving(Eq,Typeable,Data)
 

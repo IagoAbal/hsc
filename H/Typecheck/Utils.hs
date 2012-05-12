@@ -293,12 +293,7 @@ instPredTyProp :: MonadUnique m =>
 instPredTyProp _e pat _ty mb_prop | Set.null (bsPat pat) = return mb_prop
 instPredTyProp  e pat  ty mb_prop
  | Just s <- patExpSubst e pat (fvMaybeExp mb_prop) = subst_mbExp s [] mb_prop
- | otherwise = do
-    other <- newVarId "other" (tau2sigma ty)
-    return $ Just $ Case boolTy e
-                      [Alt Nothing pat (mkExpRhs boolTy prop)
-                      ,Alt Nothing (VarPat other) (mkExpRhs boolTy P._False_)
-                      ]
+ | otherwise = return $ Just $ LetP pat e prop
  where prop = maybe P._True_ id mb_prop
 
 -- Get expressions type
