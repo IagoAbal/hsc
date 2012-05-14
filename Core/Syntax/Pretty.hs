@@ -169,7 +169,7 @@ instance Pretty Exp where
            text "..", pretty to]
   pretty (Coerc e ty) =
     myFsep [pretty e, text ":", pretty ty]
-  pretty (LetP e pat prop)
+  pretty (LetP pat e prop)
     = myFsep [text "letP", pretty pat, char '=', pretty e, text "in", pretty prop]
   pretty (QP quant xs body)
     = myFsep $ pretty quant : map ppr_qvar xs ++ [text ",", pretty body]
@@ -402,12 +402,12 @@ instance Pretty TCC where
     $$ char '>' <+> text "required type:" <+> pretty exp_ty
     $$ text "|------------------------------------------------------"
     $$ pretty (tcc2prop tcc)
-  pretty (CompletenessTCC srcCtxt propCtxt prop)
+  pretty tcc@(CompletenessTCC srcCtxt propCtxt prop)
     = text "COMPLETENESS TCC"
     $$ brackets (text srcCtxt)
-    $$ (vcat $ map pretty $ toList propCtxt)
+--     $$ (vcat $ map pretty $ toList propCtxt)
     $$ text "|------------------------------------------------------"
-    $$ pretty prop
+    $$ pretty (tcc2prop tcc)
 
 instance Pretty (IntMap TCC) where
   pretty tccMap = vcat $ map (blankline . pp_tcc) $ IMap.toList tccMap
