@@ -18,8 +18,11 @@ import H.Desugar
 import H.Monad ( runH, bindH_ )
 import H.SrcContext
 import H.SrcLoc
+
 import Pretty
 import Unique
+
+import Util.Less ( less )
 
 import qualified Data.Binary as Binary
 import qualified Data.IntMap as IMap
@@ -63,7 +66,7 @@ executeCommand Typecheck{srcFile} = do
       Right (m,_,_) -> Binary.encodeFile (srcFile ++ "-core") m
 executeCommand List{coreFile} = do
   m <- Binary.decodeFile coreFile
-  putStrLn $ render $ pretty $ Core.modTCCs m
+  less $ render $ pretty $ Core.modTCCs m
 executeCommand Check{coreFile,tccNum} = do
   m <- Binary.decodeFile coreFile
   case IMap.lookup tccNum $ Core.modTCCs m of
