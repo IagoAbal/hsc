@@ -212,7 +212,8 @@ coBinds :: [Bind Ti] -> CoM ()
 coBinds = mapM_ coBind
 
 coBind :: Bind Ti -> CoM ()
-coBind (PatBind (Just loc) pat rhs@(Rhs rhs_ty _ _)) = do
+coBind (PatBind (Just loc) pat rhs@(Rhs rhs_ty _ _))
+  = inPatBindCtxt loc (ppQuot pat) $ do
   coRhs rhs
   (x,rhs_ctxt) <- getCaseLikeCtxt (rhs2exp rhs) (tau2sigma rhs_ty) [pat]
   rhs_ctxt $
@@ -236,6 +237,10 @@ coTypeSig NoTypeSig = return ()
 coTypeSig (TypeSig loc sig)
   = inContextAt loc (text "In type signature") $ coType sig
 
+-- TODO: Should I eta-expand matches in order to introduce all variables
+-- into scope? Some of these variables may have subset types concerning
+-- previous ones... otherwise the property which is generated may not be
+-- valid.
 coMatches :: [Match Ti] -> Tau Ti -> CoM ()
 coMatches matches@(m:_) exp_ty = do
   qs <- matches2eqs matches
@@ -286,13 +291,15 @@ coExp tyapp@(TyApp e typs) exp_ty = do
   e_ty <- coExp e Infer
   e_tau <- instSigmaType e_ty typs
   (tau2sigma e_tau ~>? exp_ty) tyapp
-coExp (Lam (Just loc) pats rhs) (Check exp_ty) = do
+coExp (Lam (Just loc) pats rhs) (Check exp_ty)
+  = inLambdaAbsCtxt loc pats $ do
   q <- mkEq loc pats rhs
   coEquations doms [q]
   return exp_ty
   where arity = length pats
         (doms,_) = splitFunTy arity (type2tau exp_ty)
-coExp (Lam (Just loc) pats rhs) Infer = do
+coExp (Lam (Just loc) pats rhs) Infer
+  = inLambdaAbsCtxt loc pats $ do
   pats_tys <- tcPatsTypes pats
   let doms = zipWith mkPatDom pats pats_tys
       lam_ty = funTy doms rhs_ty
@@ -318,19 +325,22 @@ coExp (TyLam tvs e) Infer = do
   sko_e_ty <- coExp e' Infer
   e_ty <- subst_type [] (zip sko_tvs $ map VarTy tvs) sko_e_ty
   return (ForallTy tvs $ type2tau e_ty)
-coExp e@(Ite ite_ty g e1 e2) exp_ty = do
+coExp e@(Ite ite_ty g e1 e2) exp_ty
+  = inIteExprCtxt g $ do
   void $ coExp g (Check boolTy)
   withFacts [g] $
     void $ coExp e1 (Check $ tau2sigma ite_ty)
   withFacts [P.notP g] $
     void $ coExp e2 (Check $ tau2sigma ite_ty)
   (tau2sigma ite_ty ~>? exp_ty) e
-coExp e@(If if_ty grhss) exp_ty = do
+coExp e@(If if_ty grhss) exp_ty
+  = inIfExprCtxt $ do
   coGuardedRhss grhss if_ty
   (tau2sigma if_ty ~>? exp_ty) e
   -- Remember that case_ty is only a 'cached' value
   -- and it matches with the rhs_ty of all alternatives
-coExp (Case case_ty scrut alts) _exp_ty = do
+coExp (Case case_ty scrut alts) _exp_ty
+  = inCaseExprCtxt scrut $ do
   scrut_ty <- coExp scrut Infer
   (x,scrut_ctxt) <- getCaseLikeCtxt scrut scrut_ty [ pat | Alt _ pat _ <- alts ]
   scrut_ctxt $
@@ -371,7 +381,7 @@ coExp e@(QP qt xs prop) exp_ty
     withForall xs $
       void $ coExp prop (Check boolTy)
     (boolTy ~>? exp_ty) e
-coExp e _exp_ty = traceDoc (text "coExp-impossible?" <+> pretty e) $ undefined
+coExp e _exp_ty = bugDoc (text "coExp: expression not supported:" <+> pretty e)
 
 coApp :: Exp Ti -> Exp Ti -> [Exp Ti] -> Expected (Sigma Ti) -> CoM (Sigma Ti)
 coApp expr fun args exp_res_ty = do

@@ -1,3 +1,5 @@
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ImplicitParams #-}
 
 module Core.Eval where
@@ -6,7 +8,11 @@ import Core.Syntax
 
 import Data.Map ( Map )
 import qualified Data.Map as Map
+import Data.Maybe ( isNothing )
 
+#include "bug.h"
+
+#define not_supported (bug "not supported")
 
 type Value = Exp
 
@@ -67,22 +73,22 @@ eval (InfixApp e1 (OpExp [] (IntOp iop)) e2) = arith_ iop (eval e1) (eval e2)
         arith_ ModI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n `mod` m
         arith_ ExpI (Lit (IntLit n)) (Lit (IntLit m)) = mkInt $ n^m
         arith_ _ t1 t2 = mkMonoInfixApp (IntOp iop) t1 t2
-eval (App _ _) = undefined
-eval (TyApp _ _) = undefined
-eval (Lam _ _) = undefined
-eval (Let _ _) = undefined
-eval (TyLam _ _) = undefined
+eval (App _ _) = not_supported
+eval (TyApp _ _) = not_supported
+eval (Lam _ _) = not_supported
+eval (Let _ _) = not_supported
+eval (TyLam _ _) = not_supported
 eval (Ite ty guard e1 e2) = ite_ (eval guard)
   where ite_ g | g == mkTrue  = eval e1
                | g == mkFalse = eval e2
                | otherwise    = Ite ty g e1 e2
-eval (If _ _) = undefined
-eval (Case _ _ _) = undefined
+eval (If _ _) = not_supported
+eval (Case _ _ _) = not_supported
 eval (Tuple ty es) = Tuple ty $ map eval es
 eval (List ty es) = List ty $ map eval es
 eval (Paren e) = eval e
-eval (EnumFromTo _ _) = undefined
-eval (EnumFromThenTo _ _ _) = undefined
+eval (EnumFromTo _ _) = not_supported
+eval (EnumFromThenTo _ _ _) = not_supported
 eval (Coerc e _) = eval e
-eval (QP _ _ _) = undefined
-eval _other = undefined -- impossible
+eval (QP _ _ _) = not_supported
+eval _other = impossible
