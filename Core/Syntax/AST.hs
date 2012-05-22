@@ -10,7 +10,7 @@ module Core.Syntax.AST where
 
 import Name
 import Sorted
-import Unique( Uniquable(..), MonadUnique(..) )
+import Unique( Uniquable(..), MonadUnique(..), UniqSupply )
 
 import Data.Data ( Data, Typeable )
 import Data.Function ( on )
@@ -172,7 +172,6 @@ mkSimpleBind x rhs = FunBind NonRec x [] [] rhs
 data Exp = Var Var -- ^ variable
          | Con Con -- ^ data constructor
          | Lit Lit -- ^ literal constant
---          | Undefined
          | PrefixApp OpExp Exp --  ^ prefix application
          | InfixApp Exp OpExp Exp -- ^ infix application
          | App Exp Exp
@@ -586,30 +585,6 @@ isVarTy :: Type c -> Bool
 isVarTy (VarTy _) = True
 isVarTy _ty       = False
 
-isFunTy :: Tau -> Bool
-isFunTy ty
-  | FunTy _ _ <- mu_0 ty = True
-  | otherwise            = False
-
-  -- (args,result)
-splitFunTy :: Tau -> ([Dom],Tau)
-splitFunTy ty
- | FunTy a t <- mu_0 ty
- , let (args,res) = splitFunTy t
- = (a:args,res)
-splitFunTy ty = ([],ty)
-
--- splitFunTyN :: Int -> Tau p -> ([Dom p],Tau p)
--- splitFunTyN 0 ty = ([],ty)
--- splitFunTyN n ty
---  | FunTy a t <- mu_0 ty
---  , let (args,res) = splitFunTyN (n-1) t
---  = (a:args,res)
--- splitFunTyN _ ty = ([],ty)
-
--- funTyArity :: Tau p -> Int
--- funTyArity ty = length args
---   where (args,_res) = splitFunTy ty
 
 -- | Removes outermost predicate-types
 mu_0 :: Tau -> Tau
@@ -647,6 +622,7 @@ data TyCon
       tyConName   :: TyName
     , tyConParams :: [TyVar]
     , synTyConRhs :: Tau
+    , synTySupply :: !(Maybe UniqSupply)
     }
     deriving(Eq,Typeable,Data)
 
@@ -682,6 +658,7 @@ natTyCon  = SynTyCon {
               tyConName   = natTyName
             , tyConParams = []
             , synTyConRhs = mkPredTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
+            , synTySupply = Nothing
             }
   where n = mkVar n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq

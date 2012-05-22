@@ -1,7 +1,9 @@
 
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Module      :  H.Unique
@@ -27,8 +29,13 @@ module Unique
 
 import Control.Monad.Identity
 import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict ( StateT, runStateT, evalStateT )
+import qualified Control.Monad.State.Strict as ST
 import Control.Monad.Trans.Maybe
+
+import Data.Binary ( Binary(..) )
+import Data.Data ( Data, Typeable )
+import Data.DeriveTH
 
 
 
@@ -43,6 +50,9 @@ class Uniquable a where
 -- * Unique supply
 
 data UniqSupply = UniqSupply { _inc :: !Int, _first :: !Uniq }
+  deriving (Eq,Typeable,Data)
+
+$( derive makeBinary ''UniqSupply )
 
 mkSupply :: Uniq -> UniqSupply
 mkSupply = UniqSupply 1
@@ -86,13 +96,13 @@ runUniqueT = runStateT . unUniqueT
 
 instance Monad m => MonadUnique (UniqueT m) where
     getUniq = UniqueT $ do
-      (uniq,us') <- gets next
-      put us'
+      (uniq,us') <- ST.gets next
+      ST.put us'
       return uniq
     forkSupply = UniqueT $ do
-      us <- get
+      us <- ST.get
       let (us1,us2) = split us
-      put us1
+      ST.put us1
       return us2
 
 -- * Unique monad

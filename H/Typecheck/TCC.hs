@@ -161,13 +161,23 @@ addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
 (~>?) act_ty (Check exp_ty)  expr = do
   is_not_trivial <- liftM not $ is_trivial_coercion act_ty exp_ty expr
   when is_not_trivial $ do
-    SrcContext{contextDescr} <- getContext
-    tccPropCtxt <- asks propCtxt
-    tccId <- getNextTCCId
+--     traceDoc (text "~>? =============" ) $ do
+--     traceDoc (text "act_ty =" <+> pretty act_ty) $ do
+--     traceDoc (text "exp_ty =" <+> pretty exp_ty) $ do
+--     traceDoc (text "expr =" <+> pretty expr) $ do
+--     traceDoc (text "=================" ) $ do
     _POs <- coerce expr act_ty exp_ty
     let prop = P.conj _POs
-    addTCCToList tccId $
-      CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty prop
+      -- THE "True" PART COULD BE DONE IN is_trivial_coercion with "matchable*"
+    case P.bool prop of
+        Just True -> return ()
+        Just False -> error "coercion does not hold"
+        Nothing -> do
+          SrcContext{contextDescr} <- getContext
+          tccPropCtxt <- asks propCtxt
+          tccId <- getNextTCCId
+          addTCCToList tccId $
+            CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty prop
   return exp_ty
 
 (->?) :: Tau Ti -> Expected (Tau Ti) -> Exp Ti -> CoM (Tau Ti)

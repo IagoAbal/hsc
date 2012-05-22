@@ -6,7 +6,8 @@ module Core.Syntax.Pretty where
 
 
 import Core.Syntax.AST
-import Core.Syntax.Built
+  -- TODO: Remove this dependency
+import {-# SOURCE #-} Core.Syntax.Built
 
 import Pretty
 
@@ -131,7 +132,7 @@ ppOpExp (OpExp tys op) = myFsep $ pretty op : map (\ty -> char '@' <> ppAType ty
 ppInfixApp :: OpExp -> Exp -> Exp -> Doc
 ppInfixApp (OpExp [] op) a b = myFsep [pretty a, pretty op, pretty b]
 ppInfixApp op a b
-  = myFsep [ppOpExp op, ppParenExp a, ppParenExp b]
+  = myFsep [ppParenExp a, ppOpExp op, ppParenExp b]
 
 instance Pretty Exp where
   pretty (Lit lit) = pretty lit

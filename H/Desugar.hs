@@ -128,7 +128,7 @@ dsgExp (TyApp (Op op) tys) = do
   let (ForallTy tvs opTy) :: Sigma Ti = typeOf op
   opTau <- subst_type [] (zip tvs tys) opTy
   tysC <- mapM dsgType tys
-  ([d1,d2],res) <- Core.splitFunTy <$> dsgType opTau
+  ([d1,d2],res) <- Core.unFunTy <$> dsgType opTau
   let ty1 = Core.tau2sigma $ Core.dom2type d1
       ty2 = Core.tau2sigma $ Core.dom2type d2
       opExp = Core.OpExp tysC $ dsgOp op
@@ -139,7 +139,7 @@ dsgExp (TyApp (Op op) tys) = do
   -- any operator here has a tau-type
 dsgExp (Op op) = do
 --   let opTy :: Tau Ti = type2tau (typeOf op :: Sigma Ti)
-  ([d1,d2],res) <- Core.splitFunTy <$> dsgType opTy
+  ([d1,d2],res) <- Core.unFunTy <$> dsgType opTy
   let ty1 = Core.tau2sigma $ Core.dom2type d1
       ty2 = Core.tau2sigma $ Core.dom2type d2
   x <- Core.newVar "x" ty1
@@ -363,8 +363,8 @@ dsgBuiltinTyCon ListTyCon = Core.ListTyCon
 
 dsgTyCon :: TyCon Ti -> DsgM Core.TyCon
 dsgTyCon (AlgTyCon tyname _) = return $ Core.AlgTyCon $ dsgTyName tyname
-dsgTyCon (SynTyCon tynm typs tyrhs _)
-  = Core.SynTyCon (dsgTyName tynm) (dsgTyVars typs) <$> dsgType tyrhs
+dsgTyCon (SynTyCon tynm typs tyrhs mb_us)
+  = Core.SynTyCon (dsgTyName tynm) (dsgTyVars typs) <$> dsgType tyrhs <*> (return mb_us)
 
 dsgTypes :: [Type c Ti] -> DsgM [Core.Type c]
 dsgTypes = mapM dsgType

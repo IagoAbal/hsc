@@ -57,7 +57,7 @@ eval (InfixApp e1 (OpExp [] (BoolOp bop)) e2)
         cmp_ _ t1 t2 = mkMonoInfixApp (BoolOp bop) t1 t2
 eval (InfixApp e1 (OpExp [ty] (BoolOp bop)) e2)
                                   -- should be aware of type synonyms
-  | bop `elem` [EqB, NeqB] && not (isFunTy ty) = cmp_ bop (eval e1) (eval e2)
+  | bop `elem` [EqB, NeqB] && isNothing (isFunTy ty) = cmp_ bop (eval e1) (eval e2)
   where cmp_ EqB t1 t2
           | t1 == t2   = mkTrue
           | otherwise  = mkFalse
