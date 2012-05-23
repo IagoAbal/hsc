@@ -1,6 +1,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Core.Cert.Supported
+module Core.Cert.QuickCheck.Supported
   ( supProp )
   where
 
@@ -41,4 +41,5 @@ supExp (Paren e) = supExp e
 supExp (EnumFromTo _ _) = False
 supExp (EnumFromThenTo _ _ _) = False
 supExp (Coerc e _) = supExp e
+supExp (LetP _ _ _) = False
 supExp (QP _ _ _) = False

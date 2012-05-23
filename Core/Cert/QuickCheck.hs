@@ -6,9 +6,10 @@ module Core.Cert.QuickCheck
   ( checkProp )
   where
 
+import Core.Cert.QuickCheck.Supported
+
 import Core.Syntax
 import Core.Eval
-import Core.Cert.Supported
 
 import Control.Applicative ( (<$>) )
 import qualified Data.Map as Map
