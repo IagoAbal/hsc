@@ -7,7 +7,7 @@ module Core.Syntax.Pretty where
 
 import Core.Syntax.AST
   -- TODO: Remove this dependency
-import {-# SOURCE #-} Core.Syntax.Built
+-- import {-# SOURCE #-} Core.Syntax.Built
 
 import Pretty
 
@@ -395,20 +395,19 @@ instance Pretty TccHypoThing where
     = vcat $ map pretty props
 
 instance Pretty TCC where
-  pretty tcc@(CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
+  pretty (CoercionTCC srcCtxt _propCtxt expr act_ty exp_ty _cprop gprop)
     = text "COERCION TCC"
     $$ brackets (text srcCtxt)
     $$ char '>' <+> text "expression:" <+> pretty expr
     $$ char '>' <+> text "inferred type:" <+> pretty act_ty
     $$ char '>' <+> text "required type:" <+> pretty exp_ty
     $$ text "|------------------------------------------------------"
-    $$ pretty (tcc2prop tcc)
-  pretty tcc@(CompletenessTCC srcCtxt propCtxt prop)
+    $$ pretty gprop
+  pretty (CompletenessTCC srcCtxt _propCtxt _cprop gprop)
     = text "COMPLETENESS TCC"
     $$ brackets (text srcCtxt)
---     $$ (vcat $ map pretty $ toList propCtxt)
     $$ text "|------------------------------------------------------"
-    $$ pretty (tcc2prop tcc)
+    $$ pretty gprop
 
 instance Pretty (IntMap TCC) where
   pretty tccMap = vcat $ map (blankline . pp_tcc) $ IMap.toList tccMap

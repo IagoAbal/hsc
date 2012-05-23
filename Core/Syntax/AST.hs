@@ -760,11 +760,13 @@ data TCC
     , tccExpr     :: Exp
     , tccActType  :: Sigma
     , tccExpType  :: Sigma
-    , tccProp     :: Prop
+    , tccCProp    :: Prop
+    , tccGProp    :: Prop
     }
   | CompletenessTCC {
       tccSrcCtxt  :: !String
     , tccPropCtxt :: TccPropCtxt
-    , tccProp     :: Prop
+    , tccCProp    :: Prop
+    , tccGProp    :: Prop
     }
     deriving(Eq,Typeable,Data)

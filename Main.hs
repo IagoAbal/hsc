@@ -5,8 +5,9 @@
 module Main where
 
 import qualified Core.Syntax as Core
-import qualified Core.Syntax.Built as Core
+-- import qualified Core.Syntax.Built as Core
 import qualified Core.Cert.QuickCheck as Core
+import qualified Core.Cert.SMT as Core
 
 import H.Parser
 import H.Renamer
@@ -32,9 +33,20 @@ import System.Console.CmdArgs
 data HC
   = Typecheck { srcFile :: FilePath }
   | List { coreFile :: FilePath }
-  | Check { coreFile :: FilePath, tccNum :: Int }
+  | Check { coreFile :: FilePath, checkType :: CheckType, tccNum :: Int }
     deriving (Typeable,Data)
 
+data CheckType = QuickCheck | SMTCheck
+    deriving (Typeable,Data)
+
+-- instance Show CheckType where
+--   show QuickCheck = "quick"
+--   show SMTCheck = "smt"
+
+instance Default CheckType where
+  def = QuickCheck
+
+typecheck_, list_, check_, hc_ :: HC
 
 typecheck_ = Typecheck{ srcFile = def &= argPos 0 &= typ "FILE" }
                &= help "Typechecker"
@@ -43,6 +55,12 @@ list_ = List{ coreFile = def &= argPos 0 &= typ "FILE" }
           &= help "List TCCs"
 
 check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
+              , checkType = enum
+                    [ QuickCheck &= explicit &= name "quick"
+                                 &= help "randomized testing"
+                    , SMTCheck   &= explicit &= name "smt"
+                                 &= help "SMT verification"
+                    ]
               , tccNum = def &= argPos 1 &= typ "TCC"
               }
           &= help "Check TCCs"
@@ -67,11 +85,17 @@ executeCommand Typecheck{srcFile} = do
 executeCommand List{coreFile} = do
   m <- Binary.decodeFile coreFile
   less $ render $ pretty $ Core.modTCCs m
-executeCommand Check{coreFile,tccNum} = do
+executeCommand Check{coreFile,checkType,tccNum} = do
   m <- Binary.decodeFile coreFile
   case IMap.lookup tccNum $ Core.modTCCs m of
       Nothing  -> putStrLn "Error: TCC not found."
-      Just tcc -> Core.checkProp $ Core.tcc2prop tcc
+      Just tcc -> case checkType of
+                      QuickCheck -> Core.checkProp tcc_PO
+                      SMTCheck   -> putStrLn "Feature not supported yet."
+        where tcc_PO = Core.tccGProp tcc
 
 main :: IO ()
 main = executeCommand =<< cmdArgs hc_
+
+
+-- putStrLn $ render $ pretty $ Core.prop2problem tcc_PO

@@ -25,8 +25,6 @@ import Control.Monad.Error
 import Data.Char ( isLower )
 import Data.Foldable ( toList )
 import Data.List ( find, inits, nub, (\\) )
-import Data.IntMap ( IntMap )
-import qualified Data.IntMap as IMap
 import qualified Data.Set as Set
 import Data.Sequence ( Seq, (|>) )
 import qualified Data.Sequence as Seq
@@ -80,13 +78,11 @@ instance Pretty TCC where
     $$ pretty prop
 
 
-type CoM = H CoEnv ModTCCs CoST
+type CoM = H CoEnv ModTCCs ()
 
 data CoEnv = CoEnv { propCtxt :: TccPropCtxt }
 
-type ModTCCs = IntMap TCC
-
-data CoST = CoST { tccCount :: !Int }
+type ModTCCs = [TCC]
 
 coModule :: Module Ti -> CoM ModTCCs
 coModule (Module loc modname decls)
@@ -97,8 +93,8 @@ coModule (Module loc modname decls)
 emptyCoEnv :: CoEnv
 emptyCoEnv = CoEnv Seq.empty
 
-emptyCoST :: CoST
-emptyCoST = CoST 1
+emptyCoST :: ()
+emptyCoST = ()
 
 resetST :: CoM ()
 resetST = modify (const emptyCoST)
@@ -146,14 +142,14 @@ is_trivial_coercion act_ty          exp_ty expr
 is_trivial_coercion _act_ty        _exp_ty _expr
   = return False
 
-getNextTCCId :: CoM Int
-getNextTCCId = do
-  c <- gets tccCount
-  modify (\st -> st{tccCount = c+1})
-  return c
+-- getNextTCCId :: CoM Int
+-- getNextTCCId = do
+--   c <- gets tccCount
+--   modify (\st -> st{tccCount = c+1})
+--   return c
 
-addTCCToList :: Int -> TCC -> CoM ()
-addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
+addTCCToList :: TCC -> CoM ()
+addTCCToList tcc = tell [tcc]
 
 
 (~>?) :: Sigma Ti -> Expected (Sigma Ti) -> Exp Ti -> CoM (Sigma Ti)
@@ -175,8 +171,8 @@ addTCCToList tccId tcc = tell $ IMap.singleton tccId tcc
         Nothing -> do
           SrcContext{contextDescr} <- getContext
           tccPropCtxt <- asks propCtxt
-          tccId <- getNextTCCId
-          addTCCToList tccId $
+--           tccId <- getNextTCCId
+          addTCCToList $
             CoercionTCC contextDescr tccPropCtxt expr act_ty exp_ty prop
   return exp_ty
 
@@ -189,8 +185,8 @@ addCompletenessTCC :: Prop Ti -> CoM ()
 addCompletenessTCC prop = do
   SrcContext{contextDescr} <- getContext
   tccPropCtxt <- asks propCtxt
-  tccId <- getNextTCCId
-  addTCCToList tccId $ CompletenessTCC contextDescr tccPropCtxt prop
+--   tccId <- getNextTCCId
+  addTCCToList $ CompletenessTCC contextDescr tccPropCtxt prop
 
 coDecls :: [Decl Ti] -> CoM ()
 coDecls = mapM_ coDecl

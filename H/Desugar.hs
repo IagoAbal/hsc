@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module H.Desugar where
@@ -8,8 +9,10 @@ import Name
 import Sorted
 
 import qualified Core.Syntax as Core
+import qualified Core.Prop as Core
 import H.Monad
 import H.Syntax
+import H.SrcContext
 import H.Typecheck.TCC ( TccHypoThing(..), TccPropCtxt, TCC(..), ModTCCs )
 import H.Typecheck.Utils
   ( tcExprType, tcExprTau, tcRhsType, tcPatsTypes
@@ -17,11 +20,12 @@ import H.Typecheck.Utils
   , instWithVars, instTupleWithVars )
 
 import Control.Applicative ( (<$>), (<*>) )
-import Control.Monad ( forM )
+import Control.Monad.Error
 import Data.Char ( isLower )
 import Data.Foldable ( toList )
 import Data.List ( find, nub )
 import qualified Data.IntMap as IMap
+import Data.Maybe ( catMaybes )
 import qualified Data.Set as Set
 import qualified Data.Sequence as Seq
 import qualified Data.Traversable as T
@@ -37,8 +41,8 @@ type DsgM = H () () ()
 dsgModule :: Module Ti -> ModTCCs -> DsgM Core.Module
 dsgModule (Module _ modname decls) tccs
   = Core.Module (dsgModuleName modname) <$> dsgDecls decls <*> dsg_tccs tccs
-  where dsg_tccs tccs1 = IMap.fromList <$>
-                          (mapM (\(i,tcc') -> do tcc <- dsgTCC tcc'; return (i,tcc) ) $ IMap.toList tccs1)
+  where dsg_tccs tccs1 = build_tcc_map <$> dsgTCCs tccs1
+        build_tcc_map = IMap.fromList . zip [1..]
 
 dsgModuleName :: ModuleName -> Core.ModuleName
 dsgModuleName (ModName n) = Core.ModName n
@@ -423,16 +427,55 @@ dsgTccPropCtxt :: TccPropCtxt -> DsgM Core.TccPropCtxt
 dsgTccPropCtxt ctxt = Seq.fromList <$> (mapM dsgTccHypoThing $ toList ctxt)
 
 dsgTCC :: TCC -> DsgM Core.TCC
-dsgTCC (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop)
-  = Core.CoercionTCC (render srcCtxt)
-      <$> dsgTccPropCtxt propCtxt
-      <*> dsgExp expr <*> dsgType act_ty <*> dsgType exp_ty
-      <*> dsgExp prop
-dsgTCC (CompletenessTCC srcCtxt propCtxt prop)
-  = Core.CompletenessTCC (render srcCtxt)
-      <$> dsgTccPropCtxt propCtxt
-      <*> dsgExp prop
+dsgTCC (CoercionTCC srcCtxt propCtxt expr act_ty exp_ty prop) = do
+  ctxt' <- dsgTccPropCtxt propCtxt
+  expr' <- dsgExp expr
+  act_ty' <- dsgType act_ty
+  exp_ty' <- dsgType exp_ty
+  prop' <- dsgExp prop
+  let tcc_PO = Core.mkTccPO ctxt' prop'
+  traceDoc (text "dsgTCC prop'=" <+> pretty prop') $ do
+  traceDoc (text "dsgTCC tcc_PO=" <+> pretty tcc_PO) $ do
+  return $ Core.CoercionTCC (render srcCtxt)
+              ctxt'
+              expr' act_ty' exp_ty'
+              prop' tcc_PO
+--   = Core.CoercionTCC (render srcCtxt)
+--       <$> dsgTccPropCtxt propCtxt
+--       <*> dsgExp expr <*> dsgType act_ty <*> dsgType exp_ty
+--       <*> dsgExp prop
+dsgTCC (CompletenessTCC srcCtxt propCtxt prop) = do
+  ctxt' <- dsgTccPropCtxt propCtxt
+  prop' <- dsgExp prop
+  return $ Core.CompletenessTCC (render srcCtxt)
+              ctxt'
+              prop'
+              (Core.mkTccPO ctxt' prop')
+--   = Core.CompletenessTCC (render srcCtxt)
+--       <$> dsgTccPropCtxt propCtxt
+--       <*> dsgExp prop
 
+filterTCC :: Core.TCC -> DsgM (Maybe Core.TCC)
+filterTCC tcc@(Core.CoercionTCC srcCtxt _ expr act_ty exp_ty _ tcc_PO)
+  | Just True <- Core.prop2bool tcc_PO
+  = return Nothing
+  | Just False <- Core.prop2bool tcc_PO
+  = inContext (text srcCtxt) $ throwError $
+      text "Coercion proved impossible:"
+      $$ nest 2 (text "expression:" <+> pretty expr)
+      $$ nest 2 (text "inferred type:" <+> pretty act_ty)
+      $$ nest 2 (text "expected type:" <+> pretty exp_ty)
+  | otherwise = return $ Just tcc
+filterTCC tcc@(Core.CompletenessTCC srcCtxt _ _ tcc_PO)
+  | Just True <- Core.prop2bool tcc_PO
+  = return Nothing
+  | Just False <- Core.prop2bool tcc_PO
+  = inContext (text srcCtxt) $ throwError $
+      text "Completeness violated."
+  | otherwise = return $ Just tcc
+
+dsgTCCs :: [TCC] -> DsgM [Core.TCC]
+dsgTCCs tccs = catMaybes <$> mapM (dsgTCC >=> filterTCC) tccs
 
 -- * Equations
 
