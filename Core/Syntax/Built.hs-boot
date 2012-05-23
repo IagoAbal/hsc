@@ -4,4 +4,6 @@ module Core.Syntax.Built where
 
 import Core.Syntax.AST
 
-tcc2prop :: TCC -> Prop
+
+expandSyn :: Type c -> Type c
+-- tcc2prop :: TCC -> Prop

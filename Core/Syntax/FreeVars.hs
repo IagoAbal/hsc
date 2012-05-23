@@ -2,6 +2,7 @@ module Core.Syntax.FreeVars where
 
 
 import Core.Syntax.AST
+import {-# SOURCE #-} Core.Syntax.Built
 
 import Data.Set ( Set )
 import qualified Data.Set as Set
@@ -110,6 +111,7 @@ fvTypes = Set.unions . map fvType
 
 fvType :: Type c -> Set Var
 fvType (VarTy _) = Set.empty
+fvType ty | isSynTy ty = fvType $ expandSyn ty
 fvType (ConTy _ args) = fvTypes args
 fvType (PredTy pat ty mbprop)
   = fvType ty `Set.union` (fvMaybeExp mbprop Set.\\ bsPat pat)
