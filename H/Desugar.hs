@@ -9,6 +9,7 @@ import Name
 import Sorted
 
 import qualified Core.Syntax as Core
+import qualified Core.Syntax.Subst1.Direct as Core
 import qualified Core.Prop as Core
 import H.Monad
 import H.Syntax
@@ -367,8 +368,8 @@ dsgBuiltinTyCon ListTyCon = Core.ListTyCon
 
 dsgTyCon :: TyCon Ti -> DsgM Core.TyCon
 dsgTyCon (AlgTyCon tyname _) = return $ Core.AlgTyCon $ dsgTyName tyname
-dsgTyCon (SynTyCon tynm typs tyrhs mb_us)
-  = Core.SynTyCon (dsgTyName tynm) (dsgTyVars typs) <$> dsgType tyrhs <*> (return mb_us)
+dsgTyCon (SynTyCon tynm typs tyrhs _us)
+  = Core.SynTyCon (dsgTyName tynm) (dsgTyVars typs) <$> dsgType tyrhs
 
 dsgTypes :: [Type c Ti] -> DsgM [Core.Type c]
 dsgTypes = mapM dsgType
@@ -573,7 +574,7 @@ match_eq (x:xs) qs
 subst_eq :: Var Ti -> Core.Exp -> Equation -> DsgM Equation
 subst_eq y' x (E pats rhs) = do
   y <- dsgVar y'
-  rhs' <- Core.subst_rhs [(y,x)] [] rhs
+  let rhs' = Core.substRhs [(y,x)] [] rhs
   return (E pats rhs')
 
 getNameForPats :: [Pat Ti] -> Maybe String

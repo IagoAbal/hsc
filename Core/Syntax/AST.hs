@@ -10,7 +10,7 @@ module Core.Syntax.AST where
 
 import Name
 import Sorted
-import Unique( Uniquable(..), MonadUnique(..), UniqSupply )
+import Unique( Uniquable(..), MonadUnique(..) )
 
 import Data.Data ( Data, Typeable )
 import Data.Function ( on )
@@ -622,7 +622,6 @@ data TyCon
       tyConName   :: TyName
     , tyConParams :: [TyVar]
     , synTyConRhs :: Tau
-    , synTySupply :: !(Maybe UniqSupply)
     }
     deriving(Eq,Typeable,Data)
 
@@ -658,7 +657,6 @@ natTyCon  = SynTyCon {
               tyConName   = natTyName
             , tyConParams = []
             , synTyConRhs = mkPredTy (VarPat n) intTy (Just $ (Var n) .>=. (Lit (IntLit 0)))
-            , synTySupply = Nothing
             }
   where n = mkVar n_nm intTy
         n_nm = mkSysName (mkOccName VarNS "n") n_uniq

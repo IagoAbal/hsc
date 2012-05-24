@@ -19,7 +19,7 @@
 module Unique
   ( Uniq
   , Uniquable(..)
-  , UniqSupply, newSupply, next, split
+  , UniqSupply, mkSupply, newSupply, next, split
   , MonadUnique(..)
   , UniqueT(..), evalUniqueT, runUniqueT
   , Unique(..), evalUnique, runUnique

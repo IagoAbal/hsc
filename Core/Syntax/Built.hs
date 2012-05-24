@@ -6,9 +6,7 @@ module Core.Syntax.Built where
 
 import Core.Syntax.AST
 import Core.Syntax.FreeVars
-import Core.Syntax.Subst1 ( subst_type )
-
-import Unique ( evalUnique )
+import Core.Syntax.Subst1.Direct ( substType )
 
 import Data.Data ( Data )
 import Data.Foldable ( toList )
@@ -134,10 +132,10 @@ typesIn :: Data t => t -> [Sigma]
 typesIn t = G.universeBi t ++ map tau2sigma (G.universeBi t :: [Tau])
 
 expandSyn :: Type c -> Type c
-expandSyn (ConTy (SynTyCon _   [] rhs Nothing)   [])
+expandSyn (ConTy (SynTyCon _   [] rhs)   [])
   = tau2type rhs
-expandSyn (ConTy (SynTyCon _ typs rhs (Just us)) args)
-  = tau2type $ evalUnique (subst_type [] (zip typs args) rhs) us
+expandSyn (ConTy (SynTyCon _ typs rhs) args)
+  = tau2type $ substType [] (zip typs args) rhs
 expandSyn _other = bug "expandSyn: not an expandable type synonym"
 
 isFunTy :: Tau -> Maybe (Dom,Tau)
