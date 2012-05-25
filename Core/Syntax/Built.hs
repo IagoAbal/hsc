@@ -1,11 +1,13 @@
 
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Core.Syntax.Built where
 
 
 import Core.Syntax.AST
 import Core.Syntax.FreeVars
+import Core.Syntax.FTV
 import Core.Syntax.Subst1.Direct ( substType )
 
 import Data.Data ( Data )
@@ -93,6 +95,11 @@ isEq :: Prop -> Maybe (Exp,Exp)
 isEq (InfixApp e1 (OpExp [_] (BoolOp EqB)) e2) = Just (e1,e2)
 isEq _othre                                    = Nothing
 
+unImp :: Exp -> ([Exp],Exp)
+unImp = go []
+  where go acc (isImp -> Just (e1,e2)) = go (e1:acc) e2
+        go acc e                       = (reverse acc,e)
+
 infixr .==>.
 
 (.&&.) :: Prop -> Prop -> Prop
@@ -129,7 +136,13 @@ mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
 -- * Types
 
 typesIn :: Data t => t -> [Sigma]
-typesIn t = G.universeBi t ++ map tau2sigma (G.universeBi t :: [Tau])
+typesIn t = G.universeBi t ++ map tau2sigma (tausIn t)
+
+tausIn :: Data t => t -> [Tau]
+tausIn t = [ ty
+           | ty <- G.universeBi t
+           , all skolemTyVar $ Set.toList $ ftvOf ty
+           ]
 
 expandSyn :: Type c -> Type c
 expandSyn (ConTy (SynTyCon _   [] rhs)   [])
@@ -137,6 +150,11 @@ expandSyn (ConTy (SynTyCon _   [] rhs)   [])
 expandSyn (ConTy (SynTyCon _ typs rhs) args)
   = tau2type $ substType [] (zip typs args) rhs
 expandSyn _other = bug "expandSyn: not an expandable type synonym"
+
+instSigma :: Sigma -> [Tau] -> Tau
+instSigma (ForallTy tvs ty) typs = substType [] (zip tvs typs) ty
+instSigma ty                []   = sigma2tau ty
+instSigma _ty                _   = bug "instSigma: cannot instantiate tau type"
 
 isFunTy :: Tau -> Maybe (Dom,Tau)
 isFunTy (FunTy d r)     = Just (d,r)
