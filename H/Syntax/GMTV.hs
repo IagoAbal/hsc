@@ -83,6 +83,7 @@ instance GMTV (Dom Tc) where
 
 instance GMTV (Exp Tc) where
   gmtvOf (Var _) = empty
+  gmtvOf (Par _) = empty
   gmtvOf (Con _) = empty
   gmtvOf (Op _)  = empty
   gmtvOf (Lit _) = empty

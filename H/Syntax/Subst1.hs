@@ -203,6 +203,7 @@ substExp Subst1{substVarEnv} e@(Var x)
   = case Map.lookup x substVarEnv of
         Just e' -> return e'   -- reunique e ?
         Nothing -> return e    -- ???
+substExp _s par@(Par _) = return par
 substExp _s con@(Con _) = return con     -- ? constructors are not substituted...
 substExp _s op@(Op _) = return op
 substExp _s lit@(Lit _) = return lit

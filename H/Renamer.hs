@@ -46,6 +46,7 @@ import Control.Monad.Reader
 import Data.List
 import Data.Map ( Map )
 import qualified Data.Map as Map
+import Data.Set ( Set )
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 
@@ -53,23 +54,38 @@ import qualified Data.Traversable as T
 
 -- * The RnM monad
 
-type RnM a = H (Map OccName Name) () () a
+type RnM a = H RnEnv () () a
 
-emptyRnEnv :: Map OccName Name
-emptyRnEnv = Map.empty
+data RnEnv
+  = RnEnv {
+    rnOccMap   :: Map OccName Name
+  , rnToplevel :: Set Name
+  }
+
+emptyRnEnv :: RnEnv
+emptyRnEnv = RnEnv Map.empty Set.empty
 
 getName :: OccName -> RnM Name
 getName occ = do
-  mbName <- asks (Map.lookup occ)
+  mbName <- asks (Map.lookup occ . rnOccMap)
   case mbName of
       Nothing   ->
         throwError $  text "Variable" <+> ppQuot occ
                                       <+> text "is not in scope."
       Just name -> return name
 
-withMapping :: [(OccName,Name)] -> RnM a -> RnM a
-withMapping maps = local (Map.union (Map.fromList maps))
+getIsToplevel :: Name -> RnM Bool
+getIsToplevel n = asks (Set.member n . rnToplevel)
 
+withMapping :: [(OccName,Name)] -> RnM a -> RnM a
+withMapping lmaps = local update
+  where maps = Map.fromList lmaps
+        update rn@RnEnv{rnOccMap} = rn{rnOccMap=maps `Map.union` rnOccMap}
+
+withToplevel :: [Name] -> RnM a -> RnM a
+withToplevel lnames = local update
+  where names = Set.fromList lnames
+        update rn@RnEnv{rnToplevel} = rn{rnToplevel=names `Set.union` rnToplevel}
 
 -- * The 'Rename' and 'RenameBndr' classes
 
@@ -92,6 +108,11 @@ instance RenameBndr OccName Name where
     withMapping [(occ,name)] $
       f name
 
+renameTopBndr :: OccName -> (Name -> RnM a) -> RnM a
+renameTopBndr occ f
+  = renameBndr occ $ \name ->
+      withToplevel [name] $ f name
+
 instance RenameBndr b b' => RenameBndr [b] [b'] where
   renameBndr []     f = f []
   renameBndr (b:bs) f = renameBndr b $ \b' ->
@@ -101,7 +122,7 @@ instance RenameBndr b b' => RenameBndr [b] [b'] where
 
 -- * Modules
 
-rnModule ::Module Pr -> RnM (Module Rn)
+rnModule :: Module Pr -> RnM (Module Rn)
 rnModule (Module loc modname decls)
   = inContextAt loc (text "In module" <+> ppQuot modname) $ do
       decls' <- decls_rn
@@ -145,7 +166,7 @@ instance RenameBndr (Bind Pr) (Bind Rn) where
   renameBndr (FunBind _rec occ sig None matches) f
     = inFunBindCtxt (ppQuot occ) $ do
         sig' <- rename sig
-        renameBndr occ $ \name -> do
+        renameTopBndr occ $ \name -> do
           matches' <- rnList matches
           let rec' = funbind_rec name matches'
           popContext $ f (FunBind rec' name sig' None matches')
@@ -154,7 +175,7 @@ instance RenameBndr (Bind Pr) (Bind Rn) where
             | otherwise                   = NonRec
   renameBndr (PatBind (Just loc) pat rhs) f
     = inPatBindCtxt loc (ppQuot pat) $ do
-        rnPat pat $ \pat' -> do
+        rnTopPat pat $ \pat' -> do
           rhs' <- rename rhs
           popContext $ f (PatBind (Just loc) pat' rhs')
   renameBndr _other _f = impossible
@@ -188,7 +209,11 @@ rnConDecl _other = impossible
 -- * Expressions
 
 instance Rename Exp where
-  rename (Var occ) = liftM Var $ getName occ
+  rename (Var occ) = do
+    name <- getName occ
+    isTop <- getIsToplevel name
+    return $ if isTop then Par name
+                      else Var name
   rename (Con con) = liftM Con $ rename con
   rename (Op op)   = return (Op op)
   rename (Lit lit) = return $ Lit lit
@@ -356,6 +381,12 @@ rnPats ps f = do
     withMapping (Map.toList ps_map) $
       f ps'
 
+rnTopPat :: Pat Pr -> (Pat Rn -> RnM a) -> RnM a
+rnTopPat p f = do
+    (p',p_map) <- rn_pat p
+    withMapping (Map.toList p_map) $
+      withToplevel (Set.toList $ bsPat p') $
+        f p'
 
 -- * Types
 

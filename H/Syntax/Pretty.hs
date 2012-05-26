@@ -187,6 +187,7 @@ instance PrettyNames p => Pretty (Exp p) where
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
   pretty (Var var) = pretty var
+  pretty (Par var) = pretty var
   pretty (Con con) = pretty con
   pretty (Op op)   = ppPrefixOp op
   pretty (Tuple _ expList) = parenList . map pretty $ expList

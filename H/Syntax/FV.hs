@@ -64,6 +64,7 @@ fvMatches = foldMap fvMatch
 
 fvExp :: Ord (VAR p) => Exp p -> Set (VAR p)
 fvExp (Var x)    = Set.singleton x
+fvExp (Par _)    = Set.empty
 fvExp (Con _con) = Set.empty
 fvExp (Op _op)   = Set.empty
 fvExp (Lit _lit) = Set.empty

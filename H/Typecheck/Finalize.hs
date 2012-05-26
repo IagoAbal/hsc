@@ -176,6 +176,7 @@ finExps = mapM finExp
 
 finExp :: Exp Tc -> TiM (Exp Ti)
 finExp (Var x) = liftM Var $ lookupVar x
+finExp (Par x) = liftM Par $ lookupVar x
 finExp (Con con) = liftM Con $ lookupCon con
 finExp (Op op) = return (Op op)
 finExp (Lit lit) = return (Lit lit)

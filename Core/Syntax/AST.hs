@@ -170,6 +170,7 @@ mkSimpleBind x rhs = FunBind NonRec x [] [] rhs
 -- * Expressions
 
 data Exp = Var Var -- ^ variable
+         | Par Var -- ^ parameter
          | Con Con -- ^ data constructor
          | Lit Lit -- ^ literal constant
          | PrefixApp OpExp Exp --  ^ prefix application

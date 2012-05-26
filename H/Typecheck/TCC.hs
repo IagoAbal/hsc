@@ -266,6 +266,7 @@ getCaseLikeCtxt scrut    ty  pats = do
 
 coExp :: Exp Ti -> Expected (Sigma Ti) -> CoM (Sigma Ti)
 coExp e@(Var x) exp_ty = (varType x ~>? exp_ty) e
+coExp e@(Par x) exp_ty = (varType x ~>? exp_ty) e
 coExp e@(Con con) exp_ty = (sortOf con ~>? exp_ty) e
 coExp e@(Op op) exp_ty = (sortOf op ~>? exp_ty) e
 coExp e@(Lit _) exp_ty = (intTy ~>? exp_ty) e

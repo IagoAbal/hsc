@@ -32,6 +32,7 @@ instance FTV Bind where
 
 instance FTV Exp where
   ftvOf (Var x) = ftvOf x
+  ftvOf (Par x) = ftvOf x
   ftvOf (Con _) = Set.empty
   ftvOf (Lit _) = Set.empty
   ftvOf (PrefixApp op e) = ftvOf op `Set.union` ftvOf e

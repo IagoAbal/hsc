@@ -224,6 +224,8 @@ data GoalType = TheoremGoal
 data Exp p where
   -- | variable
   Var :: !(VAR p) -> Exp p
+  -- | parameter
+  Par :: Ge p Rn => !(VAR p) -> Exp p
   -- | data constructor
   Con :: !(CON p) -> Exp p
   -- | operator

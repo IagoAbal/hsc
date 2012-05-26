@@ -156,6 +156,7 @@ instance Pretty Exp where
     $$$ ppBody caseIndent (map pretty altList)
   -- Constructors & Vars
   pretty (Var var) = pretty var
+  pretty (Par var) = pretty var
   pretty (Con con) = pretty con
   pretty (Tuple _ expList) = parenList . map pretty $ expList
   pretty (Paren e) = parens . pretty $ e

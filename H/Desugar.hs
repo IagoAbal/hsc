@@ -127,6 +127,7 @@ dsgExps = mapM dsgExp
 
 dsgExp :: Exp Ti -> DsgM Core.Exp
 dsgExp (Var x) = Core.Var <$> dsgVar x
+dsgExp (Par x) = Core.Par <$> dsgVar x
 dsgExp (Con tcon) = Core.Con <$> dsgTcCon tcon
   -- polymorphic op, that is: ::, == or /=
 dsgExp (TyApp (Op op) tys) = do

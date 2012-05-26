@@ -363,6 +363,9 @@ tcExp :: Exp Rn -> Expected (Tau Tc) -> TcM (Exp Tc)
 tcExp (Var n) exp_ty = do
   v <- lookupVar n
   instSigma (Var v) (varType v) exp_ty
+tcExp (Par n) exp_ty = do
+  v <- lookupVar n
+  instSigma (Par v) (varType v) exp_ty
 tcExp (Con con) exp_ty = do
   con' <- lookupCon con
   instSigma (Con con') (sortOf con') exp_ty

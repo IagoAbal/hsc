@@ -77,6 +77,7 @@ zonkExps = mapM zonkExp
 
 zonkExp :: MonadIO m => Exp Tc -> m (Exp Tc)
 zonkExp (Var x) = liftM Var $ zonkVar x
+zonkExp (Par x) = liftM Par $ zonkVar x
 zonkExp (Con con) = liftM Con $ zonkCon con
 zonkExp op@(Op _) = return op
 zonkExp e@(Lit _) = return e

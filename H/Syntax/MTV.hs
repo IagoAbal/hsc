@@ -48,6 +48,7 @@ instance MTV (TcCon Tc) where
 
 instance MTV (Exp Tc) where
   mtvOf (Var x)   = mtvOf x
+  mtvOf (Par x)   = mtvOf x
   mtvOf (Con con) = mtvOf con
   mtvOf (Op _) = Set.empty
   mtvOf (Lit _)   = Set.empty
