@@ -1,4 +1,8 @@
-{-# LANGUAGE GADTs, FlexibleInstances #-}
+
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  H.Parser.Fixity
@@ -20,10 +24,11 @@ module H.Parser.Fixity
 
 import H.Syntax
 
-import Control.Monad (when, (<=<), liftM, liftM2, liftM3, liftM4)
+import Control.Monad ( when, (<=<), liftM, liftM2, liftM3 )
 import Data.Traversable (mapM)
 import Prelude hiding (mapM)
 
+#include "bug.h"
 
 
 
@@ -155,6 +160,7 @@ instance AppFixity (TypeSig Pr) where
 instance AppFixity (ConDecl Pr) where
   applyFixities fixs (ConDeclIn loc con tys)
     = liftM (ConDeclIn loc con) $ mapM (applyFixities fixs) tys
+  applyFixities _fixs _other = impossible
 
 instance AppFixity (Match Pr) where
     applyFixities fixs (Match loc ps rhs) = liftM2 (Match loc) (mapM fix ps) (fix rhs)
@@ -178,6 +184,7 @@ instance AppFixity (GuardedRhss Pr) where
   applyFixities fixs (GuardedRhssIn grhss)
     = liftM GuardedRhssIn $ mapM fix grhss
     where fix x = applyFixities fixs x
+  applyFixities _fixs _other = impossible
 
 instance AppFixity (GuardedRhs Pr) where
     applyFixities fixs (GuardedRhs loc g e) = liftM2 (GuardedRhs loc) (fix g) $ fix e

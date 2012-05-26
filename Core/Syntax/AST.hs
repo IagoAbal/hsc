@@ -1,4 +1,4 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -19,6 +19,8 @@ import Data.IntMap ( IntMap )
 import Data.Sequence ( Seq )
 
 import Unsafe.Coerce ( unsafeCoerce )
+
+#include "bug.h"
 
 
 -- * Variables
@@ -543,7 +545,7 @@ tau2type :: Tau -> Type c
 tau2type = unsafeCoerce
 
 sigma2tau :: Sigma -> Tau
-sigma2tau (ForallTy _ _) = error "bug sigma2tau"  -- FIX
+sigma2tau (ForallTy _ _) = bug "sigma2tau: not a tau type"
 sigma2tau ty             = unsafeCoerce ty
 
 data Type c
