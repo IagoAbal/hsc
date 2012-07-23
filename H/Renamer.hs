@@ -152,7 +152,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
           popContext $ withMapping cmap $ 
             f (DataDecl loc name typarams' constrs')
   renameBndr (ValDecl bind) f =
-    renameBndr bind $ f . ValDecl
+    renameGlobalBind bind $ f . ValDecl
   renameBndr (GoalDecl loc gtype gname None prop) f
     = inGoalDeclCtxt loc gtype (ppQuot gname) $
         renameBndr gname $ \gname' -> do
@@ -162,23 +162,38 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
 
 -- * Binds
 
-instance RenameBndr (Bind Pr) (Bind Rn) where
-  renameBndr (FunBind _rec occ sig None matches) f
-    = inFunBindCtxt (ppQuot occ) $ do
-        sig' <- rename sig
-        renameTopBndr occ $ \name -> do
-          matches' <- rnList matches
-          let rec' = funbind_rec name matches'
-          popContext $ f (FunBind rec' name sig' None matches')
-    where funbind_rec x ms
-            | x `Set.member` fvMatches ms = Rec
-            | otherwise                   = NonRec
-  renameBndr (PatBind (Just loc) pat rhs) f
-    = inPatBindCtxt loc (ppQuot pat) $ do
-        rnTopPat pat $ \pat' -> do
-          rhs' <- rename rhs
-          popContext $ f (PatBind (Just loc) pat' rhs')
-  renameBndr _other _f = impossible
+renameGlobalBind = renameBind True
+
+renameLocalBinds = renameBinds False
+
+renameBinds isTop []     f = f []
+renameBinds isTop (b:bs) f = renameBind isTop b $ \b' ->
+                      renameBinds isTop bs $ \bs' ->
+                        f (b':bs')
+
+renameBndr_ False = renameBndr
+renameBndr_ True = renameTopBndr
+
+rnPat_ False = rnPat
+rnPat_ True = rnTopPat
+
+renameBind :: Bool -> Bind Pr -> (Bind Rn -> RnM a) -> RnM a
+renameBind isTop (FunBind _rec occ sig None matches) f
+  = inFunBindCtxt (ppQuot occ) $ do
+      sig' <- rename sig
+      renameBndr_ isTop occ $ \name -> do
+        matches' <- rnList matches
+        let rec' = funbind_rec occ matches
+        popContext $ f (FunBind rec' name sig' None matches')
+  where funbind_rec x ms
+          | x `Set.member` fvMatches ms = Rec
+          | otherwise                   = NonRec
+renameBind isTop (PatBind (Just loc) pat rhs) f
+  = inPatBindCtxt loc (ppQuot pat) $ do
+      rnPat_ isTop pat $ \pat' -> do
+        rhs' <- rename rhs
+        popContext $ f (PatBind (Just loc) pat' rhs')
+renameBind _isTop _other _f = impossible
 
 instance Rename TypeSig where
   rename NoTypeSig = return NoTypeSig
@@ -226,7 +241,7 @@ instance Rename Exp where
     = inLambdaAbsCtxt loc pats $
         rnPats pats $ \pats' -> liftM (Lam (Just loc) pats') $ rename body
   rename (Let binds body)
-    = renameBndr binds $ \binds' -> liftM (Let binds') $ rename body
+    = renameLocalBinds binds $ \binds' -> liftM (Let binds') $ rename body
   rename (Ite None g t e)
     = inIteExprCtxt g $
         liftM3 (Ite None) (rename g) (rename t) (rename e)
@@ -280,7 +295,7 @@ instance RenameBndr (QVar Pr) (QVar Rn) where
 
 instance Rename Rhs where
   rename (Rhs None grhs whr)
-    = renameBndr whr $ \whr' -> do
+    = renameLocalBinds whr $ \whr' -> do
         grhs' <- rename grhs
         return $ Rhs None grhs' whr'
 
