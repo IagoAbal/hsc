@@ -70,6 +70,9 @@ pat2exp (VarPat x)   = Var x
 pat2exp (InfixCONSPat typ p1 p2)
   = InfixApp (pat2exp p1) conE (pat2exp p2)
   where conE = mkTyApp (Op CONSOp) [typ]
+pat2exp (ConPat [typ] con [p1,p2])
+  | con == tcConsCon = InfixApp (pat2exp p1) conE (pat2exp p2)
+  where conE = mkTyApp (Op CONSOp) [typ]
 pat2exp (ConPat typs con ps)
   = conE `mkApp` map pat2exp ps
   where conE = mkTyApp (Con con) typs
