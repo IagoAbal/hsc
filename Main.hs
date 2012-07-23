@@ -6,8 +6,8 @@ module Main where
 
 import qualified Core.Syntax as Core
 -- import qualified Core.Syntax.Built as Core
-import qualified Core.Cert.QuickCheck as Core
-import qualified Core.Cert.SMT as Core
+import qualified Core.Cert.QuickCheck as CertQuick
+import qualified Core.Cert.SMT as CertSMT
 
 import H.Parser
 import H.Renamer
@@ -95,8 +95,8 @@ executeCommand Check{coreFile,checkType,tccNum} = do
   case IMap.lookup tccNum $ Core.modTCCs m of
       Nothing  -> putStrLn "Error: TCC not found."
       Just tcc -> case checkType of
-                      QuickCheck -> Core.checkProp tcc_PO
-                      SMTCheck   -> putStrLn "Feature not supported yet."
+                      QuickCheck -> CertQuick.checkProp tcc_PO
+                      SMTCheck   -> CertSMT.checkProp tcc_PO
         where tcc_PO = Core.tccGProp tcc
 
 main :: IO ()
