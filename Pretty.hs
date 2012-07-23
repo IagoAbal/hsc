@@ -212,11 +212,12 @@ parensIf False = id
 
 -- ** Constants
 
-dot,semi,comma,colon,space,equals :: Doc
+dot,semi,comma,colon,dcolon,space,equals :: Doc
 dot  = char '.'
 semi = return P.semi
 comma = return P.comma
 colon = return P.colon
+dcolon = text "::"
 space = return P.space
 equals = return P.equals
 
