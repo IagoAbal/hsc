@@ -32,7 +32,7 @@ import System.Console.CmdArgs
 
 data HC
   = Typecheck { srcFile :: FilePath }
-  | List { coreFile :: FilePath }
+  | List { coreFile :: FilePath, index :: Maybe Int }
   | Check { coreFile :: FilePath, checkType :: CheckType, tccNum :: Int }
     deriving (Typeable,Data)
 
@@ -51,8 +51,10 @@ typecheck_, list_, check_, hc_ :: HC
 typecheck_ = Typecheck{ srcFile = def &= argPos 0 &= typ "FILE" }
                &= help "Typechecker"
 
-list_ = List{ coreFile = def &= argPos 0 &= typ "FILE" }
-          &= help "List TCCs"
+list_ = List{ coreFile = def &= argPos 0 &= typ "FILE"
+            , index = def &= typ "RANGE"
+            }
+          &= help "List proof obligations"
 
 check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
               , checkType = enum
@@ -82,9 +84,12 @@ executeCommand Typecheck{srcFile} = do
   case res of
       Left err      -> putStrLn $ render err
       Right (m,_,_) -> Binary.encodeFile (srcFile ++ "-core") m
-executeCommand List{coreFile} = do
+executeCommand List{coreFile,index=Nothing} = do
   m <- Binary.decodeFile coreFile
   less $ render $ pretty $ Core.modTCCs m
+executeCommand List{coreFile,index=Just k} = do
+  m <- Binary.decodeFile coreFile
+  putStrLn $ render $ pretty $ Core.modTCCs m IMap.! k
 executeCommand Check{coreFile,checkType,tccNum} = do
   m <- Binary.decodeFile coreFile
   case IMap.lookup tccNum $ Core.modTCCs m of
@@ -96,6 +101,3 @@ executeCommand Check{coreFile,checkType,tccNum} = do
 
 main :: IO ()
 main = executeCommand =<< cmdArgs hc_
-
-
--- putStrLn $ render $ pretty $ Core.prop2problem tcc_PO
