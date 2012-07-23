@@ -100,6 +100,9 @@ unImp = go []
   where go acc (isImp -> Just (e1,e2)) = go (e1:acc) e2
         go acc e                       = (reverse acc,e)
 
+not_ :: Prop -> Prop
+not_ = PrefixApp (OpExp [] notOp)
+
 infixr .==>.
 
 (.&&.) :: Prop -> Prop -> Prop
@@ -135,14 +138,23 @@ mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
 
 -- * Types
 
-typesIn :: Data t => t -> [Sigma]
-typesIn t = G.universeBi t ++ map tau2sigma (tausIn t)
+isTau :: Sigma -> Bool
+isTau (ForallTy _ _) = False
+isTau _other         = True
+
+-- typesIn :: Data t => t -> [Sigma]
+-- typesIn t = G.universeBi t ++ map tau2sigma (tausIn t)
 
 tausIn :: Data t => t -> [Tau]
 tausIn t = [ ty
-           | ty <- G.universeBi t
+           | ty <- get_taus t
            , all skolemTyVar $ Set.toList $ ftvOf ty
            ]
+  where get_taus t = G.universeBi t
+                    ++ [ sigma2tau ty
+                       | ty <- G.universeBi t
+                       , isTau ty
+                       ]
 
 expandSyn :: Type c -> Type c
 expandSyn (ConTy (SynTyCon _   [] rhs)   [])
