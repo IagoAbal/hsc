@@ -59,8 +59,17 @@ mkProperty mod (QP ForallQ xs p)
   where anEnv = let ?mod = mod in params_ xs
 mkProperty _mod _other = bug "mkProperty: unsupported property"
 
+checkGround :: Module -> Prop -> IO ()
+checkGround mod p
+  | val2bool $ eval mod [] p = putStrLn "Q.E.D."
+  | otherwise                = putStrLn "Invalid"
+
 checkProp :: Module -> Prop -> IO ()
-checkProp mod p
+checkProp mod p@(QP _ _ _)
   | supProp p' = QC.quickCheck $ mkProperty mod p'
   | otherwise = traceDoc (pretty p') $ putStrLn "Sorry, property not supported :-("
+  where p' = toQuickProp p
+checkProp mod p
+  | supProp p' = checkGround mod p'
+  | otherwise  = traceDoc (pretty p') $ putStrLn "Sorry, property not supported :-("
   where p' = toQuickProp p
