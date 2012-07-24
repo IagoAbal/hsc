@@ -63,6 +63,9 @@ mkLet binds e = case binds' of
           where b_x = bsBind b
                 b_fv = fvBind b
 
+mkIntList :: [Integer] -> Exp
+mkIntList = List (ListTy intTy) . map mkInt
+
 -- ** Prop
 
 prop2bool :: Prop -> Maybe Bool

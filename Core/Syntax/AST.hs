@@ -492,6 +492,10 @@ mkTyLam :: [TyVar] -> Exp -> Exp
 mkTyLam [] expr  = expr
 mkTyLam tvs expr = TyLam tvs expr
 
+mkLam :: [Var] -> Rhs -> Exp
+mkLam [] (Rhs _ e) = e
+mkLam xs rhs       = Lam xs rhs
+
 mkApp :: Exp -> [Exp] -> Exp
 mkApp f args = foldl App f args
 

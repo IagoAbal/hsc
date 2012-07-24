@@ -42,15 +42,14 @@ param_ x = do
 params_ :: [Var] -> QC.Gen [(Var,Exp)]
 params_ = mapM param_
 
-mkProperty :: Prop -> QC.Property
-mkProperty (QP ForallQ xs p)
+mkProperty :: Module -> Prop -> QC.Property
+mkProperty mod (QP ForallQ xs p)
   = QC.forAll anEnv $ \env ->
-      let ?env = Map.fromList env
-        in val2bool $ eval p
+      val2bool $ eval mod env p
   where anEnv = params_ xs
-mkProperty _other = bug "mkProperty: unsupported property"
+mkProperty _mod _other = bug "mkProperty: unsupported property"
 
-checkProp :: Prop -> IO ()
-checkProp p
-  | supProp p = QC.quickCheck $ mkProperty p
+checkProp :: Module -> Prop -> IO ()
+checkProp mod p
+  | supProp p = QC.quickCheck $ mkProperty mod p
   | otherwise = putStrLn "Sorry, property not supported :-("
