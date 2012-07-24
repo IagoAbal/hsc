@@ -1,11 +1,14 @@
 
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Core.Prop where
 
 import Core.Syntax.AST
 import Core.Syntax.Built
+import Core.Syntax.FTV
+import Core.Syntax.Subst1.Direct ( substExp )
 
 
 import Data.Data ( Data )
@@ -56,6 +59,11 @@ cleanup = G.transform f . removeUncons
         f (isEq -> Just (e1,e2))
           | e1 == e2 = mkTrue
         f t = t
+
+instFTV :: Tau -> Exp -> Exp
+instFTV ty e = substExp [] s e
+  where e_ftv = ftvOf e
+        s = map (,ty) $ Set.toList e_ftv
 
 -- * TCCs
 
