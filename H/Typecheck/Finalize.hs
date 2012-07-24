@@ -197,8 +197,9 @@ finExp (TyApp (Op (BoolOp bop)) [ty])
   where check_eq_ty
           | isJust (isFunTy ty)
           = throwError $ text "Extensionality only applies inside a logical context"
-          | isVarTy ty
-          = throwError $ text "Equality operators cannot be applied to arbitrary types"
+  -- TODO: Eq-types
+--           | isVarTy ty
+--           = throwError $ text "Equality operators cannot be applied to arbitrary types"
           | otherwise  = return ()
 finExp (TyApp e tys) = liftM2 TyApp (finExp e) (finTypes tys)
 finExp (Lam mb_loc pats rhs)
