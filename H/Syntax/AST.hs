@@ -622,6 +622,7 @@ data BuiltinTyCon = UnitTyCon
 
 
 data TyCon p
+    -- Eventually we may need to add tyConParams to AlgTyCon
   = AlgTyCon {
       tyConName   :: TyName p
     , tyConCons   :: [Con p]

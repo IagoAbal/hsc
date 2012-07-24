@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 
@@ -16,6 +17,8 @@ import Pretty
 import Unique
 
 import Control.Monad.Error
+
+#include "bug.h"
 
 
 map_forall :: Monad m => [Var Ti] -> m [Prop Ti] -> m [Prop Ti]
@@ -85,7 +88,7 @@ coerceTypes (ty1:tys1) (ty2:tys2) = do
   ty1_ty2_POs <- map_forall [t] $ coerce (Var t) ty1 ty2
   tys1_tys2_POs <- coerceTypes tys1 tys2
   return (ty1_ty2_POs ++ tys1_tys2_POs)
-coerceTypes _tys1 _tys2 = undefined -- bug
+coerceTypes _tys1 _tys2 = bug "coerceTypes"
 
 -- For now we implement a basic version of coercion between ConTy types
 -- so List Int ~xs~> List Nat will be equivalent to "forall x:Int, Int ~x~> Nat".
@@ -110,4 +113,4 @@ coerceTupleTys _e = go
           ds2_x <- instDoms v_x d2 ds2
           ds1_ds2_POs <- go ds1_x ds2_x
           return (d1_d2_POs ++ ds1_ds2_POs)
-        go _ds1      _ds2    = undefined -- impossible
+        go _ds1      _ds2    = impossible

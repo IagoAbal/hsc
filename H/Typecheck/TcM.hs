@@ -53,7 +53,7 @@ lookupTyCon tn = do
   tyConEnv <- asks tcTyConEnv
   case Map.lookup tn tyConEnv of
       Just tc -> return tc
-      Nothing -> error $ "lookupTyCon tn=" ++ prettyPrint tn ++ " tyConEnv=" ++ concatMap (prettyPrint . fst) (Map.toList tyConEnv)
+      Nothing -> error $ "Typecheck.lookupTyCon tn=" ++ prettyPrint tn ++ " tyConEnv=" ++ concatMap (prettyPrint . fst) (Map.toList tyConEnv)
 
 
 lookupVar :: Name -> TcM (Var Tc)
@@ -61,7 +61,7 @@ lookupVar n = do
   varEnv <- asks tcVarEnv
   case Map.lookup n varEnv of
       Just v  -> return v
-      Nothing -> error $ "lookupVar  n=" ++ prettyPrint n ++ " varEnv=" ++ concatMap (prettyPrint . fst) (Map.toList varEnv)
+      Nothing -> error $ "Typecheck.lookupVar  n=" ++ prettyPrint n ++ " varEnv=" ++ concatMap (prettyPrint . fst) (Map.toList varEnv)
 
 lookupTyVar :: Name -> TcM TyVar
 lookupTyVar n = do

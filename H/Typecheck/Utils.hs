@@ -1,3 +1,5 @@
+
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs, ScopedTypeVariables, FlexibleContexts #-}
 
 module H.Typecheck.Utils where
@@ -19,6 +21,8 @@ import Control.Monad
 import Control.Monad.Error
 import Data.Set ( Set )
 import qualified Data.Set as Set
+
+#include "bug.h"
 
 
 getFreeTyVars :: [Type c Tc] -> TcM (Set TyVar)
@@ -104,7 +108,7 @@ instFunTy (Dom (Just p) _ _,rang) e
       let f prop | bsPat p `Set.disjointWith` fvExp prop = Nothing
                  | otherwise = Just $ Let [PatBind Nothing p (mkExpRhs e_ty e)] prop
       tpType f rang
-instFunTy _other _e = undefined -- impossible
+instFunTy _other _e = impossible
 
 patExpSubst :: forall p. IsTc p =>
                 Exp p
@@ -153,7 +157,7 @@ instFunTyWithPat (Dom (Just dpat) _ _,rang)   lpat = do
                     ]
   rang' <- subst_type s [] rang >>= letType binds
   traceDoc (text "instFunTyWithPat rang'=" <+> pretty rang') $ return rang'
-instFunTyWithPat _other _lpat = undefined -- impossible
+instFunTyWithPat _other _lpat = impossible
 
 patPatSubst :: forall m p. (MonadUnique m, IsTc p) =>
                  Pat p   -- ^ argument pattern
@@ -205,7 +209,7 @@ patPatSubst pat_lam pat_dom target_fv = traceDoc (text "patPatSubst" <+> pretty 
           -- just check preconditions... change it by an earlier assert
         get_subst _acc lpat dpat
          | not (matchablePats lpat dpat) = error "bug found!"
-        get_subst _acc _lpat _dpat = undefined -- impossible
+        get_subst _acc _lpat _dpat = impossible
           -- Here 'dpat' (hence, 'pat_dom') bounds some variable that is
           -- being used in rang but such (sub-)expression is ignored by
           -- 'pat_lam'.
@@ -286,7 +290,7 @@ instDoms e (Dom (Just pat) _ _)     ds
       let f prop | bsPat pat `Set.disjointWith` fvExp prop = Nothing
                  | otherwise = Just $ Let [PatBind Nothing pat (mkExpRhs e_ty e)] prop
       tpDoms f ds
-instDoms _e _other _ds = undefined -- impossible
+instDoms _e _other _ds = impossible
 
 instPredTyProp :: MonadUnique m =>
                     Exp Ti -> Pat Ti -> Tau Ti -> Maybe (Prop Ti) -> m (Maybe (Prop Ti))
@@ -336,7 +340,7 @@ tcExprType (EnumFromTo _ _) = return $ ListTy intTy
 tcExprType (EnumFromThenTo _ _ _) = return $ ListTy intTy
 tcExprType (Coerc _ _ sig) = return sig
 tcExprType (QP _ _ _) = return boolTy
-tcExprType _other = undefined -- impossible
+tcExprType _other = impossible
 
 tcExprTau :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> m (Tau p)
 tcExprTau = tcExprType >=> return . type2tau
@@ -379,7 +383,7 @@ tcPatType (WildPat wild_var)
   = return $ type2tau $ varType wild_var
 tcPatType (AsPat x _) = return $ type2tau $ varType x
 -- tcPatType (SigPat _ tau) = return tau
-tcPatType _other = undefined -- impossible
+tcPatType _other = impossible
 
 
 tcRhsType :: IsTc p => Rhs p -> Tau p

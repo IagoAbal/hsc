@@ -506,7 +506,7 @@ isLit _other               = False
 
 getLit :: Equation -> Integer
 getLit (E _ (LitPat (IntLit n):_) _) = n
-getLit _other                        = undefined -- bug
+getLit _other                        = bug "not a literal"
 
 isTuple :: Equation -> Bool
 isTuple (E _ (TuplePat _ _:_) _) = True
@@ -518,7 +518,7 @@ isCon _other                   = False
 
 getCon :: Equation -> TcCon Ti
 getCon (E _ (ConPat _ con _:_) _) = con
-getCon _other                     = undefined -- bug
+getCon _other                     = bug "not a constructor"
 
 coType :: Type c Ti -> CoM ()
 coType (VarTy _) = return ()

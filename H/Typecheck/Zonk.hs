@@ -177,7 +177,7 @@ zonkType mty@(MetaTy mtv) = do -- traceDoc (text "zonkType-MetaTy mty=" <+> pret
         writeMetaTyVar mtv ty'   -- "Short out" multiple hops
         return $ tau2type ty'
 zonkType (ForallTy tvs ty) = liftM (ForallTy tvs) $ zonkType ty
-zonkType _other = undefined -- impossible
+zonkType _other = impossible
 
 zonkDoms :: MonadIO m => [Dom Tc] -> m [Dom Tc]
 zonkDoms = mapM zonkDom
@@ -191,7 +191,7 @@ zonkDom (Dom (Just pat) ty mb_prop) = do
   ty' <- zonkType ty
   mb_prop' <- T.mapM zonkExp mb_prop
   return (Dom (Just pat') ty' mb_prop')
-zonkDom _other = undefined -- impossible
+zonkDom _other = impossible
 
 ---
 
