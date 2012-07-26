@@ -31,6 +31,7 @@ supType :: Type c -> Bool
 supType ty | ty == boolTy = True
 supType ty | ty == intTy = True
 supType ty | ty == natTy = True
+supType ty | isSynTy ty = supType $ expandSyn ty
 supType (ListTy ty) = supType ty
 supType (PredTy (VarPat _) ty (Just prop)) = supType ty && supExp prop
 supType _other = False

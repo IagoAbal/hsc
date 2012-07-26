@@ -40,6 +40,7 @@ typeGen :: (?mod :: Module) => Type c -> QC.Gen Exp
 typeGen ty | ty == boolTy = aBool
            | ty == intTy  = anInt
            | ty == natTy  = aNat
+typeGen ty | isSynTy ty = typeGen $ expandSyn ty
 typeGen (ListTy ty) = aList ty
 typeGen (PredTy (VarPat x) ty (Just prop)) = aPredTy x ty prop
 typeGen _ty = bug "unsupported type"
