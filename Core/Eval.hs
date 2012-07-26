@@ -17,6 +17,7 @@ import Pretty
 import Unique ( MonadUnique(..), Unique, evalUnique, mkSupply )
 
 import Control.Monad.State
+import Data.Functor ( (<$>) )
 import Data.Map ( Map )
 import qualified Data.Map as Map
 import Data.Maybe ( isNothing )
@@ -107,6 +108,8 @@ match (List ty (x:xs)) (ConPat _ _ [y,ys])
   = Just [match_var x y,match_var (List ty xs) ys]
 match (splitApp -> (TyApp (Con con1) _,es)) (ConPat _ con2 ps)
   | con1 == con2 = Just $ zipWith match_var es ps
+match (splitApp -> (Con con1,es)) (ConPat _ con2 ps)
+  | con1 == con2 = Just $ zipWith match_var es ps
 match (Tuple _ es) (TuplePat _ ps) = Just $ zipWith match_var es ps
 match _p1 _p2 = Nothing
 
@@ -121,6 +124,31 @@ redCase scrut (Alt pat (Rhs _ e):alts)
           mapM_ (uncurry heapAdd) bs
           red' e
 
+matchPat :: Exp -> Pat -> Maybe [(Var,Exp)]
+matchPat e (VarPat x) = Just [(x,e)]
+matchPat (Lit l1) (LitPat l2) | l1 == l2 = Just []
+matchPat (List _ []) (ConPat _ _ []) = Just []
+matchPat (InfixApp x (OpExp _ CONSOp) xs) (ConPat _ _ [y,ys]) = do
+  bs1 <- matchPat x y
+  bs2 <- matchPat xs y
+  return $ bs1 ++ bs2
+matchPat (List ty (x:xs)) (ConPat _ _ [y,ys]) = do
+  bs1 <- matchPat x y
+  bs2 <- matchPat (List ty xs) y
+  return $ bs1 ++ bs2
+matchPat (splitApp -> (TyApp (Con con1) _,es)) (ConPat _ con2 ps)
+  | con1 == con2 = concat <$> zipWithM matchPat es ps
+matchPat (Tuple _ es) (TuplePat _ ps) = concat <$> zipWithM matchPat es ps
+matchPat _p1 _p2 = Nothing
+
+redLetP :: Pat -> Exp -> Prop -> EvalM Prop
+redLetP pat expr prop
+  = case matchPat expr pat of
+        Nothing -> return mkFalse
+        Just bs -> do
+          mapM_ (uncurry heapAdd) bs
+          red' prop
+
 redEq :: Exp -> Exp -> EvalM Exp
 redEq e1 e2 = do
   e1' <- red' e1
@@ -128,9 +156,13 @@ redEq e1 e2 = do
 --   traceDoc (text "redEq... e1=" <> pretty e1' <+> text "e2=" <> pretty e2') $ do
   go e1' e2'
   where go (Lit l1) (Lit l2) = return $ bool2exp $ l1 == l2
+        go (Tuple _ es1) (Tuple _ es2) = do
+          es_eq <- zipWithM (\e1 e2 -> liftM val2bool $ redEq e1 e2) es1 es2
+          return $ bool2exp $ and es_eq
         go (splitApp -> (TyApp (Con _) _,[])) (List _ []) = return mkTrue
         go (splitApp -> (TyApp (Con _) _,[])) (List _ (_:_)) = return mkFalse
         go (List _ []) (splitApp -> (TyApp (Con _) _,[])) = return mkTrue
+        go (List _ (_:_)) (splitApp -> (TyApp (Con _) _,[])) = return mkFalse
         go (List _ []) (InfixApp _ (OpExp _ CONSOp) _) = return mkFalse
         go (List _ []) (List _ []) = return mkTrue
         go (List t1 (x:xs)) (List t2 (y:ys)) = do
@@ -139,6 +171,11 @@ redEq e1 e2 = do
           if x' == y' then redEq (List t1 xs) (List t2 ys)
                       else return mkFalse
         go (List t2 (y:ys)) (InfixApp x (OpExp _ CONSOp) xs) = do
+          x' <- red x
+          y' <- red y
+          if x' == y' then redEq xs (List t2 ys)
+                      else return mkFalse
+        go (List t2 (y:ys)) (splitApp -> (TyApp (Con _) _,[x,xs])) = do
           x' <- red x
           y' <- red y
           if x' == y' then redEq xs (List t2 ys)
@@ -153,19 +190,28 @@ redEq e1 e2 = do
           y' <- red y
           if x' == y' then redEq xs ys
                       else return mkFalse
-        go (splitApp -> (TyApp (Con con1) _,[])) (splitApp -> (TyApp (Con con2) _,[]))
-          = return $ bool2exp $ con1 == con2
+        go (splitApp -> (TyApp (Con con1) _,es1)) (splitApp -> (TyApp (Con con2) _,es2))
+          | con1 == con2 = do
+            es_eq <- zipWithM (\e1 e2 -> liftM val2bool $ redEq e1 e2) es1 es2
+            return $ bool2exp $ and es_eq
+          | otherwise = return mkFalse
+        go (splitApp -> (Con con1,es1)) (splitApp -> (Con con2,es2))
+          | con1 == con2 = do
+            es_eq <- zipWithM (\e1 e2 -> liftM val2bool $ redEq e1 e2) es1 es2
+            return $ bool2exp $ and es_eq
+          | otherwise = return mkFalse
         go e1 e2 = traceDoc (text "redEq... e1=" <> pretty e1 <+> text "e2=" <> pretty e2) $ error "unsupported"
+
+redNot e1 | e1 == mkTrue  = mkFalse
+redNot e1 | e1 == mkFalse = mkTrue
+redNot _e1 = bug "red"
 
 red :: Exp -> EvalM Value
 red (Var x) = redVar x
 red (Par x) = redVar x
 red e@(Con _) = return e
 red e@(Lit _) = return e
-red (PrefixApp (OpExp [] (BoolOp NotB)) e) = liftM not_ $ red e
-  where not_ e1 | e1 == mkTrue  = mkFalse
-        not_ e1 | e1 == mkFalse = mkTrue
-        not_ _e1 = bug "red"
+red (PrefixApp (OpExp [] (BoolOp NotB)) e) = liftM redNot $ red e
 red (PrefixApp (OpExp [] (IntOp NegI)) e) = liftM neg_ $ red e
   where neg_ (Lit (IntLit n)) = mkInt $ -n
         neg_ _e1 = bug "red"
@@ -205,7 +251,7 @@ red (InfixApp e1 (OpExp [ty] (BoolOp bop)) e2)
                                   -- should be aware of type synonyms
   | bop `elem` [EqB, NeqB] && isNothing (isFunTy ty) = cmp_ bop e1 e2
   where cmp_ EqB   = redEq
-        cmp_ NeqB  = bug "TODO"
+        cmp_ NeqB  = \e1 e2 -> liftM redNot $ redEq e1 e2
         cmp_ _     = bug "red"
 red (InfixApp e1 (OpExp [] (IntOp iop)) e2) = do
   Lit (IntLit i1) <- red' e1
@@ -252,6 +298,9 @@ red (EnumFromThenTo e1 e2 e3) = do
   Lit (IntLit i3) <- red e3
   return $ mkIntList [i1,i2..i3]
 red (Coerc e _) = red e
+red (LetP pat e p) = do
+  e' <- red e
+  redLetP pat e' p
 red e@(QP _ _ _) = return e
 red e = traceDoc (text "red e=" <+> pretty e) $ error "unsupported"
 
