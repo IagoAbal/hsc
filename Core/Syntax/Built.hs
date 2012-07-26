@@ -1,5 +1,6 @@
 
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Core.Syntax.Built where
@@ -65,6 +66,9 @@ mkLet binds e = case binds' of
 
 mkIntList :: [Integer] -> Exp
 mkIntList = List (ListTy intTy) . map mkInt
+
+instCon :: Con -> [Tau] -> [Exp] -> Exp
+instCon con = mkApp . mkTyApp (Con con)
 
 -- ** Prop
 
@@ -140,6 +144,15 @@ mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
         hypoProp (Facts hs)    = hypos hs
 
 -- * Types
+
+typeConstrs :: Module -> TyCon -> [Con]
+typeConstrs Module{modDecls} (AlgTyCon (UserTyCon d)) = go modDecls
+  where go [] = bug "typeConstrs"
+        go (DataDecl d1 _ condecls:_)
+          | d == d1 = map mkCon condecls
+        go (_:ds) = go ds
+        mkCon (ConDecl x _) = UserCon x
+typeConstrs _ _ = bug "typeConstrs"
 
 isTau :: Sigma -> Bool
 isTau (ForallTy _ _) = False
