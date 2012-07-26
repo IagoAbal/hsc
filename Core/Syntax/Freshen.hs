@@ -33,9 +33,12 @@ freshenBndrs xs = do
   return (xs',Map.fromList $ zip xs xs')
 
 freshenBinds :: (?varMap :: Var2Var, MonadUnique m) => [Bind] -> m ([Bind],Var2Var)
-freshenBinds binds = do
-  (binds',lv2v) <- liftM unzip $ mapM freshenBind binds
-  return (binds',Map.fromList lv2v)
+freshenBinds [] = return ([],Map.empty)
+freshenBinds (b:bs) = do
+  (b',(f,f')) <- freshenBind b
+  let ?varMap = Map.insert f f' ?varMap
+  (bs',v2v) <- freshenBinds bs
+  return (b':bs',Map.insert f f' v2v)
 
 freshenBind :: (?varMap :: Var2Var, MonadUnique m) => Bind -> m (Bind,(Var,Var))
 freshenBind (FunBind NonRec f tvs xs rhs) = do
@@ -43,13 +46,13 @@ freshenBind (FunBind NonRec f tvs xs rhs) = do
   rhs' <- let ?varMap = new_xs `Map.union` ?varMap
             in freshenRhs rhs
   f' <- freshenBndr f
-  return (FunBind NonRec f tvs xs' rhs',(f,f'))
+  return (FunBind NonRec f' tvs xs' rhs',(f,f'))
 freshenBind (FunBind Rec f tvs xs rhs) = do
   (xs',new_xs) <- freshenBndrs xs
   f' <- freshenBndr f
   rhs' <- let ?varMap = Map.insert f f' $ new_xs `Map.union` ?varMap
             in freshenRhs rhs
-  return (FunBind Rec f tvs xs' rhs',(f,f'))
+  return (FunBind Rec f' tvs xs' rhs',(f,f'))
 
 freshenExps :: (?varMap :: Var2Var, MonadUnique m) => [Exp] -> m [Exp]
 freshenExps = mapM freshenExp
