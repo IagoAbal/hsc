@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 
 module Main where
@@ -34,6 +35,7 @@ data HC
   = Typecheck { srcFile :: FilePath }
   | List { coreFile :: FilePath, index :: Maybe Int }
   | Check { coreFile :: FilePath, checkType :: CheckType, tccNum :: Int }
+  | Show { coreFile :: FilePath }
     deriving (Typeable,Data)
 
 data CheckType = QuickCheck | SMTCheck
@@ -46,7 +48,7 @@ data CheckType = QuickCheck | SMTCheck
 instance Default CheckType where
   def = QuickCheck
 
-typecheck_, list_, check_, hc_ :: HC
+typecheck_, list_, check_, show_, hc_ :: HC
 
 typecheck_ = Typecheck{ srcFile = def &= argPos 0 &= typ "FILE" }
                &= help "Typechecker"
@@ -67,7 +69,10 @@ check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
               }
           &= help "Check TCCs"
 
-hc_ = modes [typecheck_ &= auto, list_, check_]
+show_ = Show{ coreFile = def &= argPos 0 &= typ "FILE" }
+          &= help "Show Core"
+
+hc_ = modes [typecheck_ &= auto, list_, check_, show_]
         &= program "hc"
 
 
@@ -98,6 +103,10 @@ executeCommand Check{coreFile,checkType,tccNum} = do
                       QuickCheck -> CertQuick.checkProp tcc_PO
                       SMTCheck   -> CertSMT.checkProp tcc_PO
         where tcc_PO = Core.tccGProp tcc
+executeCommand Show{coreFile} = do
+  m::Core.Module <- Binary.decodeFile coreFile
+  less $ render $ pretty m
+
 
 main :: IO ()
 main = executeCommand =<< cmdArgs hc_
