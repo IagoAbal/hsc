@@ -156,9 +156,9 @@ unifyVar dir mtv ty = do
   mb_ty1 <- readMetaTyVar mtv
   case mb_ty1 of
       Nothing  -> do
---         ty_z <- zonkType ty
+        ty_z <- zonkType ty
 --         traceDoc (text "unifyVar by unifyUnboundVar") $ do
-        unifyUnboundVar dir mtv ty (mtvOf ty)
+        unifyUnboundVar dir mtv ty_z (mtvOf ty_z)
       Just ty1 -> flipByDirection dir unifyKappa ty1 ty
 
 -- TODO expand type synonyms if an occur check is detected (see GHC code)
