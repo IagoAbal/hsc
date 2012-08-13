@@ -9,6 +9,8 @@ length (_::xs) = 1 + length xs
 map f []      = []
 map f (x::xs) = f x :: map f xs
 
+lemma map_length = forall f xs, length (map f xs) == length xs
+
 data Vector a = Vec {n:Nat} {xs:[a]|length xs == n}
 
 size : forall a. Vector a -> Nat
@@ -19,8 +21,8 @@ mapVec f (Vec n xs) = Vec n (map f xs)
 
 -- FIX BUG
 get : forall a. {u:Vector a} -> {n:Nat|n < size u} -> a
--- get (Vec _ xs) k = go xs k
-get (Vec _ xs) = go xs
+get (Vec _ xs) k = go xs k
+-- get (Vec _ xs) = go xs
   where go (y::ys) i
           | i == 0 = y
           | else   = go ys (i-1)

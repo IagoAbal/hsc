@@ -1,7 +1,7 @@
 
 module ListSet where
 
-elem : Int -> [Int] -> Bool
+elem : forall a. a -> [a] -> Bool
 elem a [] = False
 elem a (x::xs)
   | a == x = True
@@ -13,13 +13,13 @@ count a (x::xs)
   | a == x = 1 + count a xs
   | else   = count a xs
 
-delete1 : Int -> [Int] -> [Int]
+delete1 : forall a. a -> [a] -> [a]
 delete1 a [] = []
 delete1 a (x::xs)
   | a == x = xs
   | else   = x :: delete1 a xs
 
-delete : Int -> [Int] -> [Int]
+delete : forall a. a -> [a] -> [a]
 delete a [] = []
 delete a (x::xs)
   | a == x = delete a xs
@@ -35,9 +35,11 @@ all p (x::xs)
   | p x  = all p xs
   | else = False
 
-nub : [Int] -> [Int]
+nub : forall a. [a] -> [a]
 nub []      = []
 nub (x::xs) = x :: nub (delete x xs)
+
+lemma nub_elem = forall x xs, ~(elem x xs) ==> nub(x::xs) == x::nub xs
 
 theorem nub_idempotent = forall xs, nub (nub xs) == nub xs
 

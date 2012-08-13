@@ -1,22 +1,22 @@
 
-module QSort where
+module QuickSort where
 
 
 not p x = ~(p x)
 
-elem : Int -> [Int] -> Bool
+elem : forall a. a -> [a] -> Bool
 elem a [] = False
 elem a (x::xs)
   | a == x = True
   | else   = elem a xs
 
-delete1 : Int -> [Int] -> [Int]
+delete1 : forall a. a -> [a] -> [a]
 delete1 a [] = []
 delete1 a (x::xs)
   | a == x = xs
   | else   = x :: delete1 a xs
 
-permutation : [Int] -> [Int] -> Bool
+permutation : forall a. [a] -> [a] -> Bool
 permutation [] [] = True
 permutation [] (_::_) = False
 permutation (_::_) [] = False
