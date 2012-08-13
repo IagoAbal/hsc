@@ -142,7 +142,8 @@ substMaybeExp  s (Just e) = Just $ substExp s e
 substExp :: Subst1 -> Exp -> Exp
 substExp Subst1{substVarEnv} e@(Var x)
   = maybe e id $ Map.lookup x substVarEnv
-substExp _s par@(Par _) = par
+substExp Subst1{substVarEnv} e@(Par x)
+  = maybe e id $ Map.lookup x substVarEnv
 substExp _s con@(Con _) = con
 substExp _s lit@(Lit _) = lit
 substExp s (PrefixApp op e) = PrefixApp (substOpExp s op) (substExp s e)

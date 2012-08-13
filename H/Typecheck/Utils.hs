@@ -304,6 +304,7 @@ instPredTyProp  e pat _ty mb_prop
 
 tcExprType :: (MonadUnique m, MonadError Doc m, IsTc p) => Exp p -> m (Sigma p)
 tcExprType (Var x) = return $ sortOf x
+tcExprType (Par x) = return $ sortOf x
 tcExprType (Con con) = return $ sortOf con
 tcExprType (Op op) = return $ sortOf op
 tcExprType (Lit _) = return intTy

@@ -38,7 +38,7 @@ fvMaybeExp = maybe Set.empty fvExp
 
 fvExp :: Exp -> Set Var
 fvExp (Var x)   = Set.singleton x
-fvExp (Par _)   = Set.empty
+fvExp (Par x)   = Set.singleton x
 fvExp (Con _)   = Set.empty
 fvExp (Lit _)   = Set.empty
 -- fvExp Undefined = Set.empty
