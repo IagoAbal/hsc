@@ -97,7 +97,7 @@ unifyKappa (MetaTy mtv1) ty2 = unifyVar LeftToRight mtv1 ty2
 unifyKappa ty1 (MetaTy mtv2) = unifyVar RightToLeft mtv2 ty1
 
 unifyKappa (FunTy d1 r1) (FunTy d2 r2) = do
-  unifyKappa (dom2type d1) (dom2type d2)
+  unifyKappa (dom2type d2) (dom2type d1)
   unify r1 r2
 unifyKappa (ListTy ty1) (ListTy ty2) = unifyKappa ty1 ty2
 unifyKappa (TupleTy ds1) (TupleTy ds2)
