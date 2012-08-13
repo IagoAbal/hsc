@@ -394,7 +394,7 @@ instance Pretty TccHypoThing where
   pretty (Facts props)
     = vcat $ map pretty props
 
-instance Pretty TCC where
+instance Pretty ProofObligation where
   pretty (CoercionTCC srcCtxt _propCtxt expr act_ty exp_ty _cprop gprop)
     = text "COERCION TCC"
     $$ brackets (text srcCtxt)
@@ -408,7 +408,15 @@ instance Pretty TCC where
     $$ brackets (text srcCtxt)
     $$ text "|------------------------------------------------------"
     $$ pretty gprop
+  pretty (GoalPO srcCtxt gname gtype formula)
+    = pp_gtype <+> pretty gname
+    $$ brackets (text srcCtxt)
+    $$ text "|------------------------------------------------------"
+    $$ pretty formula
+    where pp_gtype = text $ case gtype of
+                                TheoremGoal -> "THEOREM"
+                                LemmaGoal   -> "LEMMA"
 
-instance Pretty (IntMap TCC) where
-  pretty tccMap = vcat $ map (blankline . pp_tcc) $ IMap.toList tccMap
-    where pp_tcc (i,tcc) = int i <> char '#' $$ pretty tcc
+instance Pretty (IntMap ProofObligation) where
+  pretty poMap = vcat $ map (blankline . pp_PO) $ IMap.toList poMap
+    where pp_PO (i,po) = int i <> char '#' $$ pretty po

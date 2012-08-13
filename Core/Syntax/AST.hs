@@ -126,7 +126,7 @@ type TyParams = [TyVar]
 data Module = Module {
       modName :: ModuleName
     , modDecls :: [Decl]
-    , modTCCs :: IntMap TCC
+    , modPOs :: IntMap ProofObligation
     }
     deriving(Eq,Typeable,Data)
 
@@ -758,20 +758,28 @@ data TccHypoThing = ForAll [Var]
 
 type TccPropCtxt = Seq TccHypoThing
 
-data TCC
+type TCC = ProofObligation
+
+data ProofObligation
   = CoercionTCC {
-      tccSrcCtxt  :: !String
-    , tccPropCtxt :: TccPropCtxt
-    , tccExpr     :: Exp
-    , tccActType  :: Sigma
-    , tccExpType  :: Sigma
-    , tccCProp    :: Prop
-    , tccGProp    :: Prop
-    }
-  | CompletenessTCC {
-      tccSrcCtxt  :: !String
-    , tccPropCtxt :: TccPropCtxt
-    , tccCProp    :: Prop
-    , tccGProp    :: Prop
+        poSrcCtxt   :: !String
+      , tccPropCtxt :: TccPropCtxt
+      , tccExpr     :: Exp
+      , tccActType  :: Sigma
+      , tccExpType  :: Sigma
+      , tccProp     :: Prop
+      , poFormula   :: Prop
+      }
+    | CompletenessTCC {
+        poSrcCtxt   :: !String
+      , tccPropCtxt :: TccPropCtxt
+      , tccProp     :: Prop
+      , poFormula   :: Prop
+      }
+    | GoalPO {
+        poSrcCtxt  :: !String
+      , poGoalName :: !Name
+      , poGoalType :: !GoalType
+      , poFormula  :: Prop
     }
     deriving(Eq,Typeable,Data)

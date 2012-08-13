@@ -40,10 +40,21 @@ type DsgM = H () () ()
 
 
 dsgModule :: Module Ti -> ModTCCs -> DsgM Core.Module
-dsgModule (Module _ modname decls) tccs
-  = Core.Module (dsgModuleName modname) <$> dsgDecls decls <*> dsg_tccs tccs
-  where dsg_tccs tccs1 = build_tcc_map <$> dsgTCCs tccs1
-        build_tcc_map = IMap.fromList . zip [1..]
+dsgModule (Module _ modname decls) tccs = do
+  decls' <- dsgDecls decls
+  tccs' <- dsgTCCs tccs
+  let goalPOs = collectGoalPOs decls'
+  return $ Core.Module (dsgModuleName modname) decls' $ build_PO_map (tccs' ++ goalPOs)
+  where build_PO_map = IMap.fromList . zip [1..]
+
+-- TODO
+-- Do this at other point so we can get better contextual information
+-- I think I should collect this POs during Coerce phase, 
+collectGoalPOs :: [Core.Decl] -> [Core.ProofObligation]
+collectGoalPOs [] = []
+collectGoalPOs (Core.GoalDecl gtype gname _typs prop:ds) =
+  Core.GoalPO (render $ pretty gname) gname gtype prop : collectGoalPOs ds
+collectGoalPOs (_:ds) = collectGoalPOs ds
 
 dsgModuleName :: ModuleName -> Core.ModuleName
 dsgModuleName (ModName n) = Core.ModName n

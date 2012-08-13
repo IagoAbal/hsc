@@ -34,7 +34,7 @@ import System.Console.CmdArgs
 data HC
   = Typecheck { srcFile :: FilePath }
   | List { coreFile :: FilePath, index :: Maybe Int }
-  | Check { coreFile :: FilePath, checkType :: CheckType, tccNum :: Int }
+  | Check { coreFile :: FilePath, checkType :: CheckType, index :: Maybe Int }
   | Show { coreFile :: FilePath }
     deriving (Typeable,Data)
 
@@ -65,7 +65,7 @@ check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
                     , SMTCheck   &= explicit &= name "smt"
                                  &= help "SMT verification"
                     ]
-              , tccNum = def &= argPos 1 &= typ "TCC"
+              , index = def &= typ "RANGE"
               }
           &= help "Check TCCs"
 
@@ -91,18 +91,20 @@ executeCommand Typecheck{srcFile} = do
       Right (m,_,_) -> Binary.encodeFile (srcFile ++ "-core") m
 executeCommand List{coreFile,index=Nothing} = do
   m <- Binary.decodeFile coreFile
-  less $ render $ pretty $ Core.modTCCs m
+  less $ render $ pretty $ Core.modPOs m
 executeCommand List{coreFile,index=Just k} = do
   m <- Binary.decodeFile coreFile
-  putStrLn $ render $ pretty $ Core.modTCCs m IMap.! k
-executeCommand Check{coreFile,checkType,tccNum} = do
+  putStrLn $ render $ pretty $ Core.modPOs m IMap.! k
+executeCommand Check{index=Nothing}
+  = putStrLn "Nothing to do: you could give me a TCC to check."
+executeCommand Check{coreFile,checkType,index=Just i} = do
   m <- Binary.decodeFile coreFile
-  case IMap.lookup tccNum $ Core.modTCCs m of
-      Nothing  -> putStrLn "Error: TCC not found."
-      Just tcc -> case checkType of
-                      QuickCheck -> CertQuick.checkProp tcc_PO
-                      SMTCheck   -> CertSMT.checkProp tcc_PO
-        where tcc_PO = Core.tccGProp tcc
+  case IMap.lookup i $ Core.modPOs m of
+      Nothing -> putStrLn "Error: TCC not found."
+      Just po -> case checkType of
+                     QuickCheck -> CertQuick.checkProp m po_formula
+                     SMTCheck   -> CertSMT.checkProp po_formula
+        where po_formula = Core.poFormula po
 executeCommand Show{coreFile} = do
   m::Core.Module <- Binary.decodeFile coreFile
   less $ render $ pretty m
