@@ -214,6 +214,7 @@ coDecl (GoalDecl loc gtype g_name tvs prop)
   sko_prop <- subst_exp [] (zip tvs sko_tys) prop
   void $ coExp sko_prop (Check boolTy)
 
+-- TODO?: Inner bindings may need a withLetIn context...
 coBinds :: [Bind Ti] -> CoM ()
 coBinds = mapM_ coBind
 
@@ -224,6 +225,7 @@ coBind (PatBind (Just loc) pat rhs@(Rhs rhs_ty _ _))
   (x,rhs_ctxt) <- getCaseLikeCtxt (rhs2exp rhs) (tau2sigma rhs_ty) [pat]
   rhs_ctxt $
     co_Equations [x] [patbin2eq loc pat]
+  -- TODO?: Recursive bindings may need a withLetIn context...
 coBind (FunBind _rec fun fun_tsig tvs matches)
   = inFunBindCtxt (ppQuot fun) $ do
 --   traceDoc (text "coBind-FunBind " <+> pretty fun <+> char ':' <+> pretty fun_ty <+> text "==============") $ do

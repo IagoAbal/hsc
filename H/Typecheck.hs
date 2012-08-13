@@ -676,6 +676,8 @@ tcPat (ConPat None con ps) exp_ty = do
   (ps',ps_env,res_ty) <- checkEq ps con_tau
   exp_ty ?~> res_ty
   return (ConPat typs con' ps',ps_env)
+  -- TODO: Would be safe to take dependent types into account ?
+  --       E.g. Pattern (x,y) where x:Int and y:{n:Int|n>x} ?
 tcPat (TuplePat None ps) exp_ty = do
   mtys <- mapM (\i -> newMetaTy ("a" ++ show i) typeKi) [1..length ps]
   let tup_ty = TupleTy [Dom Nothing mty Nothing | mty <- mtys]
