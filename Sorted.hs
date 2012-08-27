@@ -1,9 +1,10 @@
-{-# LANGUAGE TypeOperators,
-             MultiParamTypeClasses,
-             FlexibleInstances
-             #-}
+
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Sorted where
 
