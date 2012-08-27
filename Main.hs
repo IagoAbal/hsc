@@ -31,7 +31,7 @@ import qualified Data.IntMap as IMap
 import System.Console.CmdArgs
 
 
-data HC
+data HSC
   = Typecheck { srcFile :: FilePath }
   | List { coreFile :: FilePath, index :: Maybe Int }
   | Check { coreFile :: FilePath, checkType :: CheckType, index :: Maybe Int }
@@ -48,7 +48,7 @@ data CheckType = QuickCheck | SMTCheck
 instance Default CheckType where
   def = QuickCheck
 
-typecheck_, list_, check_, show_, hc_ :: HC
+typecheck_, list_, check_, show_, hsc_ :: HSC
 
 typecheck_ = Typecheck{ srcFile = def &= argPos 0 &= typ "FILE" }
                &= help "Typechecker"
@@ -72,11 +72,11 @@ check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
 show_ = Show{ coreFile = def &= argPos 0 &= typ "FILE" }
           &= help "Show Core"
 
-hc_ = modes [typecheck_ &= auto, list_, check_, show_]
-        &= program "hc"
+hsc_ = modes [typecheck_ &= auto, list_, check_, show_]
+         &= program "hsc"
 
 
-executeCommand :: HC -> IO ()
+executeCommand :: HSC -> IO ()
 executeCommand Typecheck{srcFile} = do
   f <- readFile srcFile
   let tc = bindH_ (parseH $ parseModuleWithMode (ParseMode srcFile) f) () () $ \mod_pr ->
@@ -111,4 +111,4 @@ executeCommand Show{coreFile} = do
 
 
 main :: IO ()
-main = executeCommand =<< cmdArgs hc_
+main = executeCommand =<< cmdArgs hsc_
