@@ -3,3 +3,4 @@
 .*\.o-boot$
 .*\.hi$
 .*\.hi-boot$
+dist/.*$
