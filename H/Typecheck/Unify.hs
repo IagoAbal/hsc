@@ -163,11 +163,12 @@ unifyVar dir mtv ty = do
 
 -- TODO expand type synonyms if an occur check is detected (see GHC code)
 unifyUnboundVar :: Direction -> MetaTyVar -> Tau Tc -> Set MetaTyVar -> TcM ()
-unifyUnboundVar  dir mtv1 ty@(MetaTy mtv2) _ty_mtvs = do
-  mb_ty2 <- readMetaTyVar mtv2
-  case mb_ty2 of
-      Nothing  -> writeMetaTyVar mtv1 ty
-      Just ty2 -> flipByDirection dir unifyKappa (MetaTy mtv1) ty2
+unifyUnboundVar  dir mtv1 ty@(MetaTy mtv2) _ty_mtvs
+  | mtv1 == mtv2 = return ()
+--   mb_ty2 <- readMetaTyVar mtv2
+--   case mb_ty2 of
+--       Nothing  -> writeMetaTyVar mtv1 ty
+--       Just ty2 -> flipByDirection dir unifyKappa (MetaTy mtv1) ty2
 unifyUnboundVar  dir mtv  (PredTy _ ty1 _)   ty_mtvs
   | mtv `Set.member` ty_mtvs = flipByDirection dir unifyKappa (MetaTy mtv) ty1
 unifyUnboundVar _dir mtv  ty                 ty_mtvs
