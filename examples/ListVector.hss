@@ -19,6 +19,8 @@ size (Vec n _) = n
 mapVec : forall a b. (a -> b) -> {u:Vector a} -> {v:Vector b|size v == size u}
 mapVec f (Vec n xs) = Vec n (map f xs)
 
+foo v | size v >= 0 = 1
+
 -- FIX BUG
 get : forall a. {u:Vector a} -> {n:Nat|n < size u} -> a
 get (Vec _ xs) k = go xs k
@@ -27,10 +29,11 @@ get (Vec _ xs) k = go xs k
           | i == 0 = y
           | else   = go ys (i-1)
 
-
+{- JUST A TEST
 get1 : {u:Vector Int} -> {n:Nat|n < size u} -> Int
 get1 (Vec _ xs) = go xs
   where go : {(_::_):[Int]} -> {n:Nat|n>10} -> Int
         go (y::ys) i
           | i == 0 = y
           | else   = go ys (i-1)
+-}

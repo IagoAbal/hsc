@@ -1,0 +1,134 @@
+
+module Prelude where
+
+id : forall a. a -> a
+id x = x
+
+const : forall a b. a -> b -> a
+const x _ =  x
+
+flip : forall a b c. (a -> b -> c) -> b -> a -> c
+flip f x y =  f y x
+
+max : {a:Int} -> {b:Int} -> {m:Int|(m == a || m == b) && m>=a && m>=b}
+max a b | a > b = a
+        | else  = b
+
+min : {a:Int} -> {b:Int} -> {m:Int|(m == a || m == b) && m<=a && m<=b}
+min a b | a < b = a
+        | else  = b
+
+head : forall a. {(_::_):[a]} -> a
+head (x::_) = x
+
+tail : forall a. {(_::_):[a]} -> [a]
+tail (_::xs) = xs
+
+last : forall a. {(_::_):[a]} -> a
+last (x::xs) = case xs of
+                    []    -> x
+                    _::_  -> last xs
+
+null : forall a. [a] -> Bool
+null []     =  True
+null (_::_) =  False
+
+length : forall a. [a] -> Nat
+length [] = 0
+length (_::xs) = 1 + length xs
+
+elem : forall a. a -> [a] -> Bool
+elem a [] = False
+elem a (x::xs)
+  | a == x = True
+  | else   = elem a xs
+
+delete1 : forall a. a -> [a] -> [a]
+delete1 a [] = []
+delete1 a (x::xs)
+  | a == x = xs
+  | else   = x :: delete1 a xs
+
+delete : forall a. a -> [a] -> [a]
+delete a [] = []
+delete a (x::xs)
+  | a == x = delete a xs
+  | else   = x :: delete a xs
+
+append : forall a. [a] -> [a] -> [a]
+append [] ys = ys
+append (x::xs) ys = x :: (append xs ys)
+
+lemma append_length = forall xs ys, length (append xs ys) == length xs + length ys
+
+map : forall a b. (a -> b) -> [a] -> [b]
+map f [] = []
+map f (x::xs) = f x :: map f xs
+
+theorem map_id = forall f xs, map f (map f xs) == map f xs
+lemma map_length = forall f xs, length (map f xs) == length xs
+
+foldr : forall a b. (a -> b -> b) -> b -> [a] -> b
+foldr f z []      =  z
+foldr f z (x::xs) =  f x (foldr f z xs)
+
+foldr1 : forall a. (a -> a -> a) -> {(_::_):[a]} -> a
+foldr1 f (x::xs) = f x (foldr f x xs)
+
+foldl : forall a b. (a -> b -> a) -> a -> [b] -> a
+foldl f z []      =  z
+foldl f z (x::xs) =  foldl f (f z x) xs
+
+foldl1 : forall a. (a -> a -> a) -> {(_::_):[a]} -> a
+foldl1 f (x::xs) = foldl f x xs
+
+reverse : forall a. [a] -> [a]
+reverse = foldl (flip (::)) []
+
+all : forall a. (a -> Bool) -> [a] -> Bool
+all p [] = True
+all p (x::xs)
+  | p x  = all p xs
+  | else = False
+
+any : forall a. (a -> Bool) -> [a] -> Bool
+any p [] = False
+any p (x::xs)
+  | p x  = True
+  | else = all p xs
+
+filter : forall a. {p:a -> Bool} -> [a] -> {xs:[a]|all p xs}
+filter p []             = []
+filter p (x::xs) | p x  = x :: filter p xs
+                 | else = filter p xs
+
+nub : forall a. [a] -> [a]
+nub []      = []
+nub (x::xs) = x :: nub (delete x xs)
+
+theorem nub_idempotent = forall xs, nub (nub xs) == nub xs
+lemma nub_elem = forall x xs, ~(elem x xs) ==> nub(x::xs) == x::nub xs
+
+concat : forall a. [[a]] -> [a]
+concat xss = foldr append [] xss
+
+take : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == n}
+take _ []      =  []
+take n (x::xs) =  x :: take (n-1) xs
+
+drop : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == length xs - n}
+drop _ []      =  []
+drop n (_::xs) =  drop (n-1) xs
+
+sum : [Int] -> Int
+sum = foldr (+) 0
+
+product : [Int] -> Int
+product = foldr (*) 1
+
+maximum xs =  foldl1 max xs
+
+minimum xs =  foldl1 min xs
+
+and =  foldr (&&) True
+or =  foldr (||) False

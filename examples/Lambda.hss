@@ -1,0 +1,63 @@
+
+module Lambda where
+
+all : forall a. (a -> Bool) -> [a] -> Bool
+all p [] = True
+all p (x::xs)
+  | p x  = all p xs
+  | else = False
+
+elem : Int -> [Int] -> Bool
+elem a [] = False
+elem a (x::xs)
+  | a == x = True
+  | else   = elem a xs
+
+append : forall a. [a] -> [a] -> [a]
+append [] ys = ys
+append (x::xs) ys = x :: (append xs ys)
+
+delete : forall a. a -> [a] -> [a]
+delete a [] = []
+delete a (x::xs)
+  | a == x = delete a xs
+  | else   = x :: delete a xs
+
+
+data Var = V Nat
+
+data Term = Var Var
+          | Lam Var Term
+          | App Term Term
+
+fv : Term -> [Var]
+fv (Var x) = [x]
+fv (Lam x t) = delete x (fv t)
+fv (App f t) = append (fv f) (fv t)
+
+subst : Var -> Term -> Term -> Term
+subst x e t@(Var y)
+  | x == y = e
+  | else   = t
+subst x e t@(Lam y u)
+  | x == y = t
+  | else   = Lam y (subst x e u)
+subst x e (App f t) = App (subst x e f) (subst x e t)
+
+isNF : Term -> Bool
+isNF (Var _)             = True
+isNF (Lam x t)           = isNF t
+isNF (App (Var _) t)     = isNF t
+isNF (App (Lam _ _) t)   = False
+isNF (App f@(App _ _) t) = isNF f && isNF t
+
+type NF = {t:Term | isNF t}
+
+nf : Term -> NF
+nf (Var x)   = Var x
+nf (Lam x t) = Lam x (nf t)
+nf (App f t) = case f' of
+                   Var _   -> App f' (nf t)
+                   Lam x u -> nf (subst x t u)
+                   App _ _ -> App f' (nf t)
+  where f' = nf f
