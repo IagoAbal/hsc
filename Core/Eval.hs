@@ -159,33 +159,10 @@ redEq e1 e2 = do
         go (Tuple _ es1) (Tuple _ es2) = do
           es_eq <- zipWithM (\e1 e2 -> liftM val2bool $ redEq e1 e2) es1 es2
           return $ bool2exp $ and es_eq
-        go (splitApp -> (TyApp (Con _) _,[])) (List _ []) = return mkTrue
-        go (splitApp -> (TyApp (Con _) _,[])) (List _ (_:_)) = return mkFalse
-        go (List _ []) (splitApp -> (TyApp (Con _) _,[])) = return mkTrue
-        go (List _ (_:_)) (splitApp -> (TyApp (Con _) _,[])) = return mkFalse
-        go (List _ []) (InfixApp _ (OpExp _ CONSOp) _) = return mkFalse
-        go (List _ []) (List _ []) = return mkTrue
-        go (List t1 (x:xs)) (List t2 (y:ys)) = do
-          x' <- red x
-          y' <- red y
-          if x' == y' then redEq (List t1 xs) (List t2 ys)
-                      else return mkFalse
-        go (List t2 (y:ys)) (InfixApp x (OpExp _ CONSOp) xs) = do
-          x' <- red x
-          y' <- red y
-          if x' == y' then redEq xs (List t2 ys)
-                      else return mkFalse
-        go (List t2 (y:ys)) (splitApp -> (TyApp (Con _) _,[x,xs])) = do
-          x' <- red x
-          y' <- red y
-          if x' == y' then redEq xs (List t2 ys)
-                      else return mkFalse
-        go (InfixApp x (OpExp _ CONSOp) xs) (List t2 (y:ys)) = do
-          x' <- red x
-          y' <- red y
-          if x' == y' then redEq xs (List t2 ys)
-                      else return mkFalse
-        go (InfixApp x (OpExp _ CONSOp) xs) (InfixApp y (OpExp _ CONSOp) ys) = do
+        go (isNilList -> True) (isNilList -> True) = return $ mkTrue
+        go (isNilList -> True) (isNilList -> False) = return $ mkFalse
+        go (isNilList -> False) (isNilList -> True) = return $ mkFalse
+        go (isConsList -> Just(x,xs)) (isConsList -> Just(y,ys)) = do
           x' <- red x
           y' <- red y
           if x' == y' then redEq xs ys
