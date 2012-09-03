@@ -223,7 +223,7 @@ tcBinds binds = go [] [] binds
           (b',b_env) <- tc_bind prev_binds b
           extendVarEnv b_env $
             go (prev_binds ++ [b']) (env_acc++b_env) bs
-          
+
 
 tc_bind :: [Bind Tc] -> Bind Rn -> TcM (Bind Tc,[(Name,Var Tc)])
 tc_bind prev_binds (PatBind (Just loc) pat rhs)
@@ -539,7 +539,7 @@ tcAlt (Alt (Just loc) pat rhs) scrut_ty exp_ty
             checkRhs rhs exp_ty
   return (Alt (Just loc) pat' rhs')
 tcAlt _other _ _ = impossible
-  
+
 
 inferRhs :: Rhs Rn -> TcM (Rhs Tc,Tau Tc)
 inferRhs rhs = do
@@ -672,7 +672,7 @@ tcPat (ConPat None con ps) exp_ty = do
   con' <- lookupCon con
   (con_tau,typs) <- instantiate (sortOf con')
   when (funTyArity con_tau /= length ps) $
-    error "constructor's number of arguments does not match the number of patterns..."
+    throwError (text "Wrong number of arguments for constructor" <+> ppQuot con)
   (ps',ps_env,res_ty) <- checkEq ps con_tau
   exp_ty ?~> res_ty
   return (ConPat typs con' ps',ps_env)
