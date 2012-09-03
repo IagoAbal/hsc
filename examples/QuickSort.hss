@@ -2,7 +2,7 @@
 module QuickSort where
 
 
--- not p x = ~(p x)
+not p x = ~(p x)
 
 null : forall a. [a] -> Bool
 null []     =  True
@@ -30,7 +30,7 @@ append : forall a. [a] -> [a] -> [a]
 append [] ys = ys
 append (x::xs) ys = x :: (append xs ys)
 
-
+------------------------------------------------------------------------
 
 permutation : forall a. [a] -> [a] -> Bool
 permutation []      ys = null ys
@@ -45,27 +45,17 @@ sorted (a::b::xs)
   | a <= b = sorted xs
   | else   = False
 
-{-
+
 partition : forall a. {p:a -> Bool}
                       -> [a]
-                      -> { (ys,ns) : ([a],[a]) | all p ys && all (not p) ns }
+                      -> (ys:[a]|all p ys,ns:[a]|all (not p) ns)
 partition p [] = ([],[])
 partition p (x::xs)
   | p x  = (x::ys,ns)
   | else = (ys,x::ns)
   where (ys,ns) = partition p xs
--}
-
-partition : {a:Int}
-            -> [Int]
-            -> { (ls,rs) : ([Int],[Int]) | all (<a) ls && all (>=a) rs }
-partition a [] = ([],[])
-partition a (x::xs)
-  | a > x = (x::ls,rs)
-  | else  = (ls,x::rs)
-  where (ls,rs) = partition a xs
 
 qsort : {p:[Int]} -> {q:[Int] | permutation p q && sorted q}
 qsort [] = []
 qsort (x::xs) = append (qsort ls) (x :: qsort rs)
-  where (ls,rs) = partition x xs
+  where (ls,rs) = partition (<x) xs
