@@ -55,35 +55,42 @@ delete a (x::xs)
   | a == x = delete a xs
   | else   = x :: delete a xs
 
+lemma delete_elem = forall x xs, ~(elem x (delete x xs))
+
 append : forall a. [a] -> [a] -> [a]
-append [] ys = ys
+append []      ys = ys
 append (x::xs) ys = x :: (append xs ys)
 
-lemma append_length = forall xs ys, length (append xs ys) == length xs + length ys
+lemma append_length =
+  forall xs ys, length (append xs ys) == length xs + length ys
 
 map : forall a b. (a -> b) -> [a] -> [b]
 map f [] = []
 map f (x::xs) = f x :: map f xs
 
-theorem map_id = forall f xs, map f (map f xs) == map f xs
+lemma map_id = forall f xs, map f (map f xs) == map f xs
 lemma map_length = forall f xs, length (map f xs) == length xs
 
 foldr : forall a b. (a -> b -> b) -> b -> [a] -> b
-foldr f z []      =  z
-foldr f z (x::xs) =  f x (foldr f z xs)
+foldr f z []      = z
+foldr f z (x::xs) = f x (foldr f z xs)
+
+lemma foldr_id = foldr (::) [] == id
 
 foldr1 : forall a. (a -> a -> a) -> {(_::_):[a]} -> a
 foldr1 f (x::xs) = f x (foldr f x xs)
 
 foldl : forall a b. (a -> b -> a) -> a -> [b] -> a
-foldl f z []      =  z
-foldl f z (x::xs) =  foldl f (f z x) xs
+foldl f z []      = z
+foldl f z (x::xs) = foldl f (f z x) xs
 
 foldl1 : forall a. (a -> a -> a) -> {(_::_):[a]} -> a
 foldl1 f (x::xs) = foldl f x xs
 
 reverse : forall a. [a] -> [a]
 reverse = foldl (flip (::)) []
+
+lemma reverse_length = forall xs, length (reverse xs) == length xs
 
 all : forall a. (a -> Bool) -> [a] -> Bool
 all p [] = True
@@ -95,7 +102,7 @@ any : forall a. (a -> Bool) -> [a] -> Bool
 any p [] = False
 any p (x::xs)
   | p x  = True
-  | else = all p xs
+  | else = any p xs
 
 filter : forall a. {p:a -> Bool} -> [a] -> {xs:[a]|all p xs}
 filter p []             = []
@@ -106,19 +113,22 @@ nub : forall a. [a] -> [a]
 nub []      = []
 nub (x::xs) = x :: nub (delete x xs)
 
-theorem nub_idempotent = forall xs, nub (nub xs) == nub xs
+lemma nub_idempotent = forall xs, nub (nub xs) == nub xs
 lemma nub_elem = forall x xs, ~(elem x xs) ==> nub(x::xs) == x::nub xs
 
 concat : forall a. [[a]] -> [a]
 concat xss = foldr append [] xss
 
 take : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == n}
-take _ []      =  []
-take n (x::xs) =  x :: take (n-1) xs
+take n xs | n == 0 = []
+          | else   = case xs of
+                         x::xs1 -> x :: take (n-1) xs1
+
 
 drop : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == length xs - n}
-drop _ []      =  []
-drop n (_::xs) =  drop (n-1) xs
+drop n xs | n == 0 = xs
+          | else   = case xs of
+                         _::xs1 -> drop (n-1) xs1
 
 sum : [Int] -> Int
 sum = foldr (+) 0
@@ -126,9 +136,14 @@ sum = foldr (+) 0
 product : [Int] -> Int
 product = foldr (*) 1
 
+maximum : {s@(_::_):[Int]} -> {a:Int|forall b, elem b s ==> a >= b}
 maximum xs =  foldl1 max xs
 
+minimum : {s@(_::_):[Int]} -> {a:Int|forall b, elem b s ==> a <= b}
 minimum xs =  foldl1 min xs
 
-and =  foldr (&&) True
-or =  foldr (||) False
+and : {bs:[Bool]} -> {f:Bool|f <=> all (==True) bs}
+and bs = foldr (&&) True bs
+
+or : {bs:[Bool]} -> {f:Bool|f <=> any (==True) bs}
+or bs = foldr (||) False bs
