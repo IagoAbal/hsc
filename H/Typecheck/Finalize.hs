@@ -79,7 +79,7 @@ lookupCon con = do
 extendVarEnv :: [(Var Tc,Var Ti)] -> TiM a -> TiM a
 extendVarEnv envl = local (\env@TiEnv{tiVarEnv} -> env{tiVarEnv = Map.union tiVarEnv venv'})
   where venv' = Map.fromList envl
-  
+
 extendTyConEnv :: [(TyName Tc,TyCon Ti)] -> TiM a -> TiM a
 extendTyConEnv envl = local (\env@TiEnv{tiTyConEnv} -> env{tiTyConEnv = Map.union tiTyConEnv tcenv'})
   where tcenv' = Map.fromList envl
@@ -116,7 +116,7 @@ finDecls (DataDecl loc tyname tvs constrs:ds)
         finConDecl (ConDecl loc1 conname doms)
           = inConDeclCtxt loc1 (ppQuot conname) $ do
           doms' <- finDoms doms
-          conname' <- finBndr conname return 
+          conname' <- finBndr conname return
           return (ConDecl loc conname' doms',(UserCon conname,UserCon conname'))
 finDecls (ValDecl bind:ds)
   = finBind bind $ \bind' -> do
@@ -124,7 +124,7 @@ finDecls (ValDecl bind:ds)
   return (ValDecl bind':ds')
 finDecls (GoalDecl loc gtype gname tvs prop:ds) = do
   prop' <- inGoalDeclCtxt loc gtype (ppQuot gname) $
-             finExp prop
+             finProp prop
   ds' <- finDecls ds
   return (GoalDecl loc gtype gname tvs prop':ds')
 
