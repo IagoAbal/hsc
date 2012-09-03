@@ -23,41 +23,72 @@ delete a (x::xs)
   | a == x = delete a xs
   | else   = x :: delete a xs
 
+------------------------------------------------------------------------
 
 data Var = V Nat
 
+data Type = A
+          | Fun Type Type
+
 data Term = Var Var
-          | Lam Var Term
+          | Lam Var Type Term
           | App Term Term
 
 fv : Term -> [Var]
-fv (Var x) = [x]
-fv (Lam x t) = delete x (fv t)
-fv (App f t) = append (fv f) (fv t)
+fv (Var x)     = [x]
+fv (Lam x _ t) = delete x (fv t)
+fv (App f t)   = append (fv f) (fv t)
 
 subst : Var -> Term -> Term -> Term
 subst x e t@(Var y)
   | x == y = e
   | else   = t
-subst x e t@(Lam y u)
+subst x e t@(Lam y a u)
   | x == y = t
-  | else   = Lam y (subst x e u)
+  | else   = Lam y a (subst x e u)
 subst x e (App f t) = App (subst x e f) (subst x e t)
 
 isNF : Term -> Bool
 isNF (Var _)             = True
-isNF (Lam x t)           = isNF t
+isNF (Lam x _ t)         = isNF t
 isNF (App (Var _) t)     = isNF t
-isNF (App (Lam _ _) t)   = False
+isNF (App (Lam _ _ _) t) = False
 isNF (App f@(App _ _) t) = isNF f && isNF t
 
 type NF = {t:Term | isNF t}
 
-nf : Term -> NF
-nf (Var x)   = Var x
-nf (Lam x t) = Lam x (nf t)
-nf (App f t) = case f' of
-                   Var _   -> App f' (nf t)
-                   Lam x u -> nf (subst x t u)
-                   App _ _ -> App f' (nf t)
-  where f' = nf f
+red : Term -> NF
+red (Var x)     = Var x
+red (Lam x a t) = Lam x a (red t)
+red (App f t)   = case f' of
+                      Var _     -> App f' (red t)
+                      Lam x _ u -> red (subst x t u)
+                      App _ _   -> App f' (red t)
+  where f' = red f
+
+data TypeOf = Ok Type
+            | IllTyped
+
+typeOf : Term -> TypeOf
+typeOf (Var _)
+  = Ok A
+typeOf (Lam x a t)
+  = case typeOf t of
+        Ok b     -> Ok (Fun a b)
+        IllTyped -> IllTyped
+typeOf (App f t)
+  = case typeOf f of
+        Ok A         -> IllTyped
+        Ok (Fun a b) ->
+           case typeOf t of
+               Ok a' | a == a' -> Ok b
+                     | else    -> IllTyped
+               IllTyped        -> IllTyped
+        IllTyped     -> IllTyped
+
+welltyped : Term -> Bool
+welltyped t = typeOf t /= IllTyped
+
+type WellTyped = {t:Term|welltyped t}
+
+lemma subject_reduction = forall (t:WellTyped), typeOf t == typeOf (red t)
