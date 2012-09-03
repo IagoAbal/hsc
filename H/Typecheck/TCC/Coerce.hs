@@ -35,7 +35,7 @@ coerce t (ForallTy tvs1 ty1) (ForallTy tvs2 ty2) = do
   let typs = map VarTy tvs2
       t' = mkTyApp t typs
   ty1' <- subst_type [] (zip tvs1 typs) ty1
-  coerce t' ty1' ty2 
+  coerce t' ty1' ty2
 
 coerce _t  (VarTy tv1)      (VarTy tv2) | tv1 == tv2
   = return []
@@ -76,7 +76,7 @@ coerce f (FunTy dom1 rang1) (FunTy dom2 rang2) = do
   range_POs <- liftM (map (P.hypos domain_POs)) $ coerce f_x rang1_x rang2_x
   return (domain_POs ++ range_POs)
 
-coerce _t _ty1 _ty2 = undefined -- bug 
+coerce _t _ty1 _ty2 = undefined -- bug
 
 
 coerceTypes :: (MonadUnique m, MonadError Doc m) => [Tau Ti] -> [Tau Ti] -> m [Prop Ti]
@@ -103,14 +103,28 @@ coerceListTys _t ty1 ty2 = do
 
 -- We would need 'proj' functions to implement this properly
 coerceTupleTys :: (MonadUnique m, MonadError Doc m) => Exp Ti -> [Dom Ti] -> [Dom Ti] -> m [Prop Ti]
-coerceTupleTys _e = go
-  where go []       []       = return []
+coerceTupleTys (Tuple _ es1) act_ds exp_ds = go es1 act_ds exp_ds
+  where go []     []       []       = return []
+        go (e:es) (d1:ds1) (d2:ds2) = do
+          d1_d2_POs <- coerce e (dom2type d1) (dom2type d2)
+          ds1_e <- instDoms e d1 ds1
+          ds2_e <- instDoms e d2 ds2
+          ds1_ds2_POs <- go es ds1_e ds2_e
+          return (d1_d2_POs ++ ds1_ds2_POs)
+        go _es    _ds1      _ds2    = impossible
+coerceTupleTys e act_ds exp_ds = do
+  (xs,pos) <- go act_ds exp_ds
+  let act_ty = TupleTy act_ds
+      pat = TuplePat act_ty (map VarPat xs)
+      rhs = mkExpRhs act_ty e
+  return [mkLet [PatBind Nothing pat rhs] $ P.conj pos]
+  where go []       []       = return ([],[])
         go (d1:ds1) (d2:ds2) = do
           x <- newVarId "x" (dom2type d1)
           let v_x = Var x
-          d1_d2_POs <- map_forall [x] $ coerce v_x (dom2type d1) (dom2type d2)
+          d1_d2_POs <- coerce v_x (dom2type d1) (dom2type d2)
           ds1_x <- instDoms v_x d1 ds1
           ds2_x <- instDoms v_x d2 ds2
-          ds1_ds2_POs <- go ds1_x ds2_x
-          return (d1_d2_POs ++ ds1_ds2_POs)
+          (xs,ds1_ds2_POs) <- go ds1_x ds2_x
+          return (x:xs,d1_d2_POs ++ ds1_ds2_POs)
         go _ds1      _ds2    = impossible
