@@ -11,6 +11,8 @@ import Core.Syntax.FreeVars
 import Core.Syntax.FTV
 import Core.Syntax.Subst1.Direct ( substType )
 
+import Sorted
+
 import Data.Data ( Data )
 import Data.Foldable ( toList )
 import qualified Data.Generics.Uniplate.Data as G
@@ -81,10 +83,43 @@ isIntLit :: Exp -> Maybe Integer
 isIntLit (Lit (IntLit n)) = Just n
 isIntLit _other           = Nothing
 
+isConsList :: Exp -> Maybe (Exp,Exp)
+isConsList (InfixApp e1 (OpExp [_] CONSOp) e2) = Just (e1,e2)
+isConsList (splitApp -> (TyApp (Con con) _,[e1,e2]))
+  | con == consCon = Just (e1,e2)
+isConsList (List ty (e:es)) = Just (e,List ty es)
+isConsList _other = Nothing
+
+isNilList :: Exp -> Bool
+isNilList (splitApp -> (TyApp (Con con) _,[])) = con == nilCon
+isNilList (List ty []) = True
+isNilList _other = False
+
+isNeg :: Exp -> Maybe Exp
+isNeg (PrefixApp (OpExp [] (IntOp NegI)) e) = Just e
+isNeg _other                                = Nothing
+
+isPlus :: Prop -> Maybe (Prop,Prop)
+isPlus (InfixApp e1 (OpExp [] (IntOp AddI)) e2) = Just (e1,e2)
+isPlus _other                                   = Nothing
+
+isMult :: Prop -> Maybe (Prop,Prop)
+isMult (InfixApp e1 (OpExp [] (IntOp MulI)) e2) = Just (e1,e2)
+isMult _other                                   = Nothing
+
+isNot :: Exp -> Maybe Exp
+isNot (PrefixApp (OpExp [] (BoolOp NotB)) e) = Just e
+isNot _other                                 = Nothing
+
 isLe :: Exp -> Maybe (Exp,Exp)
 isLe (InfixApp e1 (OpExp [] (BoolOp LeB)) e2) = Just (e1,e2)
 isLe (InfixApp e1 (OpExp [] (BoolOp GeB)) e2) = Just (e2,e1)
 isLe _other                                   = Nothing
+
+isLt :: Exp -> Maybe (Exp,Exp)
+isLt (InfixApp e1 (OpExp [] (BoolOp LtB)) e2) = Just (e1,e2)
+isLt (InfixApp e1 (OpExp [] (BoolOp GtB)) e2) = Just (e2,e1)
+isLt _other                                   = Nothing
 
 isOr :: Prop -> Maybe (Prop,Prop)
 isOr (InfixApp e1 (OpExp [] (BoolOp OrB)) e2) = Just (e1,e2)
@@ -100,7 +135,11 @@ isImp _other                                    = Nothing
 
 isEq :: Prop -> Maybe (Exp,Exp)
 isEq (InfixApp e1 (OpExp [_] (BoolOp EqB)) e2) = Just (e1,e2)
-isEq _othre                                    = Nothing
+isEq _other                                    = Nothing
+
+isNeq :: Prop -> Maybe (Exp,Exp)
+isNeq (InfixApp e1 (OpExp [_] (BoolOp NeqB)) e2) = Just (e1,e2)
+isNeq _other                                     = Nothing
 
 unImp :: Exp -> ([Exp],Exp)
 unImp = go []
@@ -144,6 +183,29 @@ mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
         hypoProp (Facts hs)    = hypos hs
 
 -- * Types
+
+conTyCon :: Con -> TyCon
+conTyCon (UserCon x)
+  | (_,range) <- unFunTy tau
+  , ConTy tc _ <- mu_0 range
+  = tc
+  where tau = case varType x of
+                  ForallTy _ ty -> ty
+                  ty            -> sigma2tau ty
+conTyCon (BuiltinCon UnitCon)  = unitTyCon
+conTyCon (BuiltinCon FalseCon) = boolTyCon
+conTyCon (BuiltinCon TrueCon)  = boolTyCon
+conTyCon (BuiltinCon NilCon)   = listTyCon
+conTyCon (BuiltinCon ConsCon)  = listTyCon
+
+isRecCon :: Con -> Bool
+isRecCon con
+  | (ds,rng) <- unFunTy tau
+  , ConTy tc _ <- mu_0 rng
+  = tc `elem` G.universeBi ds
+  where tau = case sortOf con of
+                  ForallTy _ ty -> ty
+                  ty            -> sigma2tau ty
 
 typeConstrs :: Module -> TyCon -> [Con]
 typeConstrs Module{modDecls} (AlgTyCon (UserTyCon d)) = go modDecls
