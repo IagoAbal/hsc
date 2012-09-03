@@ -12,12 +12,12 @@
 -- Module      :  H.Syntax.AST
 -- Copyright   :  (c) Iago Abal 2011-2012
 -- License     :  BSD3
---
--- Maintainer  :  Iago Abal, iago.abal@gmail.com
+-- Maintainer  :  Iago Abal <iago.abal@gmail.com>
 -- Stability   :  experimental
 -- Portability :  portable
 --
 -- Abstract syntax of H!
+--
 
 -- TODO: Play with new DataKind extension
 module H.Syntax.AST
@@ -196,7 +196,7 @@ type WhereBinds p = [Bind p]
 data IsRec p where
   -- | recursive
   Rec :: IsRec p
-  -- | non-recursive 
+  -- | non-recursive
   NonRec :: Lt Pr p => IsRec p
 
 -- | Declaration of a data constructor.
@@ -484,7 +484,7 @@ where you cannot simply move 'p' since the type of 'q' depends on it.
 
 Also note that the main problem is caused by instantiation of
 pattern-types... for normal expressions we could translate @-patterns
-as specificed in the Haskell Report. 
+as specificed in the Haskell Report.
 
 Future work:
   a) Careful handling of @-patterns, potentially complicating
@@ -516,7 +516,7 @@ data Type c p where
   -- | tuple type
   TupleTy :: [Dom p] -> Type c p
   -- | parenthised type
-  ParenTy :: Tau Pr -> Type c Pr 
+  ParenTy :: Tau Pr -> Type c Pr
   -- | meta type variable
   MetaTy :: !MetaTyVar -> Type c Tc
   -- | rank-1 polymorphic type
