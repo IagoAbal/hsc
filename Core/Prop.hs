@@ -7,6 +7,7 @@ module Core.Prop where
 
 import Core.Syntax.AST
 import Core.Syntax.Built
+import Core.Syntax.FreeVars
 import Core.Syntax.FTV
 import Core.Syntax.Subst1.Direct ( substExp )
 
@@ -16,6 +17,22 @@ import qualified Data.Generics.Uniplate.Data as G
 import Data.List ( tails )
 import Data.Set ( Set )
 import qualified Data.Set as Set
+
+import qualified Util.Set as Set
+
+
+isNat :: Exp -> Maybe Bool
+isNat (Var x) | varType x == natTy = Just True
+isNat (isIntLit -> Just i) | i >= 0 = Just True
+isNat (isPlus -> Just (e1,e2))
+  | Just True <- isNat e1
+  , Just True <- isNat e2
+  = Just True
+isNat (isMult -> Just (e1,e2))
+  | Just True <- isNat e1
+  , Just True <- isNat e2
+  = Just True
+isNat _other = Nothing
 
 
 cleanup :: Exp -> Exp
@@ -30,10 +47,34 @@ cleanup = G.transform f . removeUncons
         f (QP qt xs p)
           | xs /= xs' = mkQP qt xs' p
           where xs' = filterVars p xs
+        f (isImp -> Just(p,(QP qt xs q)))
+          | Set.fromList xs `Set.disjointWith` fvExp p = QP qt xs (p .==>. q)
+        f (Let bs (QP qt xs p))
+          | fvBndrs xs `Set.disjointWith` bsBinds bs = QP qt xs (Let bs p)
+        f (Let _ e)
+          | e == mkFalse = mkFalse
+          | e == mkTrue = mkTrue
+        f (LetP _ _ e)
+          | e == mkFalse = mkFalse
+        f (Paren e@(Lit _)) = e
+        f (Paren e@(Con _)) = e
+        f (isNeg -> Just (isIntLit -> Just a)) = mkInt(-a)
+        f (isNot -> Just e)
+          | e == mkTrue = mkFalse
+          | e == mkFalse = mkTrue
+        f (isNot -> Just (isLe -> Just (e1,e2)))
+          = e2 .<. e1
+        f (isNot -> Just (isLt -> Just (e1,e2)))
+          = e2 .<=. e1
         f (isLe -> Just (e1,e2))
           | Just a <- isIntLit e1
           , Just b <- isIntLit e2
           = bool2exp $ a <= b
+          | e1 == e2 = mkTrue
+        f (isLe -> Just (e1,e2))
+          | Just 0 <- isIntLit e1
+          , Just True <- isNat e2
+          = mkTrue
         f (isOr -> Just (e1,e2))
           | e1 == e2      = e1
           | e1 == mkTrue  = mkTrue
@@ -58,6 +99,8 @@ cleanup = G.transform f . removeUncons
 --           = (p .&&. q) .==>. r
         f (isEq -> Just (e1,e2))
           | e1 == e2 = mkTrue
+        f (isNeq -> Just (e1,e2))
+          | e1 == e2 = mkFalse
         f t = t
 
 instFTV :: Tau -> Exp -> Exp
