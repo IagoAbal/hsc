@@ -15,6 +15,7 @@ import Pretty
 import Sorted ( sortOf )
 
 import Control.Applicative ( (<$>) )
+import Data.List ( partition )
 import qualified Data.Map as Map
 import qualified Test.QuickCheck as QC
 
@@ -68,8 +69,12 @@ aTupleTy ty doms = Tuple ty <$> aDoms doms
 
 aDataTy :: (?mod :: Module, ?env :: [(Var,Exp)]) => TyCon -> [Tau] -> QC.Gen Exp
 aDataTy tycon tys
-  = QC.oneof $ map (\con -> aCon con tys) constrs
+  = QC.frequency $ map (nonrec_freq,) gens_nonrec ++ map (1,) gens_rec
   where constrs = typeConstrs ?mod tycon
+        (constrs_rec,constrs_nonrec) = partition isRecCon constrs
+        nonrec_freq = max 1 (2 * length constrs_rec)
+        gens_nonrec = map (\con -> aCon con tys) constrs_nonrec
+        gens_rec = map (\con -> aCon con tys) constrs_rec
 
 aCon :: (?mod :: Module, ?env :: [(Var,Exp)]) => Con -> [Tau] -> QC.Gen Exp
 aCon con tys = instCon con tys <$> aDoms doms
