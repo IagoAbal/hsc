@@ -1,19 +1,19 @@
 
-----------------------------------------------------------------------
 -- |
 -- Module      :  Bug
---
--- Maintainer  :  iago.abal@gmail.com
+-- Copyright   :  (c) Iago Abal 2011-2012
+-- License     :  BSD3
+-- Maintainer  :  Iago Abal <iago.abal@gmail.com>
 -- Stability   :  experimental
 -- Portability :  portable
 --
 -- Utils for bug reporting, in the spirit of 'Darcs.Bug'.
 -- See also bug.h
 --
-----------------------------------------------------------------------
 
 module Bug
-  ( _bug
+  ( _assert
+  , _bug
   , _bugDoc
   , _impossible
   , _head
@@ -21,7 +21,11 @@ module Bug
   , _fromJust
   ) where
 
+import Control.Exception ( assert )
 import Pretty ( Doc, errorDoc, text, ($$), nest )
+
+_assert :: Bool -> a -> a
+_assert = assert
 
 type BugStuff = (String, Int, String, String)
 
