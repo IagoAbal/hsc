@@ -39,6 +39,7 @@ supType ty | ty == natTy = True
 supType ty | isSynTy ty = supType $ expandSyn ty
 supType (ListTy ty) = supType ty
 supType (TupleTy ds) = supDoms ds
+supType (PredTy _ ty Nothing) = supType ty && isMuTy ty
 supType (PredTy (VarPat _) ty (Just prop)) = supType ty && supExp prop
 supType (ConTy tc tys) = True
 --       and [ traceDoc (text "supType con=" <+> pretty con) $ supDoms doms

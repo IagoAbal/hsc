@@ -37,6 +37,32 @@ aPredTy :: (?mod :: Module, ?env :: [(Var,Exp)]) => Var -> Tau -> Prop -> QC.Gen
 aPredTy x ty prop
   = QC.suchThat (typeGen ty) (\e -> val2bool $ eval ?mod ((x,e) : ?env) prop)
 
+aPat :: (?mod :: Module, ?env :: [(Var,Exp)]) => Pat -> QC.Gen (Exp,[(Var,Exp)])
+aPat (VarPat x) = do
+  e <- typeGen $ varTau x
+  return (e,[(x,e)])
+aPat (LitPat lit) = return (Lit lit,[])
+aPat (ConPat typs con ps) = do
+  (es,ps_env) <- aPats ps
+  return (instCon con typs es,ps_env)
+aPat (TuplePat ty ps) = do
+  (es,ps_env) <- aPats ps
+  return (Tuple ty es,ps_env)
+aPat (ParenPat p) = do
+  (e,p_env) <- aPat p
+  return (Paren e,p_env)
+
+aPats :: (?mod :: Module, ?env :: [(Var,Exp)]) => [Pat] -> QC.Gen ([Exp],[(Var,Exp)])
+aPats [] = return ([],[])
+aPats (p:ps) = do
+  (e,p_env) <- aPat p
+  let ?env = p_env ++ ?env
+  (es,ps_env) <- aPats ps
+  return (e:es,p_env++ps_env)
+
+aPatTy :: (?mod :: Module, ?env :: [(Var,Exp)]) => Pat -> Tau -> QC.Gen Exp
+aPatTy pat ty | isMuTy ty = fst <$> aPat pat
+
 aTupleTy :: (?mod :: Module, ?env :: [(Var,Exp)]) => Tau -> [Dom] -> QC.Gen Exp
 aTupleTy ty doms = Tuple ty <$> aDoms doms
 
@@ -61,7 +87,7 @@ aDoms (d@(Dom (Just (VarPat x)) _ _):ds) = do
   as <- aDoms ds
   return (a:as)
 aDoms (_d:_) = traceDoc (text "aDoms dom=" <> pretty _d) $ bug "unsupported domain-type"
-  
+
 
 typeGen :: (?mod :: Module, ?env :: [(Var,Exp)]) => Tau -> QC.Gen Exp
 typeGen ty | ty == boolTy = aBool
@@ -70,6 +96,7 @@ typeGen ty | ty == boolTy = aBool
 typeGen ty | isSynTy ty = typeGen $ expandSyn ty
 typeGen (ListTy ty) = aList ty
 typeGen ty@(TupleTy ds) = aTupleTy ty ds
+typeGen (PredTy pat ty Nothing) = aPatTy pat ty
 typeGen (PredTy (VarPat x) ty (Just prop)) = aPredTy x ty prop
 typeGen (ConTy tc tys) = aDataTy tc tys
 typeGen _ty = bug "unsupported type"
