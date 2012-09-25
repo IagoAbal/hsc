@@ -199,6 +199,7 @@ yicesTau ty@(FunTy _ _) = parens $
   where (ds,r) = unFunTy ty
 yicesTau (TupleTy ds) = parens $
   text "tuple" <+> hsep (map yicesDom ds)
+yicesTau ty | isSynTy ty = yicesTau $ expandSyn ty
 yicesTau other = bugDoc $ text "yicesTau: Not supported:" <+> pretty other
 
 yicesSubtype :: Var -> Tau -> Prop -> Doc
