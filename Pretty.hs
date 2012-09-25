@@ -28,8 +28,6 @@ module Pretty where
 --   ) where
 
 
-import Name
-
 import Control.Monad
 import Debug.Trace ( trace )
 import qualified Text.PrettyPrint as P
@@ -146,26 +144,6 @@ class Pretty a where
 
 class PrettyBndr b where
   prettyBndr :: b -> Doc
-
--- Pretty printing of names
-
-instance Pretty OccName where
-  pretty = text . occString
-
-instance PrettyBndr OccName where
-  prettyBndr = pretty
-
-instance Pretty Name where
-  pretty (Name _ occ@(OccName ns _) uniq)
-    = case ns of
-          -- The 'OccName' for constructors is ensured to be unique
-          ConNS   -> pretty occ
-          TyConNS -> pretty occ
-          -- For regular variables we need to print the 'Uniq'.
-          _other  -> pretty occ <> char '_' <> int uniq
-
-instance PrettyBndr Name where
-  prettyBndr = pretty
 
 -- * Pretty printing combinators
 
@@ -404,4 +382,8 @@ errorDoc :: Doc -> a
 errorDoc = error . render
 
 traceDoc :: Doc -> a -> a
+#ifdef DEBUG
 traceDoc = trace . render
+#else
+traceDoc = flip const
+#endif

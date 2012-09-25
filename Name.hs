@@ -3,7 +3,7 @@
 
 module Name where
 
-
+import Pretty
 import Unique
 
 import Data.Binary ( Binary(..), getWord8, putWord8 )
@@ -31,6 +31,11 @@ data NameSpace = VarNS
 mkOccName :: NameSpace -> String -> OccName
 mkOccName = OccName
 
+instance Pretty OccName where
+  pretty = text . occString
+
+instance PrettyBndr OccName where
+  prettyBndr = pretty
 
 -- * Name
 
@@ -51,6 +56,22 @@ instance Ord Name where
 
 instance Uniquable Name where
   uniqOf = nameUniq
+
+instance Pretty Name where
+  pretty (Name _ occ@(OccName ns _) uniq)
+    = case ns of
+          -- The 'OccName' for constructors is ensured to be unique
+          ConNS   -> pretty occ
+          TyConNS -> pretty occ
+          -- For regular variables we need to print the 'Uniq'.
+#ifdef DEBUG
+          _other  -> pretty occ <> char '_' <> int uniq
+#else
+          _other  -> pretty occ
+#endif
+
+instance PrettyBndr Name where
+  prettyBndr = pretty
 
 -- ** Constructors
 
