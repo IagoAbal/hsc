@@ -20,7 +20,7 @@ class FTV t where
 
 instance FTV t => FTV [t] where
   ftvOf = foldMap ftvOf
-  
+
 instance FTV t => FTV (Maybe t) where
   ftvOf = foldMap ftvOf
 

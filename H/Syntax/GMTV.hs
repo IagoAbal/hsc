@@ -72,7 +72,7 @@ instance GMTV (Type c Tc) where
   gmtvOf (ForallTy _tvs ty) = gmtvOf ty
   gmtvOf _other = impossible
 
-instance GMTV (Dom Tc) where  
+instance GMTV (Dom Tc) where
   gmtvOf (Dom _ ty _) = gmtvOf ty
 
 

@@ -222,8 +222,8 @@ instance IsTc p => Sorted BoolOp (Sigma p) where
   sortOf GtB = intTy --> intTy --> boolTy
   sortOf GeB = intTy --> intTy --> boolTy
 
-  -- NB: / and % could be more specific but that would introduce a mutually 
-  --     recursive dependency between both. This dependency may be OK since 
+  -- NB: / and % could be more specific but that would introduce a mutually
+  --     recursive dependency between both. This dependency may be OK since
   --     they are built-in, but since the language does not allow you to do
   --     that.. we don't allow that as well.
   --     We *may* provide some assumed theorems, for instance

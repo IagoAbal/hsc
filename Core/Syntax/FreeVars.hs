@@ -99,7 +99,7 @@ fvRhs (Rhs _ expr) = fvExp expr
 
 fvGuardedRhss :: GuardedRhss -> Set Var
 fvGuardedRhss (GuardedRhss grhss elserhs)
-  = Set.unions $ fvElse elserhs : map fvGuardedRhs grhss 
+  = Set.unions $ fvElse elserhs : map fvGuardedRhs grhss
 
 fvGuardedRhs :: GuardedRhs -> Set Var
 fvGuardedRhs (GuardedRhs g e) = fvExps [g,e]

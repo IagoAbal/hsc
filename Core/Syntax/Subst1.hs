@@ -61,7 +61,7 @@ substBndrs = mapAccumL substBndr
 substBndr :: Subst1 -> Var -> (Subst1,Var)
 substBndr s@Subst1{substVarEnv,substVarScope} var@V{varName,varType} =
   if var `Set.member` substVarScope
-        -- @var@ may capture some variable 
+        -- @var@ may capture some variable
      then let varName' = new_name s varName
               var'   = mkVar varName' varType'
               env'   = Map.insert var (Var var') substVarEnv
@@ -81,7 +81,7 @@ substTyBndrs = mapAccumL substTyBndr
 substTyBndr :: Subst1 -> TyVar -> (Subst1,TyVar)
 substTyBndr s@Subst1{substTyVarEnv,substTyVarScope} tv =
   if tv `Set.member` substTyVarScope
-        -- @tv@ may capture some variable 
+        -- @tv@ may capture some variable
      then let tv'    = new_tv s tv
               env'   = Map.insert tv (VarTy tv') substTyVarEnv
               scope' = Set.insert tv' substTyVarScope
@@ -130,7 +130,7 @@ substBind s (FunBind Rec fun typs args rhs)
         (s_rhs',typs') = substTyBndrs s' typs
         (s_rhs,args') = substBndrs s_rhs' args
         rhs' = substRhs s_rhs rhs  -- recursive bindings
-  
+
 
 substExps :: Subst1 -> [Exp] -> [Exp]
 substExps s = map (substExp s)

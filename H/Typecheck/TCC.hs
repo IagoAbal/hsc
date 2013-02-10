@@ -44,7 +44,7 @@ instance Pretty TccHypoThing where
     = text "let" <+> ppBody letIndent (map pretty binds)
   pretty (Facts props)
     = pretty $ P.conj props
-    
+
 type TccPropCtxt = Seq TccHypoThing
 
 data TCC
@@ -546,7 +546,7 @@ coDoms []     = return ()
 coDoms (d:ds) = coDom d $ coDoms ds
 
 coDom :: Dom Ti -> CoM a -> CoM a
-coDom (Dom mb_pat tau mb_prop) m = do  
+coDom (Dom mb_pat tau mb_prop) m = do
   coType tau
   withForall qs $ do
     void $ T.mapM (`coExp` (Check boolTy)) mb_prop
@@ -662,7 +662,7 @@ matchCon x xs qs = do
          | otherwise = do
             no_uncover <- liftM P.conj $ mapM is_not_con uncovered_cs
             addCompletenessTCC no_uncover
-          
+
 
 matchClause :: Var Ti -> TcCon Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchClause x _con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]

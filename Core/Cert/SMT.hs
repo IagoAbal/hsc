@@ -80,7 +80,7 @@ instance Hashable Exp where
 
 instance Data c => Hashable (Type c) where
   hash ty = hash [u | (u::Uniq) <- G.universeBi ty]
- 
+
 
 yicesProblem :: SMTProblem -> Doc
 yicesProblem (SMTProblem typs datatys funs params hypos prop)

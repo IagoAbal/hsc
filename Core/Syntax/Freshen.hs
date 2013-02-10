@@ -151,7 +151,7 @@ freshenAlt (Alt pat rhs) = do
   liftM (Alt pat') $ freshenRhs rhs
 
 freshenTypes :: (?varMap :: Var2Var, MonadUnique m) => [Type c] -> m [Type c]
-freshenTypes = mapM freshenType 
+freshenTypes = mapM freshenType
 
 freshenType :: (?varMap :: Var2Var, MonadUnique m) => Type c -> m (Type c)
 freshenType ty@(VarTy _) = return ty

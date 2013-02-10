@@ -51,7 +51,7 @@ import qualified Data.Traversable as T
 
 -- * One-shot substition
 
-  
+
 data Subst1 p = Subst1 {
                 substVarEnv     :: Map (Var p) (Exp p)
               , substTyVarEnv   :: Map TyVar   (Tau p)
@@ -102,7 +102,7 @@ substBndr :: (MonadUnique m, IsTc p) => Subst1 p -> Var p -> m (Var p,Subst1 p)
 substBndr s@Subst1{substVarEnv,substVarScope} var@V{varName,varType} = do
   varType' <- substType s varType
   if var `Set.member` substVarScope
-        -- @var@ may capture some variable 
+        -- @var@ may capture some variable
      then do varName' <- newNameFrom varName
              let var'   = mkVarId varName' varType'
                  env'   = Map.insert var (Var var') substVarEnv
@@ -122,7 +122,7 @@ substTyBndrs = mapAccumM substTyBndr
 substTyBndr :: (MonadUnique m, IsTc p) => Subst1 p -> TyVar -> m (TyVar,Subst1 p)
 substTyBndr s@Subst1{substTyVarEnv,substTyVarScope} tv = do
   if tv `Set.member` substTyVarScope
-        -- @tv@ may capture some variable 
+        -- @tv@ may capture some variable
      then do tv' <- cloneTyVar tv
              let env'   = Map.insert tv (VarTy tv') substTyVarEnv
                  scope' = Set.insert tv' substTyVarScope

@@ -113,7 +113,7 @@ unifyKappa (PredTy _ ty1 _) ty2 = unifyKappa ty1 ty2
 unifyKappa ty1 (PredTy _ ty2 _) = unifyKappa ty1 ty2
 
 unifyKappa ty1 ty2 | isSynTy ty1 = unify (expandSyn ty1) ty2
-  
+
 unifyKappa ty1 ty2 | isSynTy ty2 = unify ty1 (expandSyn ty2)
 
 unifyKappa (ConTy tc1 args1) (ConTy tc2 args2)

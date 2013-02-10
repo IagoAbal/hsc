@@ -149,7 +149,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
                         <- renameBndr typarams $ \typarams' -> do
                              (constrs',cmap) <- liftM unzip $ mapM rnConDecl constrs
                              return (typarams',constrs',cmap)
-          popContext $ withMapping cmap $ 
+          popContext $ withMapping cmap $
             f (DataDecl loc name typarams' constrs')
   renameBndr (ValDecl bind) f =
     renameGlobalBind bind $ f . ValDecl
@@ -157,7 +157,7 @@ instance RenameBndr (Decl Pr) (Decl Rn) where
     = inGoalDeclCtxt loc gtype (ppQuot gname) $
         renameBndr gname $ \gname' -> do
           prop' <- inPropContext $ rename prop
-          popContext $ f (GoalDecl loc gtype gname' None prop') 
+          popContext $ f (GoalDecl loc gtype gname' None prop')
 
 
 -- * Binds

@@ -95,7 +95,7 @@ instTupleWithVars doms = go 1 [] doms
 
 instFunTy :: (IsTc p, MonadUnique m, MonadError Doc m) => (Dom p,Range p) -> Exp p -> m (Range p)
   -- non-dependent arrow
-instFunTy (Dom Nothing _ Nothing,rang) _ = return rang  
+instFunTy (Dom Nothing _ Nothing,rang) _ = return rang
 instFunTy (Dom (Just p) _ _,rang) _
   | Set.null (bsPat p) = return rang
   -- dependent arrow
@@ -114,7 +114,7 @@ patExpSubst :: forall p. IsTc p =>
                 Exp p
               -> Pat p   -- ^ domain pattern
               -> Set (Var p)
-              -> Maybe [(Var p,Exp p)]    -- ^ substitution for range  
+              -> Maybe [(Var p,Exp p)]    -- ^ substitution for range
 patExpSubst expr pat_dom target_fv = get_subst expr pat_dom
   where get_subst :: Exp p -> Pat p -> Maybe [(Var p,Exp p)]
         get_subst _ (WildPat _) = Just []

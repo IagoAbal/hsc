@@ -129,9 +129,9 @@ fvGRhs (UnGuarded e)   = fvExp e
 fvGRhs (Guarded grhss) = fvGuardedRhss grhss
 
 fvGuardedRhss :: Ord (VAR p) => GuardedRhss p -> Set (VAR p)
-fvGuardedRhss (GuardedRhssIn grhss) = Set.unions $ map fvGuardedRhs grhss 
+fvGuardedRhss (GuardedRhssIn grhss) = Set.unions $ map fvGuardedRhs grhss
 fvGuardedRhss (GuardedRhss grhss elserhs)
-  = Set.unions $ fvElse elserhs : map fvGuardedRhs grhss 
+  = Set.unions $ fvElse elserhs : map fvGuardedRhs grhss
 
 fvGuardedRhs :: Ord (VAR p) => GuardedRhs p -> Set (VAR p)
 fvGuardedRhs (GuardedRhs _loc g e) = fvExps [g,e]

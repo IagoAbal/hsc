@@ -49,7 +49,7 @@ dsgModule (Module _ modname decls) tccs = do
 
 -- TODO
 -- Do this at other point so we can get better contextual information
--- I think I should collect this POs during Coerce phase, 
+-- I think I should collect this POs during Coerce phase,
 collectGoalPOs :: [Core.Decl] -> [Core.ProofObligation]
 collectGoalPOs [] = []
 collectGoalPOs (Core.GoalDecl gtype gname _typs prop:ds) =
@@ -568,7 +568,7 @@ matchEq ds qs = do
                   go (i+1) (v:vs_rev) ds'
 
 match_eq :: [Core.Exp] -> [Equation] -> DsgM Core.Rhs
-match_eq [] []         = error "match_eq implicit default 1" 
+match_eq [] []         = error "match_eq implicit default 1"
 match_eq [] [E [] rhs] = return rhs
 match_eq [] (_:_)      = bug "this case should be caught during typechecking"
 match_eq _xs []        = error "match_eq implicit default 2"

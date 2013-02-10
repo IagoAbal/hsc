@@ -103,7 +103,7 @@ instance MTV (GRhs Tc) where
 
 instance MTV (GuardedRhss Tc) where
   mtvOf (GuardedRhss grhss elserhs)
-    = Set.unions $ mtvOf elserhs : map mtvOf grhss 
+    = Set.unions $ mtvOf elserhs : map mtvOf grhss
 
 instance MTV (GuardedRhs Tc) where
   mtvOf (GuardedRhs _loc g e) = mtvOf [g,e]
