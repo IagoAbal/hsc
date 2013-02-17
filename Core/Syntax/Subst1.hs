@@ -170,7 +170,7 @@ substExp s (EnumFromTo e1 en) = EnumFromTo (substExp s e1) (substExp s en)
 substExp s (EnumFromThenTo e1 e2 en)
   = EnumFromThenTo (substExp s e1) (substExp s e2) (substExp s en)
 substExp s (Coerc e ty) = Coerc (substExp s e) (substType s ty)
-substExp s (LetP pat e prop) = LetP pat' e' prop'
+substExp s (CaseP def e pat prop) = CaseP def e' pat' prop'
   where e' = substExp s e
         (s',pat') = substPat s pat
         prop' = substExp s' prop

@@ -96,11 +96,11 @@ freshenExp (EnumFromTo e1 e2)
 freshenExp (EnumFromThenTo e1 e2 e3)
   = liftM3 EnumFromThenTo (freshenExp e1) (freshenExp e2) (freshenExp e3)
 freshenExp (Coerc e ty) = liftM2 Coerc (freshenExp e) (freshenType ty)
-freshenExp (LetP pat e prop) = do
+freshenExp (CaseP def e pat prop) = do
   e' <- freshenExp e
   (pat', new) <- freshenPat pat
   let ?varMap = new `Map.union` ?varMap
-  liftM (LetP pat' e') $ freshenExp prop
+  liftM (CaseP def e' pat') $ freshenExp prop
 freshenExp (QP qt bs body) = do
   (bs', varMap') <- freshenBndrs bs
   let ?varMap = varMap'

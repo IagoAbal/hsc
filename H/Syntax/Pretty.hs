@@ -211,8 +211,12 @@ instance PrettyNames p => Pretty (Exp p) where
            text "..", pretty to]
   pretty (Coerc _pos e ty) =
     myFsep [pretty e, text ":", pretty ty]
-  pretty (LetP pat e prop) =
-    myFsep [text "letP", pretty pat, char '=', pretty e, text "in", pretty prop]
+--   pretty (LetP pat e prop) =
+--     myFsep [text "letP", pretty pat, char '=', pretty e, text "in", pretty prop]
+  pretty (CaseP def e pat prop) =
+    myFsep [braces $ sep [pretty e, pp_def,pretty pat], text "->", pretty prop]
+    where pp_def | def       = text "if-matches"
+                 | otherwise = text "must-match"
   pretty (QP quant patList body)
     = myFsep $ pretty quant : map pretty patList ++ [text ",", pretty body]
 

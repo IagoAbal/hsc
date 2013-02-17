@@ -77,5 +77,5 @@ supExp (Paren e) = supExp e
 supExp (EnumFromTo _ _) = True
 supExp (EnumFromThenTo _ _ _) = True
 supExp (Coerc e _) = supExp e
-supExp (LetP _ _ _) = True
+supExp (CaseP _ _ _ _) = True
 supExp (QP _ _ _) = False

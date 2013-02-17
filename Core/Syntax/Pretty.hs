@@ -170,8 +170,10 @@ instance Pretty Exp where
            text "..", pretty to]
   pretty (Coerc e ty) =
     myFsep [pretty e, text ":", pretty ty]
-  pretty (LetP pat e prop)
-    = myFsep [text "letP", pretty pat, char '=', pretty e, text "in", pretty prop]
+  pretty (CaseP def e pat prop) =
+    myFsep [braces $ sep [pretty e, pp_def,pretty pat], text "->", pretty prop]
+    where pp_def | def       = text "if-matches"
+                 | otherwise = text "matches"
   pretty (QP quant xs body)
     = myFsep $ pretty quant : map ppr_qvar xs ++ [text ",", pretty body]
     where ppr_qvar x = parens $ prettyBndr x
@@ -394,6 +396,8 @@ instance Pretty TccHypoThing where
     = myFsep $ punctuate comma $ map prettyBndr xs
   pretty (LetIn binds)
     = text "let" <+> ppBody letIndent (map pretty binds)
+  pretty (Matching e pat)
+    = pretty e <+> text "matching" <+> pretty pat
   pretty (Facts props)
     = vcat $ map pretty props
 

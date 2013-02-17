@@ -54,8 +54,9 @@ cleanup = G.transform f . removeUncons
         f (Let _ e)
           | e == mkFalse = mkFalse
           | e == mkTrue = mkTrue
-        f (LetP _ _ e)
-          | e == mkFalse = mkFalse
+        f (CaseP def _ _ e)
+          | e == mkTrue  && def     = mkTrue
+          | e == mkFalse && not def = mkFalse
         f (Paren e@(Lit _)) = e
         f (Paren e@(Con _)) = e
         f (isNeg -> Just (isIntLit -> Just a)) = mkInt(-a)

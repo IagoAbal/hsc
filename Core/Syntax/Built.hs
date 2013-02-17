@@ -180,6 +180,7 @@ mkTccCtxtProp :: TccPropCtxt -> Prop -> Prop
 mkTccCtxtProp = foldr (\h f -> hypoProp h . f) id . toList
   where hypoProp (ForAll xs)   = mkForall xs
         hypoProp (LetIn binds) = mkLet binds
+        hypoProp (Matching e pat) = CaseP True e pat
         hypoProp (Facts hs)    = hypos hs
 
 -- * Types

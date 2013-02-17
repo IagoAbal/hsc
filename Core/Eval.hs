@@ -142,10 +142,10 @@ matchPat (splitApp -> (TyApp (Con con1) _,es)) (ConPat _ con2 ps)
 matchPat (Tuple _ es) (TuplePat _ ps) = concat <$> zipWithM matchPat es ps
 matchPat _p1 _p2 = Nothing
 
-redLetP :: Pat -> Exp -> Prop -> EvalM Prop
-redLetP pat expr prop
+redCaseP :: Bool -> Exp -> Pat -> Prop -> EvalM Prop
+redCaseP def expr pat prop
   = case matchPat expr pat of
-        Nothing -> return mkFalse
+        Nothing -> return $ bool2exp def
         Just bs -> do
           mapM_ (uncurry heapAdd) bs
           red' prop
@@ -276,9 +276,9 @@ red (EnumFromThenTo e1 e2 e3) = do
   Lit (IntLit i3) <- red e3
   return $ mkIntList [i1,i2..i3]
 red (Coerc e _) = red e
-red (LetP pat e p) = do
+red (CaseP def e pat p) = do
   e' <- red e
-  redLetP pat e' p
+  redCaseP def e' pat p
 red e@(QP _ _ _) = return e
 red e = traceDoc (text "red e=" <+> pretty e) $ error "unsupported"
 

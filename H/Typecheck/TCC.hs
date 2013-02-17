@@ -35,6 +35,7 @@ import qualified Data.Traversable as T
 
 data TccHypoThing = ForAll [QVar Ti]
                   | LetIn [Bind Ti]
+                  | Matching (Exp Ti) (Pat Ti)
                   | Facts [Prop Ti]
 
 instance Pretty TccHypoThing where
@@ -42,6 +43,8 @@ instance Pretty TccHypoThing where
     = myFsep $ text "forall" : map pretty qvs
   pretty (LetIn binds)
     = text "let" <+> ppBody letIndent (map pretty binds)
+  pretty (Matching e pat)
+    = pretty e <+> text "matching" <+> pretty pat
   pretty (Facts props)
     = pretty $ P.conj props
 
@@ -118,6 +121,10 @@ withLetIn :: [Bind Ti] -> CoM a -> CoM a
 withLetIn []    = id
 withLetIn binds = local addLetBinds
   where addLetBinds env@CoEnv{propCtxt} = env{propCtxt = propCtxt |> LetIn binds}
+
+withMatching :: Exp Ti -> Pat Ti -> CoM a -> CoM a
+withMatching e pat = local addMatching
+  where addMatching env@CoEnv{propCtxt} = env{propCtxt = propCtxt |> Matching e pat}
 
 withFacts :: [Prop Ti] -> CoM a -> CoM a
 withFacts []    = id
@@ -626,22 +633,24 @@ chooseLit lit qs = [q | q <- qs, getLit q == lit]
 
 matchLitClause :: Var Ti -> Integer -> [Var Ti] -> [Equation] -> CoM ()
 matchLitClause x lit xs qs
-  = withFacts [Var x ==* mkInt lit] $
+  = withMatching (Var x) (LitPat $ IntLit lit) $
       co_Equations xs [ E loc ps rhs | E loc (LitPat _:ps) rhs <- qs]
 
 matchTuple :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchTuple x xs [E loc (p@(TuplePat _ ps1):ps) rhs]
   | all isVarPat ps1 =
-      withForall qxs' $ withFacts [Var x ==* pat2exp p] $
+--       withForall qxs' $ withFacts [Var x ==* pat2exp p] $
+      withMatching (Var x) p $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
-        qxs' = map toQVar xs'
+--         qxs' = map toQVar xs'
 matchTuple x xs qs = do
-  let E _ (TuplePat tup_ty _:_) _ = head qs
+  let E _ (p@(TuplePat tup_ty _):_) _ = head qs
       TupleTy ds = mu_0 tup_ty
-  (tup_exp,xs') <- instTupleWithVars ds
-  let qxs' = map toQVar xs'
-  withForall qxs' $ withFacts [Var x ==* tup_exp] $
+  (_tup_exp,xs') <- instTupleWithVars ds
+--   let qxs' = map toQVar xs'
+--   withForall qxs' $ withFacts [Var x ==* tup_exp] $
+  withMatching (Var x) p $
     co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (TuplePat _ ps1:ps) rhs <- qs]
 
 matchCon :: Var Ti -> [Var Ti] -> [Equation] -> CoM ()
@@ -667,15 +676,18 @@ matchCon x xs qs = do
 matchClause :: Var Ti -> TcCon Ti -> [Var Ti] -> [Equation] -> CoM ()
 matchClause x _con xs [E loc (p@(ConPat _ _ ps1):ps) rhs]
   | all isVarPat ps1 =
-      withForall qxs' $ withFacts [Var x ==* pat2exp p] $
+--       withForall qxs' $ withFacts [Var x ==* pat2exp p] $
+      withMatching (Var x) p $
         co_Equations (xs'++xs) [E loc (ps1++ps) rhs]
   where xs' = [ x1 | VarPat x1 <- ps1]
-        qxs' = map toQVar xs'
+--         qxs' = map toQVar xs'
 matchClause x con xs qs = do
   let E _ (ConPat typs _ _:_) _ = head qs
-  (p_exp,xs') <- instWithVars (sortOf con) typs (Con con)
-  let qxs' = map toQVar xs'
-  withForall qxs' $ withFacts [Var x ==* p_exp] $
+  (_p_exp,xs') <- instWithVars (sortOf con) typs (Con con)
+  let p_vars = ConPat typs con (map VarPat xs')
+--   let qxs' = map toQVar xs'
+--   withForall qxs' $ withFacts [Var x ==* p_exp] $
+  withMatching (Var x) p_vars $
     co_Equations (xs'++xs) [E  loc (ps1++ps) rhs | E loc (ConPat _ _ ps1:ps) rhs <- qs]
 
 choose :: TcCon Ti -> [Equation] -> [Equation]

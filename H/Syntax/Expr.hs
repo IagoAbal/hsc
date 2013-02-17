@@ -153,6 +153,11 @@ grhs2exp :: IsTc p => Tau p -> GRhs p -> Exp p
 grhs2exp _ty (UnGuarded e)   = e
 grhs2exp  ty (Guarded grhss) = If ty grhss
 
+mustMatchP :: Ge p Tc => Exp p -> Pat p -> Prop p -> Prop p
+mustMatchP = CaseP False
+
+ifMatchesP :: Ge p Tc => Exp p -> Pat p -> Prop p -> Prop p
+ifMatchesP = CaseP True
 
 -- * Data constructors
 

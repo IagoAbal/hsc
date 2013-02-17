@@ -280,7 +280,8 @@ data Exp p where
   -- | logical let
   -- If the expression does not match the pattern then it is evaluated
   -- to /false/.
-  LetP :: Ge p Tc => Pat p -> Exp p -> Prop p -> Prop p
+  CaseP :: Ge p Tc => Bool  -- ^ default
+                    -> Exp p -> Pat p -> Prop p -> Prop p
   -- | logic quantifier
   QP :: !Quantifier -> [QVar p] -> Prop p -> Prop p
 

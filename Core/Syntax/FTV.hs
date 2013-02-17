@@ -51,7 +51,7 @@ instance FTV Exp where
   ftvOf (EnumFromTo e1 e2) = ftvOf [e1,e2]
   ftvOf (EnumFromThenTo e1 e2 e3) = ftvOf [e1,e2,e3]
   ftvOf (Coerc e _ty) = ftvOf e
-  ftvOf (LetP pat e prop) = Set.unions [ftvOf pat, ftvOf e, ftvOf prop]
+  ftvOf (CaseP _ e pat prop) = Set.unions [ftvOf pat, ftvOf e, ftvOf prop]
   ftvOf (QP _qt xs prop) = ftvOf xs `Set.union` ftvOf prop
 
 instance FTV OpExp where

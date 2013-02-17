@@ -226,12 +226,12 @@ dsgExp (EnumFromTo e1 e2) = Core.EnumFromTo <$> dsgExp e1 <*> dsgExp e2
 dsgExp (EnumFromThenTo e1 e2 e3)
   = Core.EnumFromThenTo <$> dsgExp e1 <*> dsgExp e2 <*> dsgExp e3
 dsgExp (Coerc _ e ty) = Core.Coerc <$> dsgExp e <*> dsgType ty
-dsgExp (LetP pat e prop) = do
+dsgExp (CaseP def e pat prop) = do
   e' <- dsgExp e
   (pat',pat_s) <- dsgPat pat
   prop_p <- subst_exp pat_s [] prop
   prop' <- dsgExp prop_p
-  return $ Core.LetP pat' e' prop' 
+  return $ Core.CaseP def e' pat' prop'
 dsgExp (QP qt qvars prop)
   = Core.QP (dsgQuantifier qt) <$> dsgQVars qvars <*> dsgExp prop
 dsgExp _other = impossible
@@ -434,6 +434,9 @@ dsgKind (FunKi k1 k2) = Core.FunKi (dsgKind k1) (dsgKind k2)
 dsgTccHypoThing :: TccHypoThing -> DsgM Core.TccHypoThing
 dsgTccHypoThing (ForAll qvs) = Core.ForAll <$> dsgQVars qvs
 dsgTccHypoThing (LetIn binds) = Core.LetIn <$> dsgBinds binds
+dsgTccHypoThing (Matching e pat)
+    -- liftM fst is safe because pat is a simple-pat
+  = Core.Matching <$> dsgExp e <*> (liftM fst $ dsgPat pat)
 dsgTccHypoThing (Facts ps) = Core.Facts <$> dsgExps ps
 
 dsgTccPropCtxt :: TccPropCtxt -> DsgM Core.TccPropCtxt
