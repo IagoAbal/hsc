@@ -47,10 +47,14 @@ cleanup = G.transform f . removeUncons
         f (QP qt xs p)
           | xs /= xs' = mkQP qt xs' p
           where xs' = filterVars p xs
+        f (QP ForallQ [x] (CaseP True e pat prop))
+          | isMuTy (varType x) && e == Var x = mkForall (patVars pat) prop
         f (isImp -> Just(p,(QP qt xs q)))
           | Set.fromList xs `Set.disjointWith` fvExp p = QP qt xs (p .==>. q)
         f (Let bs (QP qt xs p))
           | fvBndrs xs `Set.disjointWith` bsBinds bs = QP qt xs (Let bs p)
+        f (CaseP def e pat (QP qt xs p))
+          | fvBndrs xs `Set.disjointWith` bsPat pat = QP qt xs (CaseP def e pat p)
         f (Let _ e)
           | e == mkFalse = mkFalse
           | e == mkTrue = mkTrue
@@ -76,6 +80,11 @@ cleanup = G.transform f . removeUncons
           | Just 0 <- isIntLit e1
           , Just True <- isNat e2
           = mkTrue
+        f (isLt -> Just (e1,e2))
+          | Just a <- isIntLit e1
+          , Just b <- isIntLit e2
+          = bool2exp $ a < b
+          | e1 == e2 = mkFalse
         f (isOr -> Just (e1,e2))
           | e1 == e2      = e1
           | e1 == mkTrue  = mkTrue
@@ -102,6 +111,8 @@ cleanup = G.transform f . removeUncons
           | e1 == e2 = mkTrue
         f (isNeq -> Just (e1,e2))
           | e1 == e2 = mkFalse
+        f (isImp -> Just(isLt->Just(a,b),isLe->Just(e1,e2)))
+          | a == e1 && b == e2 = mkTrue
         f t = t
 
 instFTV :: Tau -> Exp -> Exp
@@ -158,7 +169,7 @@ removeUncons e = let ?uvars = Set.empty in go e
           | isUnconsExp e2 = e1
         go (isImp -> Just (e1,e2))
           | isUnconsExp e1 = e2
-          | isUnconsExp e2 = mkTrue
+--           | isUnconsExp e2 = mkTrue
         go t = G.descend go t
 
 isUnconsVar :: Data t => t -> Var -> Bool

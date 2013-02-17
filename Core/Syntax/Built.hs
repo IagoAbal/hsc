@@ -174,6 +174,9 @@ hypos :: [Prop] -> Prop -> Prop
 hypos [] p = p
 hypos hs p = hypo (conj hs) p
 
+patVars :: Pat -> [Var]
+patVars pat = [x | VarPat x <- G.universeBi pat]
+
 -- * TCCs
 
 mkTccCtxtProp :: TccPropCtxt -> Prop -> Prop
