@@ -3,4 +3,6 @@
 .*\.o-boot$
 .*\.hi$
 .*\.hi-boot$
+\.orig$
+\.hsc$
 dist/.*$
