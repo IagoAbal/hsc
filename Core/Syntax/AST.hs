@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -171,10 +173,10 @@ mkSimpleBind x rhs = FunBind NonRec x [] [] rhs
 
 -- * Expressions
 
-data Exp = Var Var -- ^ variable
-         | Par Var -- ^ parameter
-         | Con Con -- ^ data constructor
-         | Lit Lit -- ^ literal constant
+data Exp = Var !Var -- ^ variable
+         | Par !Var -- ^ parameter
+         | Con !Con -- ^ data constructor
+         | Lit !Lit -- ^ literal constant
          | PrefixApp OpExp Exp --  ^ prefix application
          | InfixApp Exp OpExp Exp -- ^ infix application
          | App Exp Exp
@@ -198,12 +200,12 @@ data Exp = Var Var -- ^ variable
          | EnumFromThenTo Exp Exp Exp -- ^ bounded arithmetic sequence, with first two elements given
          | Coerc Exp Sigma -- ^ explicit type coercion
          | LetP Pat Exp Prop  -- ^ logical let
-         | QP Quantifier [Var] Prop -- ^ logic quantifier
+         | QP !Quantifier [Var] Prop -- ^ logic quantifier
     deriving(Eq,Typeable,Data)
 
 
 -- | An Op or a TyApp on an Op
-data OpExp = OpExp [Tau] Op
+data OpExp = OpExp [Tau] !Op
     deriving(Eq,Typeable,Data)
 
 -- | Expressions of boolean type
@@ -235,9 +237,9 @@ mkExpRhs = Rhs
 -- ** Patterns
 
 -- | A pattern, to be matched against a value.
-data Pat = VarPat Var
+data Pat = VarPat !Var
             -- ^ variable
-         | LitPat Lit
+         | LitPat !Lit
             -- ^ literal constant
          | ConPat [Tau] Con [Pat]
             -- ^ data constructor pattern
@@ -286,13 +288,13 @@ data Alt = Alt SPat Rhs
 
 -- ** Literals
 
-data Lit = IntLit Integer
+data Lit = IntLit !Integer
     deriving(Eq,Typeable,Data)
 
 -- ** Data constructors
 
-data Con = UserCon Var
-         | BuiltinCon BuiltinCon
+data Con = UserCon !Var
+         | BuiltinCon !BuiltinCon
   deriving(Eq,Ord,Typeable,Data)
 
 data BuiltinCon = UnitCon
@@ -351,8 +353,8 @@ consCon  = BuiltinCon ConsCon
 
 -- ** Built-in operators
 
-data Op = BoolOp BoolOp
-        | IntOp IntOp
+data Op = BoolOp !BoolOp
+        | IntOp !IntOp
         | CONSOp
     deriving(Eq,Ord,Typeable,Data)
 
@@ -553,11 +555,11 @@ sigma2tau (ForallTy _ _) = bug "sigma2tau: not a tau type"
 sigma2tau ty             = unsafeCoerce ty
 
 data Type c
-  = VarTy TyVar
+  = VarTy !TyVar
       -- ^ type variable
   | ConTy TyCon [Tau]
       -- ^ application of a type constructor
-  | PredTy Pat Tau (Maybe Prop)
+  | PredTy Pat Tau !(Maybe Prop)
       -- ^ subset type
   | FunTy Dom Range
       -- ^ function type
@@ -604,8 +606,8 @@ isSynTy _other               = False
 
 -- ** Type constructors
 
-data TyName = UserTyCon TyVar
-            | BuiltinTyCon BuiltinTyCon
+data TyName = UserTyCon !TyVar
+            | BuiltinTyCon !BuiltinTyCon
     deriving(Eq,Ord,Typeable,Data)
 
 data BuiltinTyCon = UnitTyCon
@@ -732,7 +734,7 @@ kindOf :: Sorted a Kind => a -> Kind
 kindOf = sortOf
 
 data Kind = TypeKi
-          | FunKi Kind Kind
+          | FunKi !Kind !Kind
     deriving(Eq,Typeable,Data)
 
 -- ** Constructors
