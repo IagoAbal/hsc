@@ -470,6 +470,8 @@ dsgTCC (CompletenessTCC srcCtxt propCtxt prop) = do
 
 filterTCC :: Core.TCC -> DsgM (Maybe Core.TCC)
 filterTCC tcc@(Core.CoercionTCC srcCtxt _ expr act_ty exp_ty _ tcc_PO)
+  | act_ty == exp_ty
+  = return Nothing
   | Just True <- Core.prop2bool tcc_PO
   = return Nothing
   | Just False <- Core.prop2bool tcc_PO
