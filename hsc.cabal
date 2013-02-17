@@ -43,6 +43,7 @@ executable hsc
                        containers ==0.4.*,
                        cmdargs ==0.9.*,
                        derive ==2.5.*,
+                       filepath >=1.0 && <1.4,
                        pretty ==1.1.*,
                        mtl ==2.1.*,
                        transformers ==0.3.*,

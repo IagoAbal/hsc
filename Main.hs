@@ -26,9 +26,12 @@ import Unique
 
 import Util.Less ( less )
 
+import Control.Monad ( forM_ )
 import qualified Data.Binary as Binary
 import qualified Data.IntMap as IMap
 import System.Console.CmdArgs
+import System.Exit
+import System.FilePath
 
 
 data HSC
@@ -67,7 +70,7 @@ check_ = Check{ coreFile = def &= argPos 0 &= typ "FILE"
                     ]
               , index = def &= typ "RANGE"
               }
-          &= help "Check TCCs"
+          &= help "Check VCs"
 
 show_ = Show{ coreFile = def &= argPos 0 &= typ "FILE" }
           &= help "Show Core"
@@ -76,8 +79,23 @@ hsc_ = modes [typecheck_ &= auto, list_, check_, show_]
          &= program "hsc"
 
 
+checkExt :: FilePath -> String -> String -> IO ()
+checkExt fp ext typ
+  | takeExtension fp == ext = return ()
+  | otherwise               = do
+      putStrLn $ fp ++ ": not a " ++ typ ++  " file (" ++ ext ++ ")"
+      exitFailure
+
+checkVC :: Core.Module -> Core.ProofObligation -> CheckType -> IO ()
+checkVC m po ctyp
+  = case ctyp of
+        QuickCheck -> CertQuick.checkProp m po_formula
+        SMTCheck   -> CertSMT.checkProp po_formula
+  where po_formula = Core.poFormula po
+
 executeCommand :: HSC -> IO ()
 executeCommand Typecheck{srcFile} = do
+  checkExt srcFile ".hss" "Hspec source"
   f <- readFile srcFile
   let tc = bindH_ (parseH $ parseModuleWithMode (ParseMode srcFile) f) () () $ \mod_pr ->
             bindH_ (rnModule mod_pr) emptyRnEnv () $ \mod_rn ->
@@ -88,23 +106,23 @@ executeCommand Typecheck{srcFile} = do
   (res,_) <- runH tc (SrcContext (SrcLoc srcFile 0 0) Pretty.empty False) newSupply () ()
   case res of
       Left err      -> putStrLn $ render err
-      Right (m,_,_) -> Binary.encodeFile (srcFile ++ "-core") m
+      Right (m,_,_) -> Binary.encodeFile (replaceExtension srcFile ".hsc") m
 executeCommand List{coreFile,index=Nothing} = do
+  checkExt coreFile ".hsc" "Hspec core"
   m <- Binary.decodeFile coreFile
   less $ render $ pretty $ Core.modPOs m
 executeCommand List{coreFile,index=Just k} = do
+  checkExt coreFile ".hsc" "Hspec core"
   m <- Binary.decodeFile coreFile
   putStrLn $ render $ pretty $ Core.modPOs m IMap.! k
 executeCommand Check{index=Nothing}
   = putStrLn "Nothing to do: you could give me a TCC to check."
 executeCommand Check{coreFile,checkType,index=Just i} = do
+  checkExt coreFile ".hsc" "Hspec core"
   m <- Binary.decodeFile coreFile
   case IMap.lookup i $ Core.modPOs m of
-      Nothing -> putStrLn "Error: TCC not found."
-      Just po -> case checkType of
-                     QuickCheck -> CertQuick.checkProp m po_formula
-                     SMTCheck   -> CertSMT.checkProp po_formula
-        where po_formula = Core.poFormula po
+      Nothing -> putStrLn "Error: VC not found."
+      Just po -> checkVC m po checkType
 executeCommand Show{coreFile} = do
   m::Core.Module <- Binary.decodeFile coreFile
   less $ render $ pretty m
