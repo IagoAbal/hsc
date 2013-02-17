@@ -5,4 +5,5 @@
 .*\.hi-boot$
 \.orig$
 \.hsc$
+cabal-dev/.*$
 dist/.*$
