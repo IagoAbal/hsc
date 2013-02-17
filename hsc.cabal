@@ -52,7 +52,9 @@ executable hsc
                        hashable ==1.1.*,
                        process ==1.1.*
 
-  extensions:          CPP
+  extensions:          CPP,
+                       PatternGuards,
+                       TupleSections
 
   build-tools:         ghc == 7.*
   ghc-options:         -O2
