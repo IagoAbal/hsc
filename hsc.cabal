@@ -48,7 +48,7 @@ executable hsc
                        mtl ==2.1.*,
                        transformers ==0.3.*,
                        uniplate ==1.6.*,
-                       QuickCheck ==2.5.*,
+                       QuickCheck >=2.3 && <2.6,
                        hashable ==1.1.*,
                        process ==1.1.*
 
