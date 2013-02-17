@@ -46,7 +46,7 @@ heapLookup x = EvalM $ do
   heap <- get
   case Map.lookup x heap of
       Just e  -> return e
-      Nothing -> error "eval: fatal error"
+      Nothing -> error $ render $ text "eval: fatal error: " <+> pretty x
 
 heapAddBind :: Bind -> EvalM ()
 heapAddBind (FunBind _ f tvs xs rhs)
@@ -125,16 +125,17 @@ redCase scrut (Alt pat (Rhs _ e):alts)
           red' e
 
 matchPat :: Exp -> Pat -> Maybe [(Var,Exp)]
+matchPat e (ParenPat p) = matchPat e p  -- HACK
 matchPat e (VarPat x) = Just [(x,e)]
 matchPat (Lit l1) (LitPat l2) | l1 == l2 = Just []
-matchPat (List _ []) (ConPat _ _ []) = Just []
-matchPat (InfixApp x (OpExp _ CONSOp) xs) (ConPat _ _ [y,ys]) = do
+matchPat (isNilList -> True) (ConPat _ _ []) = Just []
+-- matchPat (InfixApp x (OpExp _ CONSOp) xs) (ConPat _ _ [y,ys]) = do
+--   bs1 <- matchPat x y
+--   bs2 <- matchPat xs y
+--   return $ bs1 ++ bs2
+matchPat (isConsList -> Just(x,xs)) (ConPat _ _ [y,ys]) = do
   bs1 <- matchPat x y
-  bs2 <- matchPat xs y
-  return $ bs1 ++ bs2
-matchPat (List ty (x:xs)) (ConPat _ _ [y,ys]) = do
-  bs1 <- matchPat x y
-  bs2 <- matchPat (List ty xs) y
+  bs2 <- matchPat xs ys
   return $ bs1 ++ bs2
 matchPat (splitApp -> (TyApp (Con con1) _,es)) (ConPat _ con2 ps)
   | con1 == con2 = concat <$> zipWithM matchPat es ps
@@ -153,7 +154,7 @@ redEq :: Exp -> Exp -> EvalM Exp
 redEq e1 e2 = do
   e1' <- red' e1
   e2' <- red' e2
---   traceDoc (text "redEq... e1=" <> pretty e1' <+> text "e2=" <> pretty e2') $ do
+--   traceDoc (text "redEq... e1'=" <> pretty e1' <+> text "e2'=" <> pretty e2') $ do
   go e1' e2'
   where go (Lit l1) (Lit l2) = return $ bool2exp $ l1 == l2
         go (Tuple _ es1) (Tuple _ es2) = do
@@ -177,7 +178,7 @@ redEq e1 e2 = do
             es_eq <- zipWithM (\e1 e2 -> liftM val2bool $ redEq e1 e2) es1 es2
             return $ bool2exp $ and es_eq
           | otherwise = return mkFalse
-        go e1 e2 = traceDoc (text "redEq... e1=" <> pretty e1 <+> text "e2=" <> pretty e2) $ error "unsupported"
+        go e1 e2 = traceDoc (text "UNSUPPORTED redEq... e1=" <> pretty e1 <+> text "e2=" <> pretty e2) $ error "unsupported"
 
 redNot e1 | e1 == mkTrue  = mkFalse
 redNot e1 | e1 == mkFalse = mkTrue
