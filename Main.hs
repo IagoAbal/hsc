@@ -115,8 +115,14 @@ executeCommand List{coreFile,index=Just k} = do
   checkExt coreFile ".hsc" "Hspec core"
   m <- Binary.decodeFile coreFile
   putStrLn $ render $ pretty $ Core.modPOs m IMap.! k
-executeCommand Check{index=Nothing}
-  = putStrLn "Nothing to do: you could give me a TCC to check."
+executeCommand Check{coreFile,checkType,index=Nothing} = do
+  checkExt coreFile ".hsc" "Hspec core"
+  m <- Binary.decodeFile coreFile
+  let vcs = Core.modPOs m
+  putStrLn $ "Checking " ++ show (IMap.size vcs) ++ " VC(s)..."
+  forM_ (IMap.toList vcs) $ \(i,vc) -> do
+      putStr $ show i ++ "# "
+      checkVC m vc checkType
 executeCommand Check{coreFile,checkType,index=Just i} = do
   checkExt coreFile ".hsc" "Hspec core"
   m <- Binary.decodeFile coreFile
