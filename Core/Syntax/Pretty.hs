@@ -225,6 +225,9 @@ instance Pretty Pat where
 --   prettyPrec p (InfixCONSPat _ a b) = parensIf (p > 0) $
 --     myFsep [pretty a, text "::", pretty b]
   prettyPrec _ (ConPat _taus con []) = pretty con
+  prettyPrec p (ConPat _taus con [p1,p2])
+    | con == consCon = parensIf (p > 1) $
+        myFsep [pretty p1, text "::", pretty p2]
   prettyPrec p (ConPat _taus con ps) = parensIf (p > 1) $
     myFsep (pretty con : map pretty ps)
   prettyPrec _ (TuplePat _tau ps) = parenList . map pretty $ ps
