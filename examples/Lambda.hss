@@ -23,6 +23,14 @@ delete a (x::xs)
   | a == x = delete a xs
   | else   = x :: delete a xs
 
+data Maybe a = Nothing | Just a
+
+lookup : forall a b. a -> [(a,b)] -> Maybe b
+lookup x [] = Nothing
+lookup x ((a,b)::ps)
+  | x == a = Just b
+  | else   = lookup x ps
+
 ------------------------------------------------------------------------
 
 data Var = V Nat
@@ -69,26 +77,32 @@ red (App f t)   = case f' of
 data TypeOf = Ok Type
             | IllTyped
 
+type Env = [(Var,Type)]
+
 typeOf : Term -> TypeOf
-typeOf (Var _)
-  = Ok A
-typeOf (Lam x a t)
-  = case typeOf t of
-        Ok b     -> Ok (Fun a b)
-        IllTyped -> IllTyped
-typeOf (App f t)
-  = case typeOf f of
-        Ok A         -> IllTyped
-        Ok (Fun a b) ->
-           case typeOf t of
-               Ok a' | a == a' -> Ok b
-                     | else    -> IllTyped
-               IllTyped        -> IllTyped
-        IllTyped     -> IllTyped
+typeOf t = go [] t
+  where go env (Var x)
+          = case lookup x env of
+                Just a  -> Ok a
+                Nothing -> Ok A
+        go env (Lam x a t)
+          = case go ((x,a)::env) t of
+                Ok b     -> Ok (Fun a b)
+                IllTyped -> IllTyped
+        go env (App f t)
+          = case go env f of
+                Ok A         -> IllTyped
+                Ok (Fun a b) ->
+                   case go env t of
+                       Ok a' | a == a' -> Ok b
+                             | else    -> IllTyped
+                       IllTyped        -> IllTyped
+                IllTyped     -> IllTyped
 
 welltyped : Term -> Bool
 welltyped t = typeOf t /= IllTyped
 
 type WellTyped = {t:Term|welltyped t}
 
-lemma subject_reduction = forall (t:WellTyped), typeOf t == typeOf (red t)
+lemma subject_reduction =
+        forall (t:WellTyped), typeOf t == typeOf (red t)

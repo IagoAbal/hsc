@@ -45,6 +45,8 @@ sorted (a::b::xs)
   | a <= b = sorted xs
   | else   = False
 
+type SortingAlgorithm =
+        {p:[Int]} -> {q:[Int] | permutation p q && sorted q}
 
 partition : forall a. {p:a -> Bool}
                       -> [a]
@@ -55,7 +57,7 @@ partition p (x::xs)
   | else = (ys,x::ns)
   where (ys,ns) = partition p xs
 
-qsort : {p:[Int]} -> {q:[Int] | permutation p q && sorted q}
+qsort : SortingAlgorithm
 qsort [] = []
-qsort (x::xs) = append (qsort ls) (x :: qsort rs)
+qsort (x::xs) = append (qsort rs) (x :: qsort ls) -- append (qsort ls) (x :: qsort rs)
   where (ls,rs) = partition (<x) xs

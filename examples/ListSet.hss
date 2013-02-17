@@ -35,7 +35,7 @@ nub (x::xs) = x :: nub (delete x xs)
 
 -- lemma nub_elem = forall x xs, ~(elem x xs) ==> nub(x::xs) == x::nub xs
 
--- theorem nub_idempotent = forall xs, nub (nub xs) == nub xs
+-- lemma nub_idempotent = forall xs, nub (nub xs) == nub xs
 
 flip : forall a b c. (a -> b -> c) -> b -> a -> c
 flip f x y =  f y x
@@ -48,6 +48,7 @@ null : forall a. [a] -> Bool
 null []     =  True
 null (_::_) =  False
 
+------------------------------------------------------------------------
 
 data Set a = Set {l:[a]|nub l == l}
 
@@ -72,13 +73,20 @@ member a (Set xs) = elem a xs
 isSubsetOf : forall a. Set a -> Set a -> Bool
 isSubsetOf (Set xs) (Set ys) = all (flip elem ys) xs
 
+lemma subset_member =
+  forall s t x, isSubsetOf s t && member x s ==> member x t
+
 insert : forall a. a -> Set a -> Set a
 insert a s@(Set xs)
   | elem a xs = s
   | else      = Set (a::xs)
 
+lemma insert_member = forall x s, member x (insert x s)
+
 remove : forall a. a -> Set a -> Set a
 remove a (Set xs) = Set (delete a xs)
+
+lemma remove_member = forall x s, ~(member x (remove x s))
 
 union : forall a. {s:Set a}
             -> {t:Set a}
@@ -90,11 +98,11 @@ union s@(Set xs) t@(Set ys)
                     []   -> s
                     _::_ -> Set (nub (append xs ys))
 
-theorem union_id = forall s, union s empty == s
-theorem union_comm = forall s t, eq (union s t) (union t s)
-theorem union_assoc =
+lemma union_id = forall s, union s empty == s
+lemma union_comm = forall s t, eq (union s t) (union t s)
+lemma union_assoc =
   forall s t u, eq (union s (union t u)) (union (union s t) u)
-
+{-
 intersection : forall a. {s:Set a}
             -> {t:Set a}
             -> {u:Set a|forall x, member x s && member x t <=> member x u}
@@ -106,9 +114,9 @@ intersection (Set (x::xs)) (Set ys)
         t = Set (delete x ys)
         u = intersection s t
 
-theorem intersection_zero = forall s, intersection s empty == empty
-theorem intersection_comm = forall s t, intersection s t == intersection t s
-theorem intersection_assoc =
+lemma intersection_zero = forall s, intersection s empty == empty
+lemma intersection_comm = forall s t, intersection s t == intersection t s
+lemma intersection_assoc =
   forall s t u,
     intersection s (intersection t u) == intersection (intersection s t) u
 
@@ -117,5 +125,5 @@ substract : forall a. {s:Set a}
           -> {u:Set a|forall x, member x s && ~(member x t) <=> member x u}
 substract (Set xs) (Set ys) = Set (foldr delete xs ys)
 
-theorem substract_zero = forall s, substract s empty == s
-
+lemma substract_zero = forall s, substract s empty == s
+-}

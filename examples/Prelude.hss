@@ -119,13 +119,17 @@ lemma nub_elem = forall x xs, ~(elem x xs) ==> nub(x::xs) == x::nub xs
 concat : forall a. [[a]] -> [a]
 concat xss = foldr append [] xss
 
-take : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == n}
+take : forall a. {n:Nat}
+                -> {xs:[a]|length xs >= n}
+                -> {ys:[a]|length ys == n}
 take n xs | n == 0 = []
           | else   = case xs of
                          x::xs1 -> x :: take (n-1) xs1
 
 
-drop : forall a. {n:Nat} -> {xs:[a]|length xs >= n} -> {ys:[a]|length ys == length xs - n}
+drop : forall a. {n:Nat}
+                -> {xs:[a]|length xs >= n}
+                -> {ys:[a]|length ys == length xs - n}
 drop n xs | n == 0 = xs
           | else   = case xs of
                          _::xs1 -> drop (n-1) xs1
@@ -147,3 +151,15 @@ and bs = foldr (&&) True bs
 
 or : {bs:[Bool]} -> {f:Bool|f <=> any (==True) bs}
 or bs = foldr (||) False bs
+
+data Maybe a = Nothing | Just a
+
+maybe : forall a b. b -> (a -> b) -> Maybe a -> b
+maybe  b _f Nothing  = b
+maybe _b  f (Just a) = f a
+
+lookup : forall a b. a -> [(a,b)] -> Maybe b
+lookup x [] = Nothing
+lookup x ((a,b)::ps)
+  | x == a = Just b
+  | else   = lookup x ps
